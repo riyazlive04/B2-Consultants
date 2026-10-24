@@ -66,8 +66,15 @@ async function resetBusinessData() {
       "appointment_slot", "booking_request",
       "okr", "daily_log",
       "student", "enrollment", "milestone_log", "signal_change_log", "satisfaction_score",
-      "gn_batch", "gn_batch_member", "gn_module", "gn_recording", "gn_recording_watch",
-      "gn_event", "gn_post", "gn_comment", "gn_like", "gn_comment_like",
+      -- RENAMED by the ER v2 alignment on 29/07/2026, and this list was never updated - so
+      -- "npm run db:demo" failed on its very first statement ever since, with
+      -- 'relation "gn_batch" does not exist'. Nobody could reset the demo dataset.
+      --   gn_batch        -> batch          (one table for both lines, distinguished by "line")
+      --   gn_batch_member -> batch_member
+      --   gn_event        -> class_session
+      "batch", "batch_member", "class_session",
+      "gn_module", "gn_recording", "gn_recording_watch",
+      "gn_post", "gn_comment", "gn_like", "gn_comment_like",
       "weekly_funnel_snapshot", "cash_position", "payable", "fx_rate"
     CASCADE
   `);

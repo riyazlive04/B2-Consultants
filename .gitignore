@@ -86,6 +86,7 @@ scripts/set-local-passwords.mjs
 prelaunch-reset-backup-*.json
 /.next-dev*
 /.next-local*
+/.next-preview*
 
 # Invoice PDFs written by hand when verifying the currency/issuer rendering. Regenerated on
 # demand; they are output, not fixtures.

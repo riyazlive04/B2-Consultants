@@ -48,50 +48,20 @@ export default function ForgotPasswordForm() {
   };
 
   return (
-    <div className="flex min-h-screen items-stretch bg-surface">
-      {/* brand panel - the one allowed gradient (hero-sky) */}
-      <div className="hero-sky hidden flex-1 flex-col justify-between border-0 p-12 lg:flex">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <BrandLogo className="h-10 flex-none" />
-            <span className="flex flex-col leading-tight">
-              <span className="font-display text-[15px] font-bold text-ink">B2 Consultants</span>
-              <span className="text-caption text-ink-2">Business cockpit</span>
-            </span>
-          </div>
-          <ThemeToggle frosted />
-        </div>
-
-        <div className="max-w-md">
-          <h1 className="font-display text-[34px] font-extrabold leading-[1.15] text-ink">
-            Lost your password? No drama.
-          </h1>
-          <p className="mt-3.5 text-[15px] leading-relaxed text-ink-2">
-            Tell us the email your account uses and we&apos;ll send a link to set a new one.
-          </p>
-        </div>
-
-        <p className="text-caption text-ink-3">Internal tool · access by invitation</p>
+    <div className="flex min-h-screen flex-col bg-surface">
+      <div className="flex justify-end px-6 pt-5">
+        <ThemeToggle />
       </div>
 
-      {/* form pane */}
-      <div className="flex min-w-0 flex-1 items-center justify-center overflow-y-auto px-6 py-10">
+      <div className="flex flex-1 items-start justify-center overflow-y-auto px-6 pb-12 pt-4 sm:items-center sm:pt-0">
         <div className="w-full max-w-sm">
-          {/* mobile brand row (brand panel is hidden below lg) */}
-          <div className="mb-6 flex items-center justify-between lg:hidden">
-            <div className="flex items-center gap-2.5">
-              <BrandLogo className="h-9 flex-none" />
-              <span className="flex flex-col leading-tight">
-                <span className="font-display text-sm font-bold text-ink">B2 Consultants</span>
-                <span className="text-caption text-ink-3">Business cockpit</span>
-              </span>
-            </div>
-            <ThemeToggle />
+          <div className="mb-7 flex justify-center">
+            <BrandLogo variant="full" className="h-[72px] flex-none" />
           </div>
 
           <h2 className="font-display text-[23px] font-bold text-ink">Forgot password?</h2>
           <p className="mt-1 text-[13px] text-ink-2">
-            Enter your work email and we&apos;ll send you a reset link.
+            Enter the email your account uses and we&apos;ll send you a reset link.
           </p>
 
           {sent ? (
@@ -109,13 +79,13 @@ export default function ForgotPasswordForm() {
           ) : (
             <form onSubmit={submit} className="mt-5 flex flex-col gap-4">
               <label className="block text-xs font-semibold text-ink-2">
-                Work email
+                Email
                 <input
                   {...emailField.attrs}
                   required
                   value={email}
                   onChange={emailField.onChange}
-                  placeholder="you@b2consultants.in"
+                  placeholder="you@email.com"
                   autoComplete="email"
                   autoFocus
                   className={fieldCls}
@@ -144,6 +114,10 @@ export default function ForgotPasswordForm() {
             <Link href="/login" className="font-semibold text-primary-strong hover:underline">
               Sign in
             </Link>
+          </p>
+
+          <p className="mt-6 text-center text-caption text-ink-3">
+            No email after a few minutes? Ask your coach or your admin to resend your login.
           </p>
         </div>
       </div>

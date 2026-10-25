@@ -54,96 +54,65 @@ const fieldCls =
  * ── Why a variant and not a second auth screen ──────────────────────────────────
  * Tutors and students already had working logins, working roles and working dashboards - the
  * root page has redirected `TUTOR → /german-note` and `STUDENT → /my-journey` all along. What
- * was missing was any SIGN that this page was for them: the brand panel says "Internal tool ·
- * access by invitation" and the sign-up picker offered Admin/Head/Telecaller only.
+ * was missing was any SIGN that this page was for them: the brand panel read "Business cockpit ·
+ * internal tool · access by invitation" and the sign-up picker offered Admin/Head/Telecaller only.
  *
  * So `/portal` and `/tutor` render THIS component with different copy, not a second login
  * screen. One auth path, one set of guards, one place a credential bug can live. A second
  * implementation would be a second thing to keep secure for the sake of a heading.
+ *
+ * The `team` variant is NOT the team's variant any more - it is the SHARED door. `/login` is
+ * where middleware bounces every unauthenticated request and where `sendLoginCredentials` points
+ * a brand-new team, tutor or coach account, so its copy has to be true for all of them. The
+ * business pitch that used to live here ("one cockpit for the whole business", "ledger-backed
+ * numbers", "live speed-to-lead") was the first thing a student read on the screen they were
+ * emailed. Role-specific copy belongs on the role doors below, which are opt-in.
+ *
+ * ── No brand panel ──────────────────────────────────────────────────────────────
+ * There used to be a half-screen gradient pane carrying a headline, a paragraph and two chips.
+ * It is gone: on a screen whose whole job is two fields, it was a half-page of marketing that
+ * had to be re-written for every audience and got it wrong for most of them. What remains is
+ * the lockup, the form, and nothing to maintain per role.
  */
 export type LoginVariant = "team" | "student" | "tutor" | "coach";
 
 const VARIANTS: Record<LoginVariant, {
   heading: string;
   blurb: string;
-  hero: string;
-  heroBlurb: string;
   /** Students are provisioned from a Student record - they cannot request a seat here. */
   allowSignup: boolean;
   next: string;
-  /** Sits under the wordmark in the brand panel. */
-  kicker: string;
-  /** The two chips on the brand panel. Internal metrics must not reach a student. */
-  badges: { label: string; tone: "good" | "primary" }[];
-  /** The closing line of the brand panel. */
-  footnote: string;
+  /** Optional closing line. Omitted where the heading or the sign-up line already says it. */
+  footnote?: string;
 }> = {
   team: {
     heading: "Welcome back",
-    blurb: "Sign in to your B2 Consultants workspace.",
-    hero: "One cockpit for the whole business.",
-    heroBlurb:
-      "Finance, pipeline, students and team - every number traced to a balanced ledger. Sign in with the role that matches your seat.",
+    blurb: "Sign in and you land on your own dashboard.",
     allowSignup: true,
     next: "/",
-    kicker: "Business cockpit",
-    badges: [
-      { label: "Ledger-backed numbers", tone: "good" },
-      { label: "Live speed-to-lead", tone: "primary" },
-    ],
-    footnote: "Internal tool · access by invitation",
+    // The one place the shared door still has to say who it is for: its heading cannot,
+    // because it greets everybody.
+    footnote: "One sign-in for students, tutors, coaches & team",
   },
   student: {
     heading: "Student portal",
     blurb: "Sign in to see your own journey, classroom and agreement.",
-    hero: "Your journey, in one place.",
-    heroBlurb:
-      "Your milestones, your sessions, your classes and your agreement - everything your coach is tracking, visible to you.",
     // A student login is created FROM their student record by an admin (see portal-actions);
     // offering a request form here would collect requests nobody can action.
     allowSignup: false,
     next: "/my-journey",
-    kicker: "Student portal",
-    // NOT the team's chips. "Business cockpit", "Ledger-backed numbers" and "Live
-    // speed-to-lead" are internal sales and finance metrics, and they were rendering on
-    // the student's own sign-in page - along with a footer telling them this is an
-    // internal tool they need an invitation for, which is the exact line this variant
-    // was created to remove. Only the headline and blurb were ever being swapped.
-    badges: [
-      { label: "Your milestones", tone: "primary" },
-      { label: "Your agreement & payments", tone: "good" },
-    ],
-    footnote: "Your coach sets up your login from your student record.",
   },
   coach: {
     heading: "Coach sign-in",
     blurb: "Sign in to the batches and students you coach.",
-    hero: "Your cohorts, your week.",
-    heroBlurb:
-      "The batches you run, the sessions due this week, the register to take and every sprint check-in waiting on you.",
     allowSignup: true,
     next: "/coaching",
-    kicker: "Coaching desk",
-    badges: [
-      { label: "Your batches", tone: "primary" },
-      { label: "Sprint check-ins", tone: "good" },
-    ],
-    footnote: "Coach access · arranged with B2 Consultants",
   },
   tutor: {
     heading: "Tutor sign-in",
     blurb: "Sign in to your German Note batches and community.",
-    hero: "Your batches, your recordings.",
-    heroBlurb:
-      "The cohorts you teach, the sessions you have delivered, and the community your students learn in.",
     allowSignup: true,
     next: "/german-note",
-    kicker: "German Note",
-    badges: [
-      { label: "Your batches", tone: "primary" },
-      { label: "Class recordings", tone: "good" },
-    ],
-    footnote: "Tutor access · arranged with B2 Consultants",
   },
 };
 
@@ -246,68 +215,18 @@ export default function LoginForm({ variant = "team" }: { variant?: LoginVariant
     }`;
 
   return (
-    <div className="flex min-h-screen items-stretch bg-surface">
-      {/* brand panel - the one allowed gradient (hero-sky) */}
-      <div className="hero-sky hidden flex-1 flex-col justify-between border-0 p-12 lg:flex">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <BrandLogo className="h-10 flex-none" />
-            <span className="flex flex-col leading-tight">
-              <span className="font-display text-[15px] font-bold text-ink">B2 Consultants</span>
-              <span className="text-caption text-ink-2">{v.kicker}</span>
-            </span>
-          </div>
-          <ThemeToggle frosted />
-        </div>
-
-        <div className="max-w-md">
-          <h1 className="font-display text-[34px] font-extrabold leading-[1.15] text-ink">
-            {v.hero}
-          </h1>
-          <p className="mt-3.5 text-[15px] leading-relaxed text-ink-2">{v.heroBlurb}</p>
-          <div className="mt-6 flex flex-wrap gap-2">
-            {v.badges.map((b) => (
-              <span
-                key={b.label}
-                className={`rounded-full bg-[var(--bg-frost)] px-3.5 py-1.5 text-xs font-semibold ${
-                  b.tone === "good" ? "text-good" : "text-primary-strong"
-                }`}
-              >
-                {b.label}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* The same credit the signed-in app carries, folded into the line that was already
-            here rather than bolted on as a second footer - this pane has one closing line. */}
-        <p className="text-caption text-ink-3">
-          {v.footnote} · Developed by{" "}
-          <a
-            href="https://sirahdigital.in/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-medium underline decoration-line underline-offset-2 transition-colors hover:text-primary hover:decoration-primary"
-          >
-            Sirah Digital
-            <span className="sr-only"> (opens in a new tab)</span>
-          </a>
-        </p>
+    <div className="flex min-h-screen flex-col bg-surface">
+      <div className="flex justify-end px-6 pt-5">
+        <ThemeToggle />
       </div>
 
-      {/* form pane */}
-      <div className="flex min-w-0 flex-1 items-center justify-center overflow-y-auto px-6 py-10">
+      <div className="flex flex-1 items-start justify-center overflow-y-auto px-6 pb-12 pt-4 sm:items-center sm:pt-0">
         <div className="w-full max-w-sm">
-          {/* mobile brand row (brand panel is hidden below lg) */}
-          <div className="mb-6 flex items-center justify-between lg:hidden">
-            <div className="flex items-center gap-2.5">
-              <BrandLogo className="h-9 flex-none" />
-              <span className="flex flex-col leading-tight">
-                <span className="font-display text-sm font-bold text-ink">B2 Consultants</span>
-                <span className="text-caption text-ink-3">{v.kicker}</span>
-              </span>
-            </div>
-            <ThemeToggle />
+          {/* The FULL lockup, not the bracketed mark. The mark omits "CONSULTANTS" because it
+              was designed to sit beside an HTML wordmark that said it instead; standing alone
+              and centred, it just reads as a logo with its bottom cropped off. */}
+          <div className="mb-7 flex justify-center">
+            <BrandLogo variant="full" className="h-[72px] flex-none" />
           </div>
 
           {/* Hidden on the student portal: a student login is created FROM their student
@@ -386,14 +305,17 @@ export default function LoginForm({ variant = "team" }: { variant?: LoginVariant
               </label>
             )}
 
+            {/* Not "Work email", and not a @b2consultants.in placeholder: a student or a tutor
+                signs in with their personal address, and a label that calls it a work email is a
+                label telling them they are on the wrong screen. */}
             <label className="block text-xs font-semibold text-ink-2">
-              Work email
+              Email
               <input
                 {...emailField.attrs}
                 required
                 value={email}
                 onChange={emailField.onChange}
-                placeholder="you@b2consultants.in"
+                placeholder="you@email.com"
                 autoComplete="email"
                 className={fieldCls}
               />
@@ -492,6 +414,10 @@ export default function LoginForm({ variant = "team" }: { variant?: LoginVariant
             <p className="mt-5 text-center text-[13px] text-ink-3">
               No login yet? Your coach sets one up from your student record - ask them.
             </p>
+          )}
+
+          {v.footnote && !isSignup && (
+            <p className="mt-6 text-center text-caption text-ink-3">{v.footnote}</p>
           )}
         </div>
       </div>

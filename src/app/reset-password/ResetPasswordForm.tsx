@@ -67,45 +67,15 @@ export default function ResetPasswordForm({ token }: { token: string | null }) {
   };
 
   return (
-    <div className="flex min-h-screen items-stretch bg-surface">
-      {/* brand panel - the one allowed gradient (hero-sky) */}
-      <div className="hero-sky hidden flex-1 flex-col justify-between border-0 p-12 lg:flex">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <BrandLogo className="h-10 flex-none" />
-            <span className="flex flex-col leading-tight">
-              <span className="font-display text-[15px] font-bold text-ink">B2 Consultants</span>
-              <span className="text-caption text-ink-2">Business cockpit</span>
-            </span>
-          </div>
-          <ThemeToggle frosted />
-        </div>
-
-        <div className="max-w-md">
-          <h1 className="font-display text-[34px] font-extrabold leading-[1.15] text-ink">
-            Set a new password.
-          </h1>
-          <p className="mt-3.5 text-[15px] leading-relaxed text-ink-2">
-            Choose something you haven&apos;t used here before. You&apos;ll sign in with it right after.
-          </p>
-        </div>
-
-        <p className="text-caption text-ink-3">Internal tool · access by invitation</p>
+    <div className="flex min-h-screen flex-col bg-surface">
+      <div className="flex justify-end px-6 pt-5">
+        <ThemeToggle />
       </div>
 
-      {/* form pane */}
-      <div className="flex min-w-0 flex-1 items-center justify-center overflow-y-auto px-6 py-10">
+      <div className="flex flex-1 items-start justify-center overflow-y-auto px-6 pb-12 pt-4 sm:items-center sm:pt-0">
         <div className="w-full max-w-sm">
-          {/* mobile brand row (brand panel is hidden below lg) */}
-          <div className="mb-6 flex items-center justify-between lg:hidden">
-            <div className="flex items-center gap-2.5">
-              <BrandLogo className="h-9 flex-none" />
-              <span className="flex flex-col leading-tight">
-                <span className="font-display text-sm font-bold text-ink">B2 Consultants</span>
-                <span className="text-caption text-ink-3">Business cockpit</span>
-              </span>
-            </div>
-            <ThemeToggle />
+          <div className="mb-7 flex justify-center">
+            <BrandLogo variant="full" className="h-[72px] flex-none" />
           </div>
 
           <h2 className="font-display text-[23px] font-bold text-ink">Choose a new password</h2>
@@ -178,6 +148,10 @@ export default function ResetPasswordForm({ token }: { token: string | null }) {
             <Link href="/login" className="font-semibold text-primary-strong hover:underline">
               Sign in
             </Link>
+          </p>
+
+          <p className="mt-6 text-center text-caption text-ink-3">
+            Your new password is known only to you.
           </p>
         </div>
       </div>

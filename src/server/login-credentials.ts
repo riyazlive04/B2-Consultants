@@ -31,6 +31,20 @@ function first(full: string): string {
   return (full || "").trim().split(/\s+/)[0] || "there";
 }
 
+/**
+ * Which sign-in door the message points at.
+ *
+ * A student was being sent to `/login`, the shared door. It works - one credential path serves
+ * every role - but `/portal` is the same form headed "Student portal", and a student following a
+ * link to their own account should arrive somewhere that says so. Team, tutor and coach accounts
+ * keep the shared door: `audience` only distinguishes student from staff, and guessing a tutor's
+ * door from it would get coaches wrong.
+ */
+const LOGIN_PATH: Record<LoginAudience, string> = {
+  student: "/portal",
+  team: "/login",
+};
+
 /** What the portal is FOR, in one line - the "use it for all updates" the message exists to say. */
 const PORTAL_PURPOSE: Record<LoginAudience, string> = {
   student:
@@ -79,7 +93,7 @@ export async function sendLoginCredentials(o: {
   reset?: boolean;
 }): Promise<{ emailed: boolean; whatsapped: boolean; summary: string }> {
   const base = (process.env.BETTER_AUTH_URL ?? "").replace(/\/+$/, "");
-  const loginUrl = `${base}/login`;
+  const loginUrl = `${base}${LOGIN_PATH[o.audience]}`;
 
   // ── Email ──
   let emailNote: string;

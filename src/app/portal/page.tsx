@@ -8,7 +8,7 @@ import LoginForm from "../login/LoginForm";
  *
  * Same component, same auth path, same guards as `/login` - only the copy differs. A student
  * signing in here still lands on `/my-journey` exactly as they always did; what they get is a
- * page that says it is for them, instead of one headed "Internal tool · access by invitation".
+ * page headed with their own name for it. `sendLoginCredentials` links a student here.
  *
  * Deliberately NOT a second auth implementation. One credential path means one place a
  * credential bug can live, and a login screen is not somewhere to have two of anything.

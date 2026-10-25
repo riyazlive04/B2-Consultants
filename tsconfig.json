@@ -47,8 +47,7 @@
     // here is what stops that churn from rebuilding the eleven-entry list all over again.
     // Keep this to two entries: if a tool appends another, delete it, the glob has it.
     ".next*/types/**/*.ts",
-    ".next/types/**/*.ts",
-    ".next-local/types/**/*.ts"
+    ".next/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

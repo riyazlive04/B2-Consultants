@@ -44,7 +44,7 @@ export type ResolvedPeriod = {
   start: Date;
   /** EXCLUSIVE. A row at exactly this instant belongs to the next window. */
   endExclusive: Date;
-  /** e.g. "July 2026", "1–7 Jul 2026", "All time". */
+  /** e.g. "July 2026", "1-7 Jul 2026", "All time". */
   label: string;
   /** The window immediately before this one, same length. Null for "all". */
   previous: { start: Date; endExclusive: Date } | null;

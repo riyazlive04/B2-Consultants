@@ -15,7 +15,7 @@ import { formatDate, formatInrMinor } from "@/lib/format";
  *      surface. `--ink` is near-WHITE under `[data-theme="dark"]`, so the readout was white text
  *      on a white box - the exact failure DESIGN §1.4 names ("anything that used bg-ink +
  *      text-white must use text-surface instead"). The shared tooltip is HTML and uses the token.
- *   2. **Axis text sat at 8–9.5px** against §7's stated 12px floor. Those were viewBox units, so
+ *   2. **Axis text sat at 8-9.5px** against §7's stated 12px floor. Those were viewBox units, so
  *      the rendered size drifted with the card's width and could not be honoured or even
  *      measured. The frame measures a real pixel box, so 12px is 12px.
  *   3. **Gridlines were `[min, mid, max]`** - labels like "₹3,47,912" that no reader recognises.

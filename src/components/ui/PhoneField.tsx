@@ -9,7 +9,7 @@ import {
 
 /**
  * Country-code picker + national number (issue 4.3), on EVERY phone field it's dropped into. The
- * picker limits the digit count per country (India 10, Germany 10–11, …) and prepends the correct
+ * picker limits the digit count per country (India 10, Germany 10-11, …) and prepends the correct
  * "+CC", which is what fixes the wrong-country-code capture bug (1.4) at source: the operator can
  * no longer submit "9876543210" with no country and have it guessed against +91.
  *

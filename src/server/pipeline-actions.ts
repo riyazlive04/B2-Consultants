@@ -251,7 +251,7 @@ export async function deleteLead(id: string): Promise<ActionResult> {
 
 /**
  * Speed-to-lead (Synamate "Time Contacted" / "Speed Ratio", in-sourced). Stamps the
- * first-contact time; speed = contactedAt − createdAt is derived at read. Idempotent -
+ * first-contact time; speed = contactedAt - createdAt is derived at read. Idempotent -
  * only the first mark counts. A setter may mark their own or assigned leads; Admin any.
  */
 export async function markLeadContacted(id: string): Promise<ActionResult> {

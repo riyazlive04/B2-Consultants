@@ -162,7 +162,7 @@ export const BANT_ANSWER_SCORES: Record<string, Record<string, number>> = {
   currentIncome: {
     // Monthly bands (current form).
     gt_1l: 4, "75k_1l": 3.2, "50_75k": 2.4, "30_50k": 1.6, lt_30k: 0.8,
-    // Legacy ANNUAL bands, kept at their original scores. A stored `5_10l` meant ₹5–10 lakh a
+    // Legacy ANNUAL bands, kept at their original scores. A stored `5_10l` meant ₹5-10 lakh a
     // YEAR and must keep scoring as that; silently re-reading it against the monthly bands
     // would re-rank every prospect booked before the question changed.
     gt_20l: 4, "10_20l": 3.2, "5_10l": 2, lt_5l: 0.8,

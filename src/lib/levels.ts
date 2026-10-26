@@ -99,7 +99,7 @@ export function levelLabelMap(levels: LevelSummary[]): Record<string, string> {
 }
 
 /**
- * Normalise a user-typed level code to the stored shape: UPPER_SNAKE, A–Z/0–9/underscore only.
+ * Normalise a user-typed level code to the stored shape: UPPER_SNAKE, A-Z/0-9/underscore only.
  * "gn c1" → "GN_C1". Returns "" when nothing usable is left, so callers can reject it.
  */
 export function normalizeLevelCode(raw: string): string {

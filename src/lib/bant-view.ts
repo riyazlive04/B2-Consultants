@@ -18,9 +18,9 @@ import { BANT_CONFIRM_ABOVE, BANT_DOUBT_FROM, bantVerdictFor } from "./booking-i
 export type BantOrigin = "booking" | "opt-in" | "manual";
 
 export type BantSnapshot = {
-  /** 0–4 weighted average of the scored answers. */
+  /** 0-4 weighted average of the scored answers. */
   avg: number;
-  /** 0–4 count of dimensions met - the figure the pipeline ranking consumes. */
+  /** 0-4 count of dimensions met - the figure the pipeline ranking consumes. */
   score: number;
   verdict: BantVerdict;
   budget: boolean;
@@ -89,7 +89,7 @@ export const BANT_ORIGIN_LABELS: Record<BantOrigin, string> = {
   manual: "set by a specialist",
 };
 
-/** Traffic light on the 0–4 average, matching Ameen's verdict thresholds (>2.4 · 1.6–2.4 · <1.6). */
+/** Traffic light on the 0-4 average, matching Ameen's verdict thresholds (>2.4 · 1.6-2.4 · <1.6). */
 export function bantSignal(avg: number): "ok" | "watch" | "risk" {
   return avg > BANT_CONFIRM_ABOVE ? "ok" : avg >= BANT_DOUBT_FROM ? "watch" : "risk";
 }

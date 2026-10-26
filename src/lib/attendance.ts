@@ -62,7 +62,7 @@ export type AttendanceSummary = {
   absent: number;
   late: number;
   excused: number;
-  /** attended / counted, 0–1. Null when nothing counts yet - see `signalFor`. */
+  /** attended / counted, 0-1. Null when nothing counts yet - see `signalFor`. */
   rate: number | null;
   /** Consecutive countable sessions missed, most recent first. Excused sessions do not break it. */
   consecutiveMissed: number;

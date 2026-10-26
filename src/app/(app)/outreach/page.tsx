@@ -20,10 +20,10 @@ export const dynamic = "force-dynamic";
 const CHANNEL_LABELS: Record<string, string> = { WHATSAPP: "WhatsApp", CALL: "Call", SYSTEM: "System" };
 
 /**
- * The Outreach Specialist SOP (Script_for_Outreach_Specialist.docx, Steps 1–23), as a screen.
+ * The Outreach Specialist SOP (Script_for_Outreach_Specialist.docx, Steps 1-23), as a screen.
  *
  * Three surfaces:
- *   · Queue       - what to do next, with the message already written (Steps 2–21)
+ *   · Queue       - what to do next, with the message already written (Steps 2-21)
  *   · Key Metrics - "Key Metrics Sales B2_2026.xlsx" (Step 12 onward)
  *   · Closed      - Step 9's IGNORE bucket and the cancellations. Dormant, never deleted.
  */

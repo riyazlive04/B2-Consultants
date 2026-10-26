@@ -138,7 +138,7 @@ test("ledger period integrity", { skip }, async (t) => {
       before.june + rupees(50_000),
       "June must show the corrected ₹50,000, not ₹45,000 and not ₹95,000",
     );
-    // Before the fix this was −₹45,000: the bare reversal, marooned in the month of the edit.
+    // Before the fix this was -₹45,000: the bare reversal, marooned in the month of the edit.
     assert.equal(
       await revenueEarnedIn(JULY_KEY),
       before.july,
@@ -185,7 +185,7 @@ test("ledger period integrity", { skip }, async (t) => {
       juneAfterPost,
       "a closed month is never restated - that is what the lock is for",
     );
-    // Both halves landed in July: −20,000 reversal + 25,000 restatement = +5,000 net.
+    // Both halves landed in July: -20,000 reversal + 25,000 restatement = +5,000 net.
     assert.equal(
       await revenueEarnedIn(JULY_KEY),
       julyBefore + rupees(5_000),

@@ -5,9 +5,9 @@
  * response target; it sets FOUR, by the clock time the lead arrived:
  *
  *   • any lead      - connect within 5 minutes of arrival        (90% hit rate)
- *   • 09:00–19:59   - connect the SAME day                        (100%)
- *   • 20:00–23:59   - connect the FOLLOWING day                   (100%)
- *   • 00:00–08:59   - connect the SAME day                        (100%)
+ *   • 09:00-19:59   - connect the SAME day                        (100%)
+ *   • 20:00-23:59   - connect the FOLLOWING day                   (100%)
+ *   • 00:00-08:59   - connect the SAME day                        (100%)
  *
  * The 5-minute rule is not a fifth window - it runs across all four, which is why
  * `slaFor` returns a window AND a separate five-minute deadline. A lead that arrives at
@@ -68,7 +68,7 @@ export type SlaVerdict = {
   metWindow: boolean;
 };
 
-/** IST wall-clock hour (0–23) of an instant. */
+/** IST wall-clock hour (0-23) of an instant. */
 export function istHour(instant: Date): number {
   return new Date(instant.getTime() + IST_OFFSET_MS).getUTCHours();
 }
@@ -236,7 +236,7 @@ export function bucketForLead(verdict: SlaVerdict): QueueBucket | null {
  * The eight target cards of spec §6, each mapped to its JD threshold.
  *
  * `amber` is the band between "missing it" and "hitting it". Where the JD gives a range
- * (lead→booked 30–40%, BANT accuracy 65–75%) the LOWER bound is the pass mark and the
+ * (lead→booked 30-40%, BANT accuracy 65-75%) the LOWER bound is the pass mark and the
  * range's top is not a ceiling to be punished for exceeding - so `green` is the lower
  * bound, and there is no upper limit.
  */

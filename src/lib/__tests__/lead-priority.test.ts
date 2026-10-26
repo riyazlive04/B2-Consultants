@@ -22,7 +22,7 @@ describe("lead priority - the shipped weights reproduce the old hardcoded formul
    * tell whether that was the refactor or the founder's settings. The old pipeline formula was:
    *
    *   stageWeight + bant*10 + (highlyQualified ? 15 : 0) + (age <= 7d ? 10 : 0)
-   *                − min(max(idle - 7, 0), 20)
+   *                - min(max(idle - 7, 0), 20)
    */
   const legacy = (i: {
     stage: number; bant: number; hq: boolean; ageDays: number; idleDays: number;

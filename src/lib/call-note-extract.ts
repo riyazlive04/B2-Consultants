@@ -59,7 +59,7 @@ export type CallNoteExtraction = {
    * it silently would be writing to a permissioned field through the back door.
    */
   highlyQualified: boolean;
-  /** 0–1. Below LOW_CONFIDENCE the UI asks for a human read rather than pre-filling. */
+  /** 0-1. Below LOW_CONFIDENCE the UI asks for a human read rather than pre-filling. */
   confidence: number;
   evidence: Evidence;
   source: "ai" | "rules";

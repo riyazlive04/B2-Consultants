@@ -416,7 +416,7 @@ export default async function FinancePage({
       signedValue: view.net.inr,
       tooltip: "Net Profit = Revenue minus all costs including marketing and tools.",
       detailTitle: "Net profit - this month",
-      detailNote: "Net = revenue − all costs (COGS, marketing, tools, ops).",
+      detailNote: "Net = revenue - all costs (COGS, marketing, tools, ops).",
       detailRows: [
         { label: "Revenue (money in)", inrMinor: view.revenue.inr, eurMinor: view.revenue.eur },
         { label: "All costs (money out)", inrMinor: view.revenue.inr - view.net.inr, eurMinor: view.revenue.eur - view.net.eur },
@@ -444,7 +444,7 @@ export default async function FinancePage({
       signedValue: view.gross.inr,
       tooltip: "Gross Profit = Revenue minus only delivery costs (COGS).",
       detailTitle: "Gross profit - this month",
-      detailNote: "Gross = revenue − COGS (direct delivery).",
+      detailNote: "Gross = revenue - COGS (direct delivery).",
       detailRows: [
         { label: "Revenue", inrMinor: metrics.revenue.inr, eurMinor: metrics.revenue.eur },
         { label: "COGS (delivery)", inrMinor: view.cogs.inr, eurMinor: view.cogs.eur },
@@ -691,7 +691,7 @@ export default async function FinancePage({
         />
 
       {/* §3.2/§3.3 - the year view the dashboard never had: cumulative target vs
-          achieved across Jan–Dec, with a run-rate projection to year-end. */}
+          achieved across Jan-Dec, with a run-rate projection to year-end. */}
       <Card
         title={<CardTitle icon={<CalendarRange size={16} />}>Month on month - {annual.year}</CardTitle>}
         subtitle="Plan pace, actual and what it now takes to still make the year. Hover any month. Shown in ₹ - the monthly target is set in rupees."

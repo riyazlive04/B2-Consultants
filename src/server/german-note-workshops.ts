@@ -30,11 +30,11 @@ import {
  *   COGS         = books + tutor     (DERIVED from the product cost model;
  *                                      lib/gn-workshop-pricing, overridable per row)
  *   ad spend     = workshop ad-set spend ÷ its AD conversions   (DERIVED, allocated)
- *   Gross Profit = final − COGS                     GP% = GP / final
+ *   Gross Profit = final - COGS                     GP% = GP / final
  *   Total Exp    = COGS + adSpend + referral
- *   Net Profit   = final − Total Exp                NP% = NP / final
+ *   Net Profit   = final - Total Exp                NP% = NP / final
  *   ROAS         = final ÷ adSpend
- *   Balance      = paid − final   (negative = owed)
+ *   Balance      = paid - final   (negative = owed)
  *
  * Verified against the March rollup - COGS ₹404,708.41 → GP 48.83%, NP 45.76%.
  * Money crosses to client components as INR paise `number`s (BigInt isn't
@@ -209,7 +209,7 @@ export type GnPnlRollup = {
   organic: number;
   revenue: number; // Σ final
   cashCollected: number; // Σ paid
-  balance: number; // cash − revenue (negative = outstanding)
+  balance: number; // cash - revenue (negative = outstanding)
   books: number;
   tutor: number;
   cogs: number;
@@ -422,7 +422,7 @@ export type GnDuesRow = {
   fullName: string;
   workshopId: string;
   workshopName: string;
-  /** POSITIVE paise still owed (pnl.balance is paid − final, so a debt is negative there) */
+  /** POSITIVE paise still owed (pnl.balance is paid - final, so a debt is negative there) */
   owed: number;
   final: number;
   paid: number;
@@ -447,8 +447,8 @@ export type GnFounderStats = {
   /** rollup over EVERY conversion in every workshop */
   totals: GnPnlRollup;
   /**
-   * Net profit on the CASH basis: collected − total expense.
-   * `totals.netProfit` is the QUOTED basis (revenue − expense) and overstates
+   * Net profit on the CASH basis: collected - total expense.
+   * `totals.netProfit` is the QUOTED basis (revenue - expense) and overstates
    * profit on money that has not arrived - docs F1, §6.7. Both are shown.
    */
   netProfitCash: number;

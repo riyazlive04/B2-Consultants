@@ -13,7 +13,7 @@
 export const COMPLETION_THRESHOLD_PCT = 90;
 
 export type WatchRow = {
-  /** Tracked high-water mark, 0–100. Null = never tracked. */
+  /** Tracked high-water mark, 0-100. Null = never tracked. */
   watchedPct: number | null;
   /** Whether the student ticked "watched". */
   selfReported: boolean;

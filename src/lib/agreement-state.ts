@@ -259,7 +259,7 @@ export function agreementGroup(state: AgreementState): AgreementGroup {
   }
 }
 
-/** Short headline for the action card, e.g. the requested "Agreement Pending – Ready to Send". */
+/** Short headline for the action card, e.g. the requested "Agreement Pending - Ready to Send". */
 export function agreementStateHeadline(state: AgreementState): string {
   switch (state) {
     case "READY_TO_SEND":

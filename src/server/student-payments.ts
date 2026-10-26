@@ -167,7 +167,7 @@ export const getMyPayments = cache(async (userId: string): Promise<StudentPaymen
   );
 
   // Compared against `@db.Date` columns, so today must be the IST business day as a day boundary,
-  // not a raw UTC instant - else an instalment flips overdue during the 00:00–05:30 IST window.
+  // not a raw UTC instant - else an instalment flips overdue during the 00:00-05:30 IST window.
   const todayKey = istToday().toISOString().slice(0, 10);
 
   const mapped: StudentPaymentPlan[] = plans.map((p) => {

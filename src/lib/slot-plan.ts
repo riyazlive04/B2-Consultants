@@ -115,7 +115,7 @@ export function slotStartsForRange(opts: {
     const dayEndUtc = opts.istWallToUtc(dateStr, p.endTime).getTime();
     if (!Number.isFinite(dayStartUtc) || !Number.isFinite(dayEndUtc)) continue;
 
-    // `+ 1` so a call that ends exactly ON the window's end time still fits: a 15:00–18:00
+    // `+ 1` so a call that ends exactly ON the window's end time still fits: a 15:00-18:00
     // window with 60-minute calls must yield a 17:00 slot, not stop at 16:00.
     for (let t = dayStartUtc; t + p.durationMins * 60_000 <= dayEndUtc + 1; t += stepMs) {
       starts.push(new Date(t));

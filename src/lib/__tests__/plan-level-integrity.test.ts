@@ -10,11 +10,11 @@ import { fileURLToPath } from "node:url";
  * ── What went wrong, in real data ───────────────────────────────────────────────────────
  * `CurriculumTemplate.levelCode` is meant to hold a `Level.code`. The form offered a free-text
  * box with "GUIDED" as its placeholder, and the server validated it as
- * `z.string().trim().max(40)` — i.e. anything at all. On live, 23 Oct 2026, two of three plans
+ * `z.string().trim().max(40)` - i.e. anything at all. On live, 23 Oct 2026, two of three plans
  * were filed under a programme that does not exist:
  *
- *   · "Guided"   — the catalogue code is upper-case
- *   · "Gudied30" — a typo, on a plan literally named "Guided"
+ *   · "Guided"   - the catalogue code is upper-case
+ *   · "Gudied30" - a typo, on a plan literally named "Guided"
  *
  * Neither could be matched to a programme by any screen that looks one up by code, and nothing in
  * the app could tell anybody. Both were corrected on 24 Oct 2026.
@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
  *   3. migration M2 puts a foreign key on the column, so the database itself refuses
  *
  * Layer 3 is the only permanent one, and it could not be applied until the data was clean. Layers
- * 1 and 2 are what stop it getting dirty again in the meantime — and they are what this tests,
+ * 1 and 2 are what stop it getting dirty again in the meantime - and they are what this tests,
  * because a source scan is what is available for a form and an action.
  */
 

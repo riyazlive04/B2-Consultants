@@ -9,11 +9,11 @@ import { formatInrMinor } from "@/lib/format";
 import { AGE_BUCKETS, bucketForDaysOverdue, type AgeBucketKey } from "@/lib/ageing";
 
 /**
- * Age analysis of the due balance (Error Log G1–G4).
+ * Age analysis of the due balance (Error Log G1-G4).
  *
  * REPLACES a bucket-total column chart, which was wrong in two ways at once:
  *
- *   • G1 - the buckets were 1–30 / 31–60 / 61–90 / 90+ days. The collection cycle is at most
+ *   • G1 - the buckets were 1-30 / 31-60 / 61-90 / 90+ days. The collection cycle is at most
  *     a fortnight, so effectively every overdue receivable landed in the first column and the
  *     chart said nothing. They are weeks now.
  *

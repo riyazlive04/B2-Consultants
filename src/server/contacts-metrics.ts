@@ -65,7 +65,7 @@ export type ContactsListResult = {
   nextCursor: string | null;
   hasMore: boolean;
   /** Count of rows matching the current filters (not the whole table) - powers the
-   *  "Showing X–Y of Z" pagination notice. */
+   *  "Showing X-Y of Z" pagination notice. */
   filteredTotal: number;
 };
 

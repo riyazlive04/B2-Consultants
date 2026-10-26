@@ -283,7 +283,7 @@ async function writeScore(
 }
 
 /**
- * Option scores are 0–4 with decimals (`unsure: 1.2`), so `LeadAnswer.score` is a Float. Rounded
+ * Option scores are 0-4 with decimals (`unsure: 1.2`), so `LeadAnswer.score` is a Float. Rounded
  * to one decimal so a weight multiplication cannot leave float noise, and never below zero.
  */
 function roundScore(score: number | null): number | null {

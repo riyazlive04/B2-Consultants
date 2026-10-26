@@ -58,7 +58,7 @@ export default async function BookPage() {
   }));
 
   return (
-    // The header that used to sit here — mark, title, blurb — is now the scheduler's own left
+    // The header that used to sit here - mark, title, blurb - is now the scheduler's own left
     // panel, where it stays beside the calendar instead of scrolling away above it.
     <main className="min-h-screen bg-canvas px-4 py-10 sm:py-14">
       <BookingForm slots={slotOptions} hostName={hostName} />

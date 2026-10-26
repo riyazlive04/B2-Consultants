@@ -246,7 +246,7 @@ export async function getPipelineOverview(
   const mEnd = month.end;
   /**
    * …but stage changes are true timestamps: query them with the IST INSTANTS, otherwise
-   * 00:00–05:30 IST events on the boundary day land in the wrong window.
+   * 00:00-05:30 IST events on the boundary day land in the wrong window.
    *
    * Derived from the window's own boundaries rather than from `today`, so a custom or past
    * window shifts its instant range with it. `istMonthInstantRange(today)` would have silently
@@ -626,7 +626,7 @@ export type StageAging = {
   count: number;
   avgDays: number;
   oldestDays: number;
-  // Distribution by time-in-stage: 0–3d, 4–7d, 8–14d, 15d+.
+  // Distribution by time-in-stage: 0-3d, 4-7d, 8-14d, 15d+.
   fresh: number;
   warm: number;
   stale: number;
@@ -635,7 +635,7 @@ export type StageAging = {
 
 /**
  * Aging analysis (issue 1.7): for every OPEN lead, how long it has sat in its CURRENT stage.
- * Time-in-stage = now − the latest LeadStageHistory.changedAt - the history is append-only, so a
+ * Time-in-stage = now - the latest LeadStageHistory.changedAt - the history is append-only, so a
  * lead's newest row is when it entered the stage it's in now (that table is indexed on
  * [toStage, changedAt]). Terminal stages (Won/Lost/No-show) don't age, so they're excluded via
  * KANBAN_STAGES. Complements the existing by-stage view - the two together are the doc's ask.

@@ -64,7 +64,7 @@ describe("the cohort floor", () => {
      * The reason it is three and not two.
      *
      * A student reading the board knows their own per-metric line exactly, so from the cohort
-     * mean they can recover the sum of everybody else's: `mean × size − mine`. On a cohort of
+     * mean they can recover the sum of everybody else's: `mean × size - mine`. On a cohort of
      * two that sum IS their single classmate's breakdown. On a cohort of three it is a pair,
      * and a pair cannot be resolved into its members.
      *

@@ -10,10 +10,10 @@
  *
  *   Metric                        Green        Amber        Red        Source
  *   ───────────────────────────────────────────────────────────────────────────────────────
- *   OKR / target completion %     ≥ 80%        50–79%       < 50%      signalForPercent
- *   Cash runway (months)          ≥ 6          3–6          < 3        signalForRunway
+ *   OKR / target completion %     ≥ 80%        50-79%       < 50%      signalForPercent
+ *   Cash runway (months)          ≥ 6          3-6          < 3        signalForRunway
  *                                 (founder-editable - Console → Cash targets; these are defaults)
- *   Speed to lead                 ≤ 5 min      6–60 min     -          signalForSpeedToLead
+ *   Speed to lead                 ≤ 5 min      6-60 min     -          signalForSpeedToLead
  *   Signed figures (profit,       > 0          -            < 0        signedColor
  *     margin, balance, variance)               (0 = neutral, no verdict claimed)
  *   Student signal                manual GREEN / AMBER / RED, set by the coach   signalForStudent

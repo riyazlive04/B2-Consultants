@@ -123,7 +123,7 @@ test("signalForTarget uses the JD threshold, and stays silent with no data", () 
   assert.equal(signalForTarget("fiveMinuteRate", 80), "watch");
   assert.equal(signalForTarget("fiveMinuteRate", 40), "risk");
 
-  // The JD's 30–40% band: 30 passes, and exceeding the top of the range is not punished.
+  // The JD's 30-40% band: 30 passes, and exceeding the top of the range is not punished.
   assert.equal(signalForTarget("leadToBooked", 30), "ok");
   assert.equal(signalForTarget("leadToBooked", 55), "ok");
   assert.equal(signalForTarget("leadToBooked", 26), "watch");

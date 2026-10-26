@@ -13,7 +13,7 @@ import type { ClientMovementMonth } from "@/server/annual-metrics";
  * be read as what moved it.
  *
  * The base gets its OWN band above the bars (Error Log F5). It used to be overlaid on the same
- * axis, which put it in the y-range 126–202 - below the zero line and squarely inside the red
+ * axis, which put it in the y-range 126-202 - below the zero line and squarely inside the red
  * churn bars, so the one thing the movement is supposed to be read against was buried under the
  * movement itself, and drifted into the month labels whenever the roster was small. Two stacked
  * panels on a shared x-axis keep "how big is the base" and "what moved it" legible at once.
@@ -21,7 +21,7 @@ import type { ClientMovementMonth } from "@/server/annual-metrics";
  * DRAWN IN MEASURED PIXELS, NOT A `viewBox` (§5.8). It used to be `viewBox="0 0 720 286"`
  * stretched to the card with `fontSize="9"` - but a viewBox unit is only 9px when the card is
  * 720px wide. In the Finance column on a 320px phone the card is 238px, so every label rendered
- * at 9 × (238/720) = **3px**: the Jan–Dec axis was a row of grey dashes. Taking the width from
+ * at 9 × (238/720) = **3px**: the Jan-Dec axis was a row of grey dashes. Taking the width from
  * `ChartFrame` means one SVG unit is one CSS pixel, so the 12px below is actually 12px at every
  * size - the same fix `AnnualChart` and `CashChart` already had.
  */
@@ -263,7 +263,7 @@ function Plot({
                     +{h.gained} joined
                   </text>
                   <text x={half} y="40" textAnchor="middle" fontSize="11" fill="var(--bad-on-ink)">
-                    −{h.lost} left
+                    -{h.lost} left
                   </text>
                   <text x={half} y="51" textAnchor="middle" fontSize="11" fill="var(--on-accent)" opacity="0.8">
                     net {net >= 0 ? "+" : ""}{net} · {h.activeEnd} active

@@ -2,7 +2,7 @@ import type { Tone } from "@/components/ui/kit";
 import type { BatchReadiness } from "@/lib/batch";
 
 /**
- * How each cohort state is coloured — one map, because two of them drifted apart once already.
+ * How each cohort state is coloured - one map, because two of them drifted apart once already.
  *
  * It lives in its own module rather than on either component: `BatchChecklist` is a server
  * component that imports the Activate button, so importing a constant FROM it would drag that

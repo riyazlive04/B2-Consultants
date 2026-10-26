@@ -25,7 +25,7 @@ type Month = FunnelOverview["months"][number];
  * Plotting the raw stage counts on one axis is unreadable: awareness runs in the thousands and
  * enrolments in single digits, so every stage but the first flattens onto the baseline. A log
  * axis would fix the geometry and lose the audience. Rates put all four stages on one honest
- * 0–100 scale, and rate IS the question - "carry-through" is what a funnel measures.
+ * 0-100 scale, and rate IS the question - "carry-through" is what a funnel measures.
  *
  * Volume still matters, and it is not hidden: the counts live in the funnel blocks above and the
  * metrics table below. This chart is deliberately the derivative, not the level.

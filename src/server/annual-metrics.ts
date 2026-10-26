@@ -15,7 +15,7 @@ import { levelKinds } from "./levels";
  * answered from the screen at all.
  *
  * Everything here is CUMULATIVE, because that is the question being asked: a good March does
- * not matter if the year is still behind. Variance is cumulative achieved − cumulative target,
+ * not matter if the year is still behind. Variance is cumulative achieved - cumulative target,
  * evaluated only up to the current month (comparing a full year of target against three months
  * of actuals would report a catastrophe every January).
  */
@@ -43,7 +43,7 @@ export type AnnualPerformance = {
   fullYearTargetInr: number;
   /** Run-rate projection for where the year finishes if today's pace holds. */
   projectedYearEndInr: number;
-  /** Cumulative achieved − cumulative target, up to the current month only. */
+  /** Cumulative achieved - cumulative target, up to the current month only. */
   varianceInr: number;
   runRateInr: number;
 };

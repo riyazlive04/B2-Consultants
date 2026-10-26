@@ -51,7 +51,7 @@ function Trend({ trend, delta }: { trend: WeeklyReport["rows"][number]["trend"];
   return (
     <span className={`inline-flex items-center gap-1 text-caption font-semibold ${up ? "text-good" : "text-warn"}`}>
       {up ? <ArrowUpRight size={12} aria-hidden /> : <ArrowDownRight size={12} aria-hidden />}
-      {up ? "+" : "−"}
+      {up ? "+" : "-"}
       {Math.abs(delta)}
     </span>
   );

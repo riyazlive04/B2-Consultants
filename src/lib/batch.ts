@@ -480,7 +480,7 @@ export type BatchSeat = {
   enrollmentId: string | null;
   name: string;
   code: string | null;
-  /** Null for German Note — a course is sat, not bought as a tier. */
+  /** Null for German Note - a course is sat, not bought as a tier. */
   programLevel: string | null;
   /** The enrolment lifecycle status, or null for a `BatchMember`. */
   status: string | null;
@@ -505,7 +505,7 @@ export type BatchMembershipRows = {
 /**
  * Merge both mechanisms into one roster, one row per person.
  *
- * Pure, so it can be called from any read that has already fetched the rows — which is how
+ * Pure, so it can be called from any read that has already fetched the rows - which is how
  * `batch-detail.ts` uses it without a second query. Members first, then enrolments: within each
  * the database ordering is kept (joined date, enrolment date), and the two never interleave in
  * practice because a cohort only ever uses one mechanism.
@@ -514,14 +514,14 @@ export type BatchMembershipRows = {
  * Nothing in the schema forbids being in both: `BatchMember` has `@@unique([batchId, studentId])`
  * and `Enrollment.batchId` has no such constraint against it, so one person CAN hold a seat
  * through each. The register has always deduped for exactly this reason ("deduped because nothing
- * forbids being in both", server/attendance.ts) and the cohort roster did not — so the same
+ * forbids being in both", server/attendance.ts) and the cohort roster did not - so the same
  * cohort would have listed that person twice on one screen and once on the other.
  *
  * The enrolment row wins because it is strictly richer: it carries the programme level, the
  * lifecycle status and the coach, and the member row carries none of them. Keeping the member row
  * would mean silently dropping three facts we hold.
  *
- * `optOut` lets a caller drop enrolments it should not list — the register passes
+ * `optOut` lets a caller drop enrolments it should not list - the register passes
  * `belongsOnRegister`, which keeps a departed student on sheets they were already marked on while
  * taking them off future ones. Members are never filtered: a `BatchMember` row has no status to
  * judge, so its existence IS the membership.

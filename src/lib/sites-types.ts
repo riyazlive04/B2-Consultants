@@ -889,7 +889,7 @@ export type BlockType =
   // ── composites & spacing ──
   | "card" | "stat" | "divider" | "spacer"
   /**
-   * A rounded label chip - "OUR GUARANTEE", "★ NEXT BATCH FILLING NOW", "PHASE 1 · WEEK 1–2",
+   * A rounded label chip - "OUR GUARANTEE", "★ NEXT BATCH FILLING NOW", "PHASE 1 · WEEK 1-2",
    * the green "27 days" on a testimonial.
    *
    * Its own element rather than a styled `eyebrow` because it appears eight times on one page in

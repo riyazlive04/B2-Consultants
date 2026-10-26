@@ -301,7 +301,7 @@ export async function unseatEnrollment(enrollmentId: string): Promise<ActionResu
 }
 
 /**
- * START A COHORT — the Activate gate (refactor step C3).
+ * START A COHORT - the Activate gate (refactor step C3).
  *
  * ── Why this action exists at all, when readiness is derived ────────────────────────────
  * `batchReadiness` works out DRAFT / READY / ACTIVE / COMPLETED from the row every render, so

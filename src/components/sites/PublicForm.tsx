@@ -67,7 +67,7 @@ const KIND_BY_FIELD_TYPE: Partial<Record<FormFieldType, FieldKind>> = {
 const INPUT_CLS =
   "h-11 w-full rounded-field border border-line bg-surface px-3 text-sm outline-none focus:border-primary";
 
-/** Fisher–Yates against a fixed seed, so a re-render does not reshuffle under the respondent. */
+/** Fisher-Yates against a fixed seed, so a re-render does not reshuffle under the respondent. */
 function shuffled<T>(list: readonly T[], seed: number): T[] {
   const out = [...list];
   let s = seed || 1;
@@ -140,7 +140,7 @@ export default function PublicForm({
   }, [form.fields, form.settings.shuffleQuestions, seed]);
 
   const [pageIndex, setPageIndex] = useState(0);
-  /** Pages actually visited, so Back retraces the real route rather than index − 1. */
+  /** Pages actually visited, so Back retraces the real route rather than index - 1. */
   const [trail, setTrail] = useState<number[]>([]);
 
   const page: FormPage | undefined = pages[pageIndex];

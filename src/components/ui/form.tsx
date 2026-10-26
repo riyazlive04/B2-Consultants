@@ -187,7 +187,7 @@ export function Select(
 /** §5.5: the box is a styled span; the real input stays `sr-only` so it keeps focus + the tab order. */
 export function CheckboxField({ name, label, defaultChecked, hint, value, required }: {
   name: string; label: string; defaultChecked?: boolean; hint?: string;
-  /** Submitted instead of "on" when ticked — for consent, where the *wording agreed to* is
+  /** Submitted instead of "on" when ticked - for consent, where the *wording agreed to* is
    *  the record, not the fact that a box was ticked. */
   value?: string;
   required?: boolean;

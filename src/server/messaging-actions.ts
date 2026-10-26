@@ -319,12 +319,12 @@ export async function saveEmailSettings(form: FormData): Promise<ActionResult> {
 }
 
 /**
- * "Send test" from the email settings card — the one thing that tells you the Resend connection is
+ * "Send test" from the email settings card - the one thing that tells you the Resend connection is
  * really live, end to end.
  *
  * Deliberately NOT routed through sendEmailMessage: that helper is built for production paths and
  * fails SOFT, logging a SKIPPED row and returning ok:true when a gate is shut. That is exactly the
- * wrong behaviour while you are wiring the channel up — "Logged (email is off)" does not tell you
+ * wrong behaviour while you are wiring the channel up - "Logged (email is off)" does not tell you
  * WHICH of the three gates is off. This names the specific gate instead, and on a real attempt
  * surfaces Resend's own error verbatim, which is where "domain is not verified" actually shows up.
  */

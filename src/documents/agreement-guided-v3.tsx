@@ -8,8 +8,8 @@
  *
  * 1. GLYPHS. The built-in Helvetica/Times use WinAnsi encoding. The characters the master
  *    document uses - ☒ ☐ ⚠ ✓ ₹ ◦ - are NOT in it and render as blank boxes. So checkboxes and
- *    warning icons are drawn as <Svg>, sub-bullets use "–", and money is written "69,999 INR"
- *    (see formatInrPlainForDocument). "•" and "§" and "–" ARE in WinAnsi and are safe as literal text.
+ *    warning icons are drawn as <Svg>, sub-bullets use "-", and money is written "69,999 INR"
+ *    (see formatInrPlainForDocument). "•" and "§" and "-" ARE in WinAnsi and are safe as literal text.
  *    Don't paste a glyph in here without checking it, and don't "fix" it by registering a
  *    Unicode font just to get a tick.
  *
@@ -205,7 +205,7 @@ const P = ({ children }: { children: ReactNode }) => <Text style={s.p}>{children
 function Bullet({ children, sub }: { children: ReactNode; sub?: boolean }) {
   return (
     <View style={[s.bulletRow, sub ? { paddingLeft: 16 } : {}]}>
-      {/* "•" and "–" are both in WinAnsi; "◦" is not. */}
+      {/* "•" and "-" are both in WinAnsi; "◦" is not. */}
       <Text style={s.bulletDot}>{sub ? "-" : "•"}</Text>
       <Text style={s.bulletBody}>{children}</Text>
     </View>

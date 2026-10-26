@@ -10,8 +10,8 @@ import { mergeBatchSeats } from "../batch";
 /**
  * THE TWO STRUCTURAL FORKS THIS REFACTOR COULD CLOSE WITHOUT A MIGRATION.
  *
- *   P1 — `Batch` has two membership mechanisms, and nothing in the schema says which applies.
- *   P18 — `batches.manage` gated seating while the only screen with a roster was admin-only.
+ *   P1 - `Batch` has two membership mechanisms, and nothing in the schema says which applies.
+ *   P18 - `batches.manage` gated seating while the only screen with a roster was admin-only.
  *
  * Both are now held by rules rather than by habit, and these are the rules.
  */
@@ -141,7 +141,7 @@ describe("batch membership - one roster from two tables (P1)", () => {
   /**
    * The ratchet. `BatchMember` is the German Note mechanism, and reading it directly is how a
    * feature ends up written twice. The allowed list is the seam plus the German Note modules,
-   * whose own screens are a community and a classroom rather than a cohort roster — they
+   * whose own screens are a community and a classroom rather than a cohort roster - they
    * legitimately know about members as people, not as seats.
    *
    * It may only ever SHRINK. A new module here means the fork spread.
@@ -253,11 +253,11 @@ describe("both business lines ask the same question about seating (24/10/2026)",
    * The permission model used to say two different things about one job: `seatEnrollment` (a
    * coaching seat) was `batches.manage`, and `addExistingMember` / `addNewMember` (a German Note
    * seat) were `requireAdmin()`. So the same head coach, granted the capability, could seat a
-   * coaching client and not a German Note learner — and nobody had decided that; it fell out of
+   * coaching client and not a German Note learner - and nobody had decided that; it fell out of
    * the two lines being built at different times.
    *
    * Both are `batches.manage` now. The capability is still a PER-PERSON grant and not a role
-   * default, so the founder decides who — which is the point: the decision is theirs to make
+   * default, so the founder decides who - which is the point: the decision is theirs to make
    * rather than hardcoded in an action.
    */
   test("adding a German Note learner is a capability, not founder-only", () => {

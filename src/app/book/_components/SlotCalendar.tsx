@@ -14,7 +14,7 @@ import type { SlotOption } from "./BookingForm";
  * for six slots and unreadable for ninety: a three-week rolling horizon at half-hourly intervals
  * is ~90 buttons in one column, and a prospect scrolls past most of the month to find a Thursday.
  * A month grid answers "which days can I even come?" in one glance, then shows only that day's
- * times — the shape everyone already knows from Calendly.
+ * times - the shape everyone already knows from Calendly.
  *
  * ── Why it looks like the rest of the app ───────────────────────────────────────
  * The grid deliberately copies `ui/DatePicker`'s calendar: Monday-first, `Mo Tu We…` headers,
@@ -28,7 +28,7 @@ import type { SlotOption } from "./BookingForm";
  * Slots are stored as UTC instants; IST and CET were previously baked into the markup on the
  * server. A prospect in Dubai or Berlin then had to do the arithmetic themselves, which is
  * exactly the sort of thing people get wrong by a half-hour and then miss the call. Here the
- * visitor's zone is detected, overridable, and applied to BOTH the times and the day grouping —
+ * visitor's zone is detected, overridable, and applied to BOTH the times and the day grouping -
  * because a 21:00 IST slot is the *previous* day in New York, and putting it under the wrong date
  * would be worse than not converting at all.
  */
@@ -55,7 +55,7 @@ function offsetLabel(tz: string, at = new Date()): string {
   }
 }
 
-/** YYYY-MM-DD **in the given zone** — the key everything groups on. */
+/** YYYY-MM-DD **in the given zone** - the key everything groups on. */
 function dateKeyIn(tz: string, iso: string): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: tz,
@@ -111,7 +111,7 @@ export function SlotCalendar({
   const activeDate = selectedDate && byDate.has(selectedDate) ? selectedDate : firstKey ?? null;
   const activeMonth = month || (firstKey ? firstKey.slice(0, 7) : "");
 
-  // Month navigation is bounded by the horizon — an empty grid you can page into forever is a
+  // Month navigation is bounded by the horizon - an empty grid you can page into forever is a
   // control that does nothing, and it invites the reading that there is nothing available at all.
   const canPrev = !!firstKey && activeMonth > firstKey.slice(0, 7);
   const canNext = !!lastKey && activeMonth < lastKey.slice(0, 7);
@@ -150,7 +150,7 @@ export function SlotCalendar({
     <div className="grid grid-cols-1 gap-6 sm:grid-cols-[minmax(0,1fr)_180px]">
       {/* ── Month grid ── (the heading lives in the wizard's step header, not here) */}
       <div>
-        {/* Chevrons at the edges of a justify-between header, ghost-styled — DatePicker's
+        {/* Chevrons at the edges of a justify-between header, ghost-styled - DatePicker's
             arrangement, not a centred pair with one of them filled. A filled control here would
             read as the primary action on a step whose primary action is picking a day. */}
         <div className="flex items-center justify-between gap-2">
@@ -205,7 +205,7 @@ export function SlotCalendar({
                     : has
                       ? "bg-primary-soft font-semibold text-primary-strong hover:bg-primary-tint"
                       : "cursor-not-allowed text-ink-disabled",
-                  // Today reads as a ring, exactly as it does in DatePicker — a marker that
+                  // Today reads as a ring, exactly as it does in DatePicker - a marker that
                   // survives being drawn under any of the three fills above.
                   isToday && !isSelected ? "ring-1 ring-inset ring-primary-tint" : "",
                 ].join(" ")}
@@ -240,7 +240,7 @@ export function SlotCalendar({
             : "Times"}
         </p>
         <div className="mt-3 flex max-h-[26rem] flex-col gap-2.5 overflow-y-auto pr-1 sm:mt-0">
-          {/* The kit's own button: `outline` unpicked, `primary` picked — the same pair the app
+          {/* The kit's own button: `outline` unpicked, `primary` picked - the same pair the app
               uses everywhere else for "one of these, and you've chosen this one". */}
           {dayTimes.map((s) => (
             <Btn

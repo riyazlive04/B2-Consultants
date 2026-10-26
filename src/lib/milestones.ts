@@ -110,7 +110,7 @@ export function overdueCount(
   return items.filter((i) => milestoneHealth(i.status, i.targetDay, currentDay) === "overdue").length;
 }
 
-/** Percentage of the ladder achieved, 0–100. An empty ladder is 0, never NaN. */
+/** Percentage of the ladder achieved, 0-100. An empty ladder is 0, never NaN. */
 export function ladderCompletionPct(items: { status: MilestoneProgressStatus }[]): number {
   if (items.length === 0) return 0;
   const done = items.filter((i) => i.status === "ACHIEVED").length;

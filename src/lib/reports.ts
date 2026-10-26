@@ -113,7 +113,7 @@ export function measureIsAdditive(m: ReportMeasure): boolean {
 /**
  * Period presets. No "custom range" picker on purpose: five presets cover every question this
  * business actually asks, and each one has a well-defined previous period to compare against.
- * An arbitrary custom range does not - "the previous period" for 17 Feb–3 Apr is a question with
+ * An arbitrary custom range does not - "the previous period" for 17 Feb-3 Apr is a question with
  * no good answer, and guessing one silently is worse than not offering it.
  */
 export type ReportRangeKey = "30d" | "90d" | "6m" | "12m" | "ytd" | "all";

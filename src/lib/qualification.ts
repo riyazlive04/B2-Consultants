@@ -26,7 +26,7 @@ import type { BantDimension, QuestionKind } from "@prisma/client";
 import { INTAKE_OPTIONS, BANT_ANSWER_SCORES, BANT_MAX, DIMENSION_MET_AT, bantVerdictFor, type BantResult } from "./booking-intake";
 
 /**
- * One option on a SELECT-style question. `score` is the 0–4 weighted layer.
+ * One option on a SELECT-style question. `score` is the 0-4 weighted layer.
  *
  * `aliases` are additional ANSWER TEXTS an external form may send for this option - the landing
  * page posts its own wording, not our slug. Optional so every option written before inbound
@@ -58,9 +58,9 @@ export const SCORED_DIMENSIONS = ["BUDGET", "AUTHORITY", "NEED", "TIMELINE"] as 
 export type AnswerMap = Record<string, string | null | undefined>;
 
 /**
- * The 0–4 score one answer contributes.
+ * The 0-4 score one answer contributes.
  *
- * `weight` multiplies and the result is clamped back into 0–4, so the average stays on the
+ * `weight` multiplies and the result is clamped back into 0-4, so the average stays on the
  * same scale the verdict thresholds are expressed in. A weight of 1 - what the seed uses
  * everywhere - is the identity, which is what makes the derived catalogue reproduce
  * `computeBant` exactly.

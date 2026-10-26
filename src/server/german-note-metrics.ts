@@ -85,7 +85,7 @@ export type GnFeedPost = {
   comments: GnFeedComment[];
 };
 
-/** Skool's level curve: points (likes received) → level 1–9. */
+/** Skool's level curve: points (likes received) → level 1-9. */
 const LEVEL_THRESHOLDS = [0, 5, 20, 65, 155, 515, 2015, 8015, 33015];
 
 export function gnLevelForPoints(points: number): number {

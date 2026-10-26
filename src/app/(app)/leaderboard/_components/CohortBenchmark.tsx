@@ -40,7 +40,7 @@ function Delta({ delta, unit }: { delta: number; unit?: string }) {
       }`}
     >
       {ahead ? <TrendingUp size={12} aria-hidden /> : <TrendingDown size={12} aria-hidden />}
-      {ahead ? "+" : "−"}
+      {ahead ? "+" : "-"}
       {Math.abs(rounded).toLocaleString("en-IN")}
       {unit ? ` ${unit}` : ""} {ahead ? "ahead" : "behind"}
     </span>

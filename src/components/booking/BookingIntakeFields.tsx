@@ -7,16 +7,16 @@ import { INDUSTRY_SUGGESTIONS, INTAKE_OPTIONS } from "@/lib/booking-intake";
 import { CONSENT_LABEL, CONSENT_VALUE } from "@/lib/consent";
 
 /**
- * The discovery-call questionnaire — everything `submitBooking` reads except `slotId`.
+ * The discovery-call questionnaire - everything `submitBooking` reads except `slotId`.
  *
  * ── Why this is its own component ───────────────────────────────────────────────
  * Three surfaces now collect it: the standalone `/book` page, the `booking` block embedded in a
- * funnel step, and the per-person `BookingCalendar`. These fields are not decoration — every
+ * funnel step, and the per-person `BookingCalendar`. These fields are not decoration - every
  * `Select` name here maps to a BANT answer that `scoreLeadAtOptIn` reads and the SOP routes on.
  * Two copies would drift, and the drift would present as "leads booked from the funnel score
  * differently to leads booked from /book", which is close to impossible to spot from the outside.
  *
- * It renders the fields ONLY — no <form>, no submit button. The caller owns the form element and
+ * It renders the fields ONLY - no <form>, no submit button. The caller owns the form element and
  * the action, because the surfaces frame the submit differently.
  */
 
@@ -29,7 +29,7 @@ const withPlaceholder = (opts: readonly { value: string; label: string }[], plac
  * The four rungs of the qualification ladder, in order.
  *
  * These are NOT an arbitrary grouping: they are the same four groups the field order below already
- * described in prose — identity, then credentials, then motivation, then the commercial questions.
+ * described in prose - identity, then credentials, then motivation, then the commercial questions.
  * Naming them lets `/book` render the ladder as a four-step wizard while the fields themselves stay
  * defined exactly once, here. A wizard that re-declared its own copy of these inputs is precisely
  * the drift this component exists to prevent.
@@ -37,7 +37,7 @@ const withPlaceholder = (opts: readonly { value: string; label: string }[], plac
 export type IntakeSection = "identity" | "credentials" | "motivation" | "commercial";
 
 /**
- * The honeypot and the attribution blob — present on every surface, visible on none.
+ * The honeypot and the attribution blob - present on every surface, visible on none.
  *
  * Split out because a paginated caller keeps all of its steps mounted and must render these ONCE
  * for the whole form; two `name="utm"` inputs in one form post twice and the server reads whichever
@@ -63,7 +63,7 @@ export function BookingIntakeHiddenFields() {
 
   return (
     <>
-      {/* honeypot — hidden from real users; bots fill it and get silently dropped */}
+      {/* honeypot - hidden from real users; bots fill it and get silently dropped */}
       <input
         type="text"
         name="company_website"
@@ -83,7 +83,7 @@ export function BookingIntakeFields({
 }: {
   headings?: boolean;
   /**
-   * Which rung to render. `"all"` — the default — emits the entire questionnaire exactly as it
+   * Which rung to render. `"all"` - the default - emits the entire questionnaire exactly as it
    * always did, so the single-page callers are unaffected by the split.
    */
   section?: IntakeSection | "all";
@@ -99,12 +99,12 @@ export function BookingIntakeFields({
           ── One column, and this exact order ─────────────────────────────────────────
           Both are load-bearing, not styling preferences. The order is Synamate's, and it is a
           qualification ladder: identity first, then credentials, then motivation, then the
-          commercial questions (salary, readiness to invest, who decides) last — asked only
+          commercial questions (salary, readiness to invest, who decides) last - asked only
           after the prospect has already invested effort in the form. Re-sorting it into a
           tidy two-column grid, as this form previously was, puts "what do you earn?" beside
           "what is your name?" and measurably costs completions.
 
-          Rendering one rung at a time does not break that rule — it enforces it, since the
+          Rendering one rung at a time does not break that rule - it enforces it, since the
           commercial questions then cannot appear until the earlier rungs are answered.
         */}
         <div className="mt-3 grid grid-cols-1 gap-4">
@@ -118,7 +118,7 @@ export function BookingIntakeFields({
               </Field>
               {/*
                 One number, bound to `phone`. The form asks for WhatsApp because that is the channel
-                the confirmation and every reminder actually go out on — and `phone` is the column
+                the confirmation and every reminder actually go out on - and `phone` is the column
                 WATI sends to. A second "WhatsApp (if different)" field existed before and was the
                 kind of optional duplicate that ends up holding the only reachable number.
               */}
@@ -227,7 +227,7 @@ export function BookingIntakeFields({
 
       {/*
         GDPR consent (spec §15). `required` gives the prospect an instant browser-native message
-        instead of a server round-trip, but it is only a courtesy — submitBooking refuses
+        instead of a server round-trip, but it is only a courtesy - submitBooking refuses
         unconsented submissions regardless, since a client-side attribute is not a compliance control.
 
         Rides with the commercial rung: it must be the last thing agreed to before submitting, and

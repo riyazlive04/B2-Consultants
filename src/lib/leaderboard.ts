@@ -393,8 +393,8 @@ export function weeksElapsed(startYmd: string, nowYmd: string): number {
  * ── The attack this is defending against ───────────────────────────────────────────────
  * An aggregate normally leaks nothing about an individual, but a student reading this board
  * knows their OWN per-metric line exactly. Given the cohort mean they can recover the sum of
- * everybody else's: `mean × size − mine`. So the real question is not how big the cohort is, it
- * is how big the cohort MINUS the reader is - and `size − 1 = 1` is not an aggregate at all, it
+ * everybody else's: `mean × size - mine`. So the real question is not how big the cohort is, it
+ * is how big the cohort MINUS the reader is - and `size - 1 = 1` is not an aggregate at all, it
  * is one named classmate's exact breakdown with two arithmetic steps in front of it.
  *
  * Which is why the hard minimum is THREE, not two. A cohort of two publishes the other person;

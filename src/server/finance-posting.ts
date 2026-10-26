@@ -155,7 +155,7 @@ export type ExpenseForPosting = DualCurrencyRow & {
  *
  * `isCogs` rides on the debit line rather than being inferred from the account, because
  * COGS is orthogonal to category: Karthick's salary is TEAM_SALARIES *and* a direct
- * delivery cost (SPEC §4.2). Gross profit is then `revenue − Σ lines where isCogs`, a
+ * delivery cost (SPEC §4.2). Gross profit is then `revenue - Σ lines where isCogs`, a
  * slice of the ledger rather than a second source of truth.
  */
 export function expenseEntryDraft(

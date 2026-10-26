@@ -5,7 +5,7 @@
  * The app had TWO rankings that disagreed, both hardcoded:
  *
  *   • `/pipeline`'s "Call these first" - stage weight + BANT×10 + highly-qualified 15 +
- *     new-this-week 10 − idle penalty.
+ *     new-this-week 10 - idle penalty.
  *   • The L1 desk - sorted each bucket by ARRIVAL TIME only. So the BANT score shown on every
  *     row changed nothing about the order a caller worked in. A 3.7/4 lead and a 0.4/4 lead that
  *     arrived the same morning were rung in the order they landed.
@@ -25,7 +25,7 @@
  */
 
 export type PriorityWeights = {
-  /** Points per BANT dimension met (0–4). The founder's main dial. */
+  /** Points per BANT dimension met (0-4). The founder's main dial. */
   bantPerPoint: number;
   /** Bonus for a lead a discovery specialist marked highly qualified. */
   highlyQualifiedBonus: number;
@@ -49,7 +49,7 @@ export type PriorityWeights = {
 
 /**
  * The shipped numbers, chosen to equal the previous hardcoded pipeline formula exactly:
- * `bant * 10`, `highlyQualified +15`, `freshDays <= 7 → +10`, `idleDays > 7 → −min(idle−7, 20)`.
+ * `bant * 10`, `highlyQualified +15`, `freshDays <= 7 → +10`, `idleDays > 7 → -min(idle-7, 20)`.
  */
 export const DEFAULT_PRIORITY_WEIGHTS: PriorityWeights = {
   bantPerPoint: 10,
@@ -62,7 +62,7 @@ export const DEFAULT_PRIORITY_WEIGHTS: PriorityWeights = {
 };
 
 export type PriorityInput = {
-  /** 0–4 dimensions met. Null = never scored, which is NOT the same as scoring zero. */
+  /** 0-4 dimensions met. Null = never scored, which is NOT the same as scoring zero. */
   bantScore: number | null;
   /** When the lead arrived - drives freshness. */
   arrivedAt: Date;

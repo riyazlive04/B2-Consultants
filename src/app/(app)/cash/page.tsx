@@ -76,11 +76,11 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
   const gaugeFrac =
     runway.runwayMonths === null ? 0 : Math.min(1, runway.runwayMonths / targets.runwayHorizonMonths);
   const gaugeColor = runwayLevel ? `var(--${runwayLevel})` : "var(--muted)";
-  // hero band coloured by the runway signal (green ≥6, amber 3–6, red <3) - soft bg, not a gradient
+  // hero band coloured by the runway signal (green ≥6, amber 3-6, red <3) - soft bg, not a gradient
   const gaugeBand = runwayLevel ? `var(--${runwayLevel}-soft)` : "var(--surface-2)";
 
   // Receivables age analysis - now per student, bucketed by WEEKS, each bar scaled to that
-  // student's own agreed total (Error Log G1–G4). See _components/AgeAnalysis.
+  // student's own agreed total (Error Log G1-G4). See _components/AgeAnalysis.
   const ageRows = receivables.rows
     .filter((r) => r.overdue && r.balanceInr > 0)
     .map((r) => ({

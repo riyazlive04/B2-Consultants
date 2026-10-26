@@ -5,14 +5,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * ONE DEAL, TWO STATUS FIELDS — the invariant that keeps them in step (P4).
+ * ONE DEAL, TWO STATUS FIELDS - the invariant that keeps them in step (P4).
  *
  * `Lead.stage` and `Opportunity.stageId` are two records of one thing, reconciled in application
  * code rather than by the database. Any site that writes the stage therefore has to do THREE
  * things, and doing two of them is a silent data bug:
  *
  *   1. update `Lead.stage`
- *   2. write a `LeadStageHistory` row — the pipeline's stage metrics read HISTORY, not the current
+ *   2. write a `LeadStageHistory` row - the pipeline's stage metrics read HISTORY, not the current
  *      column, so a stage change with no history row is invisible to every report that matters
  *   3. move the card on the Opportunity board
  *
@@ -29,7 +29,7 @@ import { fileURLToPath } from "node:url";
  * later that "the opportunity board is wrong".** New code should use `writeLeadStage`.
  *
  * It is a source scan because the thing being checked is a code-level obligation, not a runtime
- * one — there is no value to assert at runtime, only a habit to enforce.
+ * one - there is no value to assert at runtime, only a habit to enforce.
  */
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -84,7 +84,7 @@ describe("Lead.stage writers - the board cannot be left behind", () => {
     /*
       Two spellings count, and they are different jobs:
         · `syncDefaultOpportunity` MOVES an existing card to the column for the new stage
-        · `ensureDefaultOpportunity` CREATES the card if the lead has none — which is what a
+        · `ensureDefaultOpportunity` CREATES the card if the lead has none - which is what a
           creation path needs, and is idempotent so it is safe on a returning lead
       A file doing neither has a stage change the board never hears about.
     */

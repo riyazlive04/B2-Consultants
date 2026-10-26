@@ -27,7 +27,7 @@ export type SourceEconomics = SourceTotals & {
   cacInrMinor: number | null;
   /** Revenue ÷ spend. Null without spend - dividing by zero is not "infinite ROAS". */
   roas: number | null;
-  /** Leads → enrolments, 0–100. */
+  /** Leads → enrolments, 0-100. */
   conversionPct: number;
 };
 

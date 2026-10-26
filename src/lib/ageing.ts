@@ -1,7 +1,7 @@
 /**
  * Receivable ageing buckets (Error Log G1).
  *
- * WEEKS, NOT MONTHS. The old buckets were 1–30 / 31–60 / 61–90 / 90+ days, which is the
+ * WEEKS, NOT MONTHS. The old buckets were 1-30 / 31-60 / 61-90 / 90+ days, which is the
  * default shape for a business on 30/60/90-day terms. This one collects in at most a
  * fortnight, so in practice every overdue receivable fell into the first column and the chart
  * carried no information at all - a payment two days late and one three weeks late looked

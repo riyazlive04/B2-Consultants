@@ -230,23 +230,23 @@ export async function advanceLeadStage(
  * remember THREE things:
  *
  *   1. update the column
- *   2. write a `LeadStageHistory` row — the pipeline's stage metrics read history, not the current
+ *   2. write a `LeadStageHistory` row - the pipeline's stage metrics read history, not the current
  *      column, so a stage change with no history row is invisible to every report that matters
  *   3. move the card on the Opportunity board
  *
  * Fifteen of the seventeen remembered all three. Two did not, and both were the same bug in two
  * places: `booking-automation.ts` and `outreach.ts` released an unconfirmed booking and sent the
- * lead back to `DISCO_NOT_BOOKED` without touching the board — so the card sat in "Discovery Call
+ * lead back to `DISCO_NOT_BOOKED` without touching the board - so the card sat in "Discovery Call
  * Booked" claiming a call that had just been cancelled. Both files carry a comment explaining that
  * they fixed exactly this failure for the stage column, and neither carried it through to the card.
  *
  * Doing all three in one place is the fix. Forgetting is no longer possible, because there is
- * nothing left to forget — and `lead-stage-writers.test.ts` fails if a new direct write appears.
+ * nothing left to forget - and `lead-stage-writers.test.ts` fails if a new direct write appears.
  *
  * ── Why it takes a `tx` rather than opening its own ─────────────────────────────────────
  * Every caller is already inside a transaction that is doing something else at the same time:
  * cancelling a booking, releasing a slot, logging a call. The stage change has to commit or roll
- * back WITH that work — a released slot whose lead stayed in "Booked" is precisely the drift
+ * back WITH that work - a released slot whose lead stayed in "Booked" is precisely the drift
  * this exists to prevent.
  *
  * `changedById` is the person who did it, or `null` for the system. Null matters: attributing an

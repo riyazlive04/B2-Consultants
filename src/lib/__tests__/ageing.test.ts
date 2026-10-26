@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { AGE_BUCKETS, ageBucket, bucketForDaysOverdue } from "../ageing";
 
 /**
- * The boundaries are the whole point of this module - the old 1–30/31–60 buckets put every
+ * The boundaries are the whole point of this module - the old 1-30/31-60 buckets put every
  * real receivable in one column, so where the lines fall is exactly what was wrong.
  */
 
@@ -20,7 +20,7 @@ test("week boundaries are inclusive-upper", () => {
 });
 
 test("the collection cycle is actually resolved, not flattened into one column", () => {
-  // The regression this replaces: on 1–30/31–60 buckets, all four of these were one bucket.
+  // The regression this replaces: on 1-30/31-60 buckets, all four of these were one bucket.
   const spread = [2, 9, 16, 25].map(bucketForDaysOverdue);
   assert.deepEqual(spread, ["w1", "w2", "w3", "w4plus"]);
   assert.equal(new Set(spread).size, 4, "a fortnight's cycle must span more than one bucket");

@@ -3,7 +3,7 @@
  *
  * Deliberately has NO prisma, NO clock and NO IO: every function takes `now` as an argument and
  * returns a decision. That is what makes the SOP's timing rules testable at their boundaries
- * (T−36h−1min / T−36h / T−36h+1min) without a database or a fake timer, which is exactly what the
+ * (T-36h-1min / T-36h / T-36h+1min) without a database or a fake timer, which is exactly what the
  * QA checklist's Step 2 asks for. `src/server/outreach.ts` is the thin DB shell around this.
  *
  * The one rule worth internalising: a step is MATERIALISED when its precondition becomes true, and
@@ -283,7 +283,7 @@ export function planJourney(
 
   const reaction = reactionState(state, now, sla);
 
-  // ═══ Steps 3–9: the booking chase. Only while unbooked. ═══
+  // ═══ Steps 3-9: the booking chase. Only while unbooked. ═══
   if (!state.booked) {
     /**
      * Step 2's branch, and the one subtlety in the whole ladder: the branch is decided ONCE, and
@@ -426,7 +426,7 @@ export function planJourney(
     }
   }
 
-  // ═══ Steps 11–12: qualification, the moment a booking is matched. ═══
+  // ═══ Steps 11-12: qualification, the moment a booking is matched. ═══
   if (state.booked) {
     add("BANT_QUALIFICATION", now);
     if (acted(state, "BANT_QUALIFICATION")) {
@@ -450,7 +450,7 @@ export function planJourney(
     }
   }
 
-  // ═══ Steps 13–16: the Disco ladder. Gated on Qualified = YES/MAYBE. ═══
+  // ═══ Steps 13-16: the Disco ladder. Gated on Qualified = YES/MAYBE. ═══
   const q = state.qualified;
   /**
    * NOTHING in the disco ladder may fire for a call that has already happened.
@@ -583,7 +583,7 @@ export function planJourney(
     }
   }
 
-  // ═══ Steps 19–22: the SSS ladder. Gated on Highly Qualified = YES. ═══
+  // ═══ Steps 19-22: the SSS ladder. Gated on Highly Qualified = YES. ═══
   if (state.highlyQualified === true && state.sssAt && !state.salesCallConfirmed) {
     add("SSS_CONFIRM_1", minus(state.sssAt, sla.sssConfirm1LeadHours));
     if (acted(state, "SSS_CONFIRM_1")) {

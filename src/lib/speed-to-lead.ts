@@ -47,7 +47,7 @@ export type SpeedToLeadReport = {
   breaches: SpeedToLeadBreach[];
   /** Newly-arrived leads considered, whatever their state. The denominator for `hitRate`. */
   considered: number;
-  /** Fraction of considered leads connected within the five-minute clock, 0–1. Null if none. */
+  /** Fraction of considered leads connected within the five-minute clock, 0-1. Null if none. */
   hitRate: number | null;
   /** Age in minutes of the oldest unconnected lead in `breaches`. 0 when there are none. */
   worstAgeMinutes: number;

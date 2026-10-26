@@ -954,6 +954,134 @@ export async function deleteIncome(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
+/**
+ * ════════════════════════════════════════════════════════════════════════════════════════════
+ *  THE MONEY WENT AWAY AGAIN  (issue C2)
+ * ════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * A bounced cheque. A reversed UPI. A recalled transfer. A customer who paid and then charged it
+ * back. There is no payment processor in this app - `/i/<token>` serves a read-only invoice with
+ * no Pay button - so every income row is a human recording a claim about a bank, and the claim
+ * sometimes turns out to be wrong. The money model had no state for it.
+ *
+ * ── WHAT PEOPLE DID INSTEAD, AND WHY IT WAS WRONG ───────────────────────────────────────────
+ * They archived the row, or edited it away. Both destroy the fact that money appeared to arrive
+ * and then did not - after the ledger, revenue recognition, commission accrual and the runway
+ * had all already read it. The figures move and nothing says why.
+ *
+ * ── WHY THIS IS NOT JUST `deleteIncome` WITH A DIFFERENT WORD ───────────────────────────────
+ * Archiving says "this row should not have been entered". Reversing says "it was entered
+ * correctly and the money went away again". The difference is not bookkeeping pedantry:
+ *
+ *   · The reversal is a fact about the BANK and belongs in the record. An archived row is
+ *     hidden; a reversed row is visible, flagged, with a reason and a date, because somebody
+ *     will ask in March why February's collections dropped.
+ *   · It is a DIFFERENT conversation with the student. A typo needs no follow-up; a bounced
+ *     payment means they still owe the instalment and need to hear about it.
+ *
+ * ── WHAT IT SHARES WITH ARCHIVING, DELIBERATELY ─────────────────────────────────────────────
+ * Everything downstream: the ledger entry is voided by a reversing entry (never edited), the
+ * instalments it settled go back to DUE/OVERDUE, a plan it had marked Paid in full returns to
+ * ACTIVE, a plan it STARTED is restated, and - the point of issue C1 - `unsettleIncome` bumps
+ * `Instalment.dunningCycle` so the ladder may chase those instalments again. None of that is
+ * duplicated here; it is the same four calls `deleteIncome` makes, which is what keeps the two
+ * paths from drifting.
+ *
+ * Reversing is NOT reversible by design. There is no `unreverseIncome`: if the money genuinely
+ * did arrive after all, that is a new payment on the day it cleared, which is also the only
+ * version of events the bank statement will agree with.
+ */
+const reverseSchema = z.object({
+  /** Free text: the vocabulary here is the bank's, not ours. Shown on the income row. */
+  reason: z.string().trim().min(1, "Say why it reversed - this is what the row will show").max(500),
+});
+
+export async function reverseIncome(id: string, form: FormData): Promise<ActionResult> {
+  const { allowed, denied, session } = await capabilityCheck("finance.write");
+  if (!allowed) return denied;
+  const parsed = reverseSchema.safeParse(Object.fromEntries(form));
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+
+  const existing = await prisma.income.findUnique({
+    where: { id },
+    select: { deletedAt: true, reversedAt: true },
+  });
+  if (!existing) return { ok: false, error: "Record not found" };
+  // An archived row is already out of every total, and reversing it would claim a bank event
+  // about a payment we have said should not have been entered. One or the other.
+  if (existing.deletedAt) return { ok: false, error: "This income is archived - restore it first if it really reversed." };
+  if (existing.reversedAt) return { ok: false, error: "This payment is already marked reversed." };
+
+  let reversed: Income | null = null;
+  const result = await withLedgerErrors(async () => {
+    await prisma.$transaction(async (tx) => {
+      // A REVERSING ENTRY, not an edit. Same call `deleteIncome` makes: the original posting
+      // stays in the journal for ever and is cancelled by its opposite, which is the only
+      // version of events an auditor can follow.
+      const voided = await voidEntryForSource(tx, "INCOME", id, {
+        reason: `income reversed: ${parsed.data.reason}`,
+        actorId: session.user.id,
+        on: istToday(),
+      });
+      const income = await tx.income.update({
+        where: { id },
+        data: {
+          reversedAt: new Date(),
+          reversedReason: parsed.data.reason,
+          reversedById: session.user.id,
+        },
+      });
+      // Whatever it paid off is owed again - and `unsettleIncome` bumps the dunning cycle, so
+      // the ladder can chase it. See issue C1: without that bump the instalment came back DUE
+      // with every rung recorded as sent and was never chased again.
+      const prior = await latestSettlement(tx, id);
+      await unsettleIncome(tx, prior, income.date, istToday());
+      // A plan this payment AGREED has its first instalment restated for the same reason the
+      // archive path restates it: instalment 1 IS this payment.
+      const startedPlan = await tx.pendingPayment.findUnique({
+        where: { startedByIncomeId: id },
+        select: { id: true },
+      });
+      if (startedPlan) await restatePlanForStarterIncome(tx, startedPlan.id, income, false);
+      await appendAudit(tx, {
+        actorId: session.user.id,
+        action: "income.reverse",
+        entityType: "Income",
+        entityId: id,
+        payload: {
+          reason: parsed.data.reason,
+          reversalId: voided?.reversalId ?? null,
+          ...(prior ? { settlement: archivedSettlement(prior) } : {}),
+        },
+      });
+      reversed = income;
+    });
+  });
+  if (!result.ok) return result;
+
+  if (reversed) {
+    const row: Income = reversed;
+    await logActivity(session, {
+      action: "finance.income.reverse",
+      section: "finance",
+      entityType: "Income",
+      entityId: row.id,
+      summary: `Reversed the ${amountDisplay(row.amountInrMinor, row.amountEurMinor)} payment from ${row.studentName} dated ${formatDate(row.date)} - ${parsed.data.reason}`,
+      meta: {
+        amountInrMinor: row.amountInrMinor.toString(),
+        amountEurMinor: row.amountEurMinor.toString(),
+        programLevel: row.programLevel,
+        reason: parsed.data.reason,
+      },
+    });
+  }
+
+  revalidatePath("/finance");
+  revalidatePath("/cash");
+  revalidatePath("/students");
+  return { ok: true };
+}
+
 /** Restore an archived income and re-post the ledger entry that archiving voided. */
 export async function restoreIncome(id: string): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("finance.write");
@@ -1463,6 +1591,24 @@ async function statusError(
   status: string,
   planId: string | null,
 ): Promise<string | null> {
+  /**
+   * WRITING OFF IS NOT COLLECTING (issue C2).
+   *
+   * It needs its own refusal for the new-receivable case and its own sentence everywhere else,
+   * because the two statuses look similar on a dropdown and mean opposite things: PAID_IN_FULL
+   * says the money came in, WRITTEN_OFF says it never will. Only the founder may say the second
+   * one, which is already true by the `finance.write` gate on every caller.
+   *
+   * It is deliberately NOT blocked on having a balance, unlike PAID_IN_FULL. Writing off a plan
+   * with nothing outstanding is pointless rather than dangerous, and refusing it would mean
+   * explaining a rule nobody would hit.
+   */
+  if (status === "WRITTEN_OFF") {
+    if (!planId) {
+      return "A brand-new receivable can't start out written off - if it is not owed, don't raise it.";
+    }
+    return null;
+  }
   if (status !== "PAID_IN_FULL") return null;
   if (!planId) {
     return "A brand-new receivable can't start out paid in full - save it, then record the payment against it.";
@@ -1627,7 +1773,18 @@ export async function updatePendingPayment(id: string, form: FormData): Promise<
  * dropdown (issue 8).
  */
 const resolveSchema = z.object({
-  status: z.enum(["ACTIVE", "PAID_IN_FULL", "OVERDUE", "DROPPED"]),
+  /**
+   * WRITTEN_OFF is new here (issue C2), and it is the state this panel was missing.
+   *
+   * Without it there was no way to say "we are not going to collect this": a genuinely
+   * uncollectable plan sat as OVERDUE for ever, inflating the receivables figure on the
+   * founder's wall and the runway that reads it, and being chased by the dunning ladder up to
+   * FINAL - after which it was chased never again but still counted.
+   *
+   * Deliberately NOT on `pendingSchema` (the create form). A receivable cannot be born written
+   * off, for the same reason it cannot be born PAID_IN_FULL - see `statusError`.
+   */
+  status: z.enum(["ACTIVE", "PAID_IN_FULL", "OVERDUE", "DROPPED", "WRITTEN_OFF"]),
   nextDueDate: z.string().optional(),
   notes: optionalRule("text"),
 });

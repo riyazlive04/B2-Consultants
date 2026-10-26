@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, CalendarCheck, CalendarDays, CheckCircle2, Clock, MailCheck } from "lucide-react";
+import { ArrowLeft, CalendarDays, CheckCircle2, Clock, MailCheck } from "lucide-react";
 import { submitBooking } from "@/server/booking-actions";
 import { BrandLogo } from "@/components/shell/BrandLogo";
 import {
@@ -13,6 +13,7 @@ import { Btn } from "@/components/ui/controls";
 import { FormError, SubmitButton } from "@/components/ui/form";
 import { slotTypeLabel } from "@/lib/labels";
 import { SlotCalendar } from "./SlotCalendar";
+import { NoSlotsCapture } from "./NoSlotsCapture";
 import { safeAction } from "@/lib/action-guard";
 
 const IST_ZONE = "Asia/Kolkata";
@@ -33,7 +34,7 @@ export type SlotOption = {
  *
  * Each question step names a rung of the intake ladder rather than listing fields: the questions
  * themselves live in `BookingIntakeFields`, which is also what the funnel block and the per-person
- * calendar render. That indirection is the point — every `name` here maps to a BANT answer, so a
+ * calendar render. That indirection is the point - every `name` here maps to a BANT answer, so a
  * second copy of these inputs would silently score funnel leads differently from /book leads.
  */
 const STEPS = [
@@ -50,7 +51,7 @@ const STEPS = [
  * ── Why it is paginated ─────────────────────────────────────────────────────────
  * This was one scroll: ninety slot chips, then contact details, then nineteen qualification
  * questions and a free-text box, all visible at once. Everything being on screen together
- * reads as a form — and a long one — rather than as booking a call, and the length is the thing
+ * reads as a form - and a long one - rather than as booking a call, and the length is the thing
  * a prospect judges before they start. Four pages of four-to-six fields ask for exactly the same
  * information and never look like more than a minute's work.
  *
@@ -61,7 +62,7 @@ const STEPS = [
  * Steps are hidden with `display:none`, never unmounted. A hidden input still posts its value;
  * an unmounted one loses whatever was typed into it, so going Back and forward again would
  * quietly empty the fields behind you. It also means the whole thing is still ONE form and one
- * submit — the server action is untouched.
+ * submit - the server action is untouched.
  *
  * `required` is checked per step on the way forward, so the browser never has to complain about
  * a field it cannot scroll to. Every intake field is required, so this is what carries a prospect
@@ -81,7 +82,7 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
    *
    * Not detected during render: this component is server-rendered first, and seeding state from
    * `Intl` would make the server emit IST while the browser hydrates with something else. React
-   * treats that as corrupt markup and throws the whole page away — on the one page where that
+   * treats that as corrupt markup and throws the whole page away - on the one page where that
    * costs a booking.
    */
   const [tz, setTz] = useState(IST_ZONE);
@@ -90,7 +91,7 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
       const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
       if (detected) setTz(detected);
     } catch {
-      /* Intl blocked — IST stands, and the picker still lets them change it. */
+      /* Intl blocked - IST stands, and the picker still lets them change it. */
     }
   }, []);
   const showLocalTz = tz !== IST_ZONE;
@@ -148,7 +149,7 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
   }
 
   /**
-   * Bring the top of the pane back into view when the step changes — on a phone the Next button
+   * Bring the top of the pane back into view when the step changes - on a phone the Next button
    * sits below the fold, so without this you land halfway down the following step.
    *
    * Skipped on the FIRST run: that one is not a step change, it is the page arriving, and
@@ -171,10 +172,10 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
     setDone({ slot: chosen, declined: !!res.declined });
   };
 
-  /** The standing left-hand card: who the call is with, how long, and when — once known. */
+  /** The standing left-hand card: who the call is with, how long, and when - once known. */
   const asideCard = (
     <aside className="border-b border-line bg-surface-2 p-6 sm:p-8 md:w-80 md:flex-none md:border-b-0 md:border-r">
-      {/* The real mark plus an HTML wordmark — the lockup every other B2 entry page uses (login,
+      {/* The real mark plus an HTML wordmark - the lockup every other B2 entry page uses (login,
           reset, change-password), not a blue square with "B2" typed into it. The SVG's own "full"
           variant is not used here: its strapline is 10 units in a 100-unit box, so at this size it
           would render at ~6px, under the §7 text floor. */}
@@ -217,7 +218,7 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
   if (done) {
     // The auto-disqualify path stores the intake but claims NO slot, so this screen must not
     // read back a time. Saying "you're booked" there sends someone to a call that isn't in
-    // anyone's diary — and the slot they think they hold is still open to the next visitor.
+    // anyone's diary - and the slot they think they hold is still open to the next visitor.
     if (done.declined || !done.slot) {
       return shell(
         <div className="py-6 text-center">
@@ -248,17 +249,15 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
     );
   }
 
-  if (slots.length === 0) {
-    return shell(
-      <div className="py-10 text-center">
-        <CalendarCheck className="mx-auto text-muted" size={36} />
-        <p className="mt-3 text-sm text-muted">
-          No call times are open right now. Please check back shortly - we release new slots
-          regularly.
-        </p>
-      </div>,
-    );
-  }
+  /**
+   * An empty calendar is a CAPTURE, not a sign-off (issue A6).
+   *
+   * This used to be one sentence and a dead end - the only one in the app whose victim is a
+   * stranger we have already paid to get here. `NoSlotsCapture` owns the whole state now,
+   * including its own thank-you, because the question it asks has nothing to do with the
+   * five-step booking ladder above it.
+   */
+  if (slots.length === 0) return shell(<NoSlotsCapture />);
 
   const anim = dir === "fwd" ? "step-in-fwd" : "step-in-back";
   /** Hidden steps keep their values; only the active one is laid out (and so only it animates). */
@@ -299,7 +298,7 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
       </div>
       <input type="hidden" name="slotId" value={slotId} />
 
-      {/* ── 2–5. The intake ladder, one rung per step ──
+      {/* ── 2-5. The intake ladder, one rung per step ──
           `headings={false}`: the step header above already names the rung, and the component's own
           "Enter details" h2 would repeat it on every page. */}
       {STEPS.map((s, i) =>
@@ -310,7 +309,7 @@ export function BookingForm({ slots, hostName }: { slots: SlotOption[]; hostName
         ) : null,
       )}
 
-      {/* Once for the whole form, outside the panels — two `name="utm"` inputs would post twice. */}
+      {/* Once for the whole form, outside the panels - two `name="utm"` inputs would post twice. */}
       <BookingIntakeHiddenFields />
 
       {/* ── Wizard controls ── */}

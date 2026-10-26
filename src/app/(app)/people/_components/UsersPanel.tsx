@@ -21,6 +21,7 @@ import { formatDate } from "@/lib/format";
 import { effectiveSectionKeys, type AppRole, type ResolvedSection } from "@/lib/sections";
 import { AccessDialog, type Actor } from "./AccessDialog";
 import { safeAction } from "@/lib/action-guard";
+import { MIN_PASSWORD_LENGTH, PASSWORD_HINT } from "@/lib/credentials";
 
 /**
  * Team & access.
@@ -295,8 +296,8 @@ export function UsersPanel({
             }}
             className="space-y-4"
           >
-            <Field label="New password" hint="At least 8 characters">
-              <TextInput type="password" name="password" required minLength={8} autoComplete="new-password" />
+            <Field label="New password" hint={PASSWORD_HINT}>
+              <TextInput type="password" name="password" required minLength={MIN_PASSWORD_LENGTH} autoComplete="new-password" />
             </Field>
             {/* Students also get it on WhatsApp; team accounts have no number, so email only. */}
             <CheckboxField name="notify" defaultChecked label="Send them the new login details by email (and WhatsApp for students)" />

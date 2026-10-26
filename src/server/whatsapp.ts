@@ -1104,7 +1104,7 @@ export async function sendBookingAutoCancelled(bookingRequestId: string, sentByI
 
 // ── SSS (sales) call calendar ──
 /**
- * "Your Success Strategy Session has been moved to <new time>." Sent by the SSS calendar
+ * "Your Solution Strategy Session has been moved to <new time>." Sent by the SSS calendar
  * (server/sss-slots.ts) when the founder blocks a booked slot/day (prospect auto-moved to the next
  * open slot) or a prospect is manually/dragged onto a different slot. Reads the prospect off the
  * journey's lead; `slot_time` is the journey's already-updated sssAt (the NEW time).

@@ -6,6 +6,7 @@ import { classReminderRung, formatClassTime, leadLabel, maxLeadMs } from "@/lib/
 import { WHATSAPP_KIND_LABELS } from "@/lib/whatsapp";
 import { sendWhatsApp, type SendOutcome } from "./whatsapp";
 import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
+import { SESSION_ON } from "@/lib/session-status";
 
 /**
  * CLASS REMINDERS - "your class starts in an hour, here is the link".
@@ -101,6 +102,10 @@ export async function runClassReminders(): Promise<ClassReminderRun> {
   const sessions = await prisma.classSession.findMany({
     where: {
       delivery: "LIVE",
+      // A cancelled class sends no reminder (issue C3). This is the most visible consequence of
+      // the missing status: before it, calling a class off and then watching the cohort receive
+      // "your class starts in an hour" was unavoidable.
+      ...SESSION_ON,
       startsAt: { gt: now, lte: new Date(now.getTime() + lookAhead) },
       // An archived cohort is finished. Its calendar may still hold future-dated rows from a
       // timetable that was never cleaned up, and nobody should hear from those.

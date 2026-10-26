@@ -5,7 +5,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/rbac";
-import { ACTIVE } from "@/lib/soft-delete";
+import { ACTIVE, INCOME_COUNTABLE } from "@/lib/soft-delete";
 import { decideBookOrder, initialBookOrderStatus } from "@/lib/book-order";
 import {
   bookOrderBodySummary,
@@ -51,7 +51,7 @@ function firstError(e: z.ZodError): string {
  */
 async function cashCollectedInrMinor(studentId: string): Promise<number> {
   const paid = await prisma.income.aggregate({
-    where: { ...ACTIVE, studentId },
+    where: { ...INCOME_COUNTABLE, studentId },
     _sum: { amountInrMinor: true },
   });
   return Number(paid._sum.amountInrMinor ?? 0);

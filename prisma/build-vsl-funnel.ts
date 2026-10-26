@@ -4,7 +4,7 @@
  * Synamate's step list (screenshot, 06/08/2026) is reproduced NAME-FOR-NAME so the team
  * recognises the funnel after the cutover:
  *   Landing Page · VSL · Apply Team Page · Disco with Asma · Disco with Ameen ·
- *   Congrats · Success Strategy Session · Disco with Loshini · Workshop Follow Up
+ *   Congrats · Solution Strategy Session · Disco with Loshini · Workshop Follow Up
  *
  * VSL and Apply Team Page are designed here - the two we have a reference for. Disco with
  * Asma / Ameen are authored separately by `scripts/build-disco-pages.ts`, which owns them
@@ -299,7 +299,9 @@ const STEPS: Array<{ name: string; slug: string; seoTitle?: string; body?: (vide
   { name: "Disco with Asma", slug: "disco-with-asma" },
   { name: "Disco with Ameen", slug: "disco-with-ameen" },
   { name: "Congrats", slug: "congrats" },
-  { name: "Success Strategy Session", slug: "success-strategy-session" },
+  // Display name corrected to "Solution" (reviewer, 26 Oct 2026). The SLUG is deliberately
+  // NOT renamed: it is a live public URL, and changing it 404s every link already shared.
+  { name: "Solution Strategy Session", slug: "success-strategy-session" },
   { name: "Disco with Loshini", slug: "disco-with-loshini" },
   { name: "Workshop Follow Up", slug: "workshop-follow-up" },
 ];

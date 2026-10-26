@@ -18,6 +18,9 @@ import type { WhatsAppKind } from "@prisma/client";
 import {
   STEP_BY_KEY,
   TPL_INTRO_SUPERSEDED,
+  TPL_SSS_CANCEL_SUPERSEDED,
+  TPL_SSS_CONFIRM_1_SUPERSEDED,
+  TPL_SSS_CONFIRM_2_SUPERSEDED,
   renderOutreachTemplate,
   type OutreachVars,
 } from "./outreach-sop";
@@ -113,7 +116,7 @@ const V = {
  * The nine templates.
  *
  * ALL NINE ARE MARKETING. This was reviewed against Meta's categorisation rules on 17 Jul 2026 and
- * is a deliberate call, not an oversight - the earlier revision of this file had Steps 13–21 as
+ * is a deliberate call, not an oversight - the earlier revision of this file had Steps 13-21 as
  * UTILITY, and that was wrong.
  *
  * WHY. Meta's bar for UTILITY is that a template be "non-promotional, not containing any
@@ -145,7 +148,7 @@ const V = {
  *    time-critical confirm-your-call reminder CAN be throttled for a prospect near their cap.
  *    Accepted for now; revisit against real delivery rates.
  *
- * To move any of Steps 13–21 back to UTILITY, the promotional lines must come out of the body
+ * To move any of Steps 13-21 back to UTILITY, the promotional lines must come out of the body
  * first - and that is a `proposedFix`, because it changes what a prospect reads.
  */
 export const SUBMISSION_TEMPLATES: SubmissionTemplate[] = [
@@ -235,6 +238,7 @@ export const SUBMISSION_TEMPLATES: SubmissionTemplate[] = [
     vars: [V.name("Priya"), V.date("Sat 18 Jul"), V.time("07:00 PM"), V.zoom()],
     notes: [
       "The app will NOT send this until a Zoom link is on the prospect’s card - an unresolved variable blocks the send rather than delivering a broken message.",
+      "REVIEWER ASKED (26/10/2026): “since the zoom is not connected, from where will you get the link?” ANSWER: from `OutreachJourney.zoomLink`, written by the Zoom reconciler in server/zoom-meetings.ts - which ships OFF. Until it is armed and proven, {{zoom_link}} resolves to nothing and `sendWhatsApp` SKIPS the send rather than delivering a blank join line. So this template is safe to GET APPROVED now and must NOT be BOUND until Zoom is on: bound early it sends nothing, silently, per prospect. The reviewer marked the wording itself as ok.",
     ],
   },
   {
@@ -247,6 +251,9 @@ export const SUBMISSION_TEMPLATES: SubmissionTemplate[] = [
     categoryNote:
       "Second reminder for the same booked appointment, but re-pitches it as a “*FREE* Personalized Discovery Call”. “Free” is offer language → MARKETING.",
     vars: [V.name("Priya"), V.date("Sat 18 Jul"), V.time("07:00 PM"), V.zoom()],
+    notes: [
+      "REVIEWER ASKED (26/10/2026): “since the zoom is not connected, from where will you get the link?” ANSWER: from `OutreachJourney.zoomLink`, written by the Zoom reconciler in server/zoom-meetings.ts - which ships OFF. Until it is armed and proven, {{zoom_link}} resolves to nothing and `sendWhatsApp` SKIPS the send rather than delivering a blank join line. So this template is safe to GET APPROVED now and must NOT be BOUND until Zoom is on: bound early it sends nothing, silently, per prospect. The reviewer marked the wording itself as ok.",
+    ],
   },
   {
     sopStep: "Step 16",
@@ -257,6 +264,22 @@ export const SUBMISSION_TEMPLATES: SubmissionTemplate[] = [
     // has actually happened. b2_booking_auto_cancelled is approved and says the true thing here:
     // the slot is being released for lack of confirmation.
     name: "b2_booking_auto_cancelled",
+    /**
+     * MARKETING, and it stays MARKETING - see `whatsapp-submission.test.ts`, which asserts it.
+     *
+     * Recorded here because the 26 Oct WATI audit briefly flipped this to UTILITY to resolve a
+     * cross-pack conflict, and that was the wrong end of the problem. The category follows the
+     * BODY, and this body carries a re-booking CTA; flipping the declaration without stripping
+     * the copy earns a silent re-categorisation from Meta and an abuse flag, which is exactly
+     * what that test exists to prevent.
+     *
+     * The conflict was real and is fixed on the other side: `scripts/wati-templates-utility-docx.ts`
+     * had a DIFFERENT, non-promotional body under this same name, and Meta approves one body per
+     * (name, language) - so the two documents were competing submissions and whichever was sent
+     * second replaced the first. That rewrite was briefly renamed `b2_booking_auto_cancelled_u` so
+     * both could be approved; it was then DELETED on 26 Oct 2026, when the reviewer's approval
+     * sheet marked this template's wording ok. The name now has exactly one body again, this one.
+     */
     category: "MARKETING",
     language: "en",
     categoryNote:
@@ -269,15 +292,41 @@ export const SUBMISSION_TEMPLATES: SubmissionTemplate[] = [
     kind: "SOP_SSS_CONFIRM_1",
     step: "SSS_CONFIRM_1",
     name: "b2_sop_sss_confirm_1",
-    category: "MARKETING",
+    /**
+     * ── THE REVIEWER REWROTE THIS BODY, AND THAT IS WHY IT IS UTILITY  (26 Oct 2026) ────
+     *
+     * Two decisions in one rewrite, and the second is the one that moves the category.
+     *
+     * The call is the "Solution Strategy Session". The SOP document transcribed it as "Success"
+     * throughout; the reviewer corrected it on four separate templates, and `lib/outreach-sla.ts`
+     * had been saying "Solution Strategy Call" for months - so this is a correction, not taste.
+     *
+     * And the PROMOTIONAL COPY IS OUT. The rationale at the top of this file says these steps
+     * could not clear Meta's UTILITY bar because every body sold while it informed, and that
+     * moving them "back to UTILITY" would first require the promotional lines to come out - a
+     * `proposedFix`, because it changes what a prospect reads. The reviewer has now taken that
+     * trade and written the stripped bodies themselves. So this is an `acceptedFix`, the open
+     * question is closed, and the category follows the body it actually has.
+     *
+     * The superseded transcription lives in `TPL_*_SUPERSEDED` in lib/outreach-sop.ts, beside
+     * the new constant, for the same reason `TPL_INTRO_SUPERSEDED` does.
+     */
+    acceptedFix: {
+      reason:
+        'Reviewer rewrote the body in the approval sheet: the call is the "Solution Strategy Session", and the promotional copy that forced MARKETING is removed. Submitted as UTILITY on the new body.',
+      decidedOn: "2026-10-26",
+      was: TPL_SSS_CONFIRM_1_SUPERSEDED,
+    },
+    category: "UTILITY",
     language: "en",
     categoryNote:
       "Confirmation request for a booked SSS, but built around a “personalized game plan” and “excited to help you take the next step in your career” - and carries a promo video header. Persuasive throughout → MARKETING.",
     vars: [V.name("Priya"), V.sender("Nilofer"), V.date("Mon 20 Jul"), V.time("06:30 PM")],
     header: "VIDEO - the personalized video Ameen records per prospect",
     notes: [
-      "The SOP’s “<< ATTACH VIDEO TO THIS MESSAGE>>” is a per-prospect video, so it must be a VIDEO HEADER, not body text. Submit with a sample video; the real one is supplied per send.",
-      "DECISION NEEDED: a per-send video header requires uploading each prospect’s video to WATI and passing its media id. The app does not do that today - see the wiring doc. Until it does, keep this step MANUAL.",
+      "THE VIDEO IS GONE, AND THAT UNBLOCKS THIS STEP. Both notes that used to sit here are obsolete as of the reviewer’s 26/10/2026 rewrite: the body no longer ends in “<< ATTACH VIDEO TO THIS MESSAGE>>”, so there is no media header to submit and no per-send video to upload.",
+      "What that was blocking: a per-prospect video header means uploading each one to WATI and passing its media id, which this app does not do - so Step 19 was pinned to MANUAL sending. With the video out of the template, it is an ordinary text send like every other rung on the ladder and the engine can run it.",
+      "If B2 still wants the personalised video, it goes as a SEPARATE message rather than a header on this one. Putting it back into the body re-imposes the manual-only constraint and costs a re-approval; `outreach-engine.test.ts` asserts the placeholder stays out so that decision cannot be made by accident.",
     ],
   },
   {
@@ -285,7 +334,32 @@ export const SUBMISSION_TEMPLATES: SubmissionTemplate[] = [
     kind: "SOP_SSS_CONFIRM_2",
     step: "SSS_CONFIRM_2",
     name: "b2_sop_sss_confirm_2",
-    category: "MARKETING",
+    /**
+     * ── THE REVIEWER REWROTE THIS BODY, AND THAT IS WHY IT IS UTILITY  (26 Oct 2026) ────
+     *
+     * Two decisions in one rewrite, and the second is the one that moves the category.
+     *
+     * The call is the "Solution Strategy Session". The SOP document transcribed it as "Success"
+     * throughout; the reviewer corrected it on four separate templates, and `lib/outreach-sla.ts`
+     * had been saying "Solution Strategy Call" for months - so this is a correction, not taste.
+     *
+     * And the PROMOTIONAL COPY IS OUT. The rationale at the top of this file says these steps
+     * could not clear Meta's UTILITY bar because every body sold while it informed, and that
+     * moving them "back to UTILITY" would first require the promotional lines to come out - a
+     * `proposedFix`, because it changes what a prospect reads. The reviewer has now taken that
+     * trade and written the stripped bodies themselves. So this is an `acceptedFix`, the open
+     * question is closed, and the category follows the body it actually has.
+     *
+     * The superseded transcription lives in `TPL_*_SUPERSEDED` in lib/outreach-sop.ts, beside
+     * the new constant, for the same reason `TPL_INTRO_SUPERSEDED` does.
+     */
+    acceptedFix: {
+      reason:
+        'Reviewer rewrote the body in the approval sheet: the call is the "Solution Strategy Session", and the promotional copy that forced MARKETING is removed. Submitted as UTILITY on the new body.',
+      decidedOn: "2026-10-26",
+      was: TPL_SSS_CONFIRM_2_SUPERSEDED,
+    },
+    category: "UTILITY",
     language: "en",
     categoryNote:
       "Second reminder for the same booked SSS, but sells attendance - “prepared something very specific for your profile and would love to see you there” → MARKETING.",
@@ -330,7 +404,32 @@ export const SUBMISSION_TEMPLATES: SubmissionTemplate[] = [
     kind: "SOP_SSS_CANCEL",
     step: "SSS_CANCEL_MSG",
     name: "b2_sop_sss_cancel",
-    category: "MARKETING",
+    /**
+     * ── THE REVIEWER REWROTE THIS BODY, AND THAT IS WHY IT IS UTILITY  (26 Oct 2026) ────
+     *
+     * Two decisions in one rewrite, and the second is the one that moves the category.
+     *
+     * The call is the "Solution Strategy Session". The SOP document transcribed it as "Success"
+     * throughout; the reviewer corrected it on four separate templates, and `lib/outreach-sla.ts`
+     * had been saying "Solution Strategy Call" for months - so this is a correction, not taste.
+     *
+     * And the PROMOTIONAL COPY IS OUT. The rationale at the top of this file says these steps
+     * could not clear Meta's UTILITY bar because every body sold while it informed, and that
+     * moving them "back to UTILITY" would first require the promotional lines to come out - a
+     * `proposedFix`, because it changes what a prospect reads. The reviewer has now taken that
+     * trade and written the stripped bodies themselves. So this is an `acceptedFix`, the open
+     * question is closed, and the category follows the body it actually has.
+     *
+     * The superseded transcription lives in `TPL_*_SUPERSEDED` in lib/outreach-sop.ts, beside
+     * the new constant, for the same reason `TPL_INTRO_SUPERSEDED` does.
+     */
+    acceptedFix: {
+      reason:
+        'Reviewer rewrote the body in the approval sheet: the call is the "Solution Strategy Session", and the promotional copy that forced MARKETING is removed. Submitted as UTILITY on the new body.',
+      decidedOn: "2026-10-26",
+      was: TPL_SSS_CANCEL_SUPERSEDED,
+    },
+    category: "UTILITY",
     language: "en",
     categoryNote:
       "Notifies the prospect their SSS slot was released, then asks them to re-book with a link. Re-engagement CTA → MARKETING. Like Step 16, no confirmation request in it - still MARKETING.",

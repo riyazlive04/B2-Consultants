@@ -4,13 +4,15 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  CalendarRange, ClipboardCheck, ExternalLink, Flag, Pencil, PlayCircle, Plus, Trash2, Video, Wand2,
+  CalendarOff, CalendarRange, ClipboardCheck, ExternalLink, Flag, Pencil, PlayCircle, Plus, RotateCcw,
+  Trash2, Video, Wand2,
 } from "lucide-react";
 import type { BatchDetailView, TimetableSessionView } from "@/server/batch-detail";
 import type { CurriculumTemplateView } from "@/server/curriculum";
 import { DAY_NAMES, formatDuration, planTimetable, sortRows } from "@/lib/curriculum";
 import {
-  deleteBatchSession, generateTimetable, setSprintStart, upsertBatchSession,
+  cancelBatchSession, deleteBatchSession, generateTimetable, restoreBatchSession, setSprintStart,
+  upsertBatchSession,
 } from "@/server/batch-timetable-actions";
 import { AttendanceSheetModal } from "@/components/attendance/AttendanceSheet";
 import { askConfirm, toast } from "@/components/ui/feedback";
@@ -21,6 +23,7 @@ import { TimePicker } from "@/components/ui/TimePicker";
 import { Modal } from "@/components/ui/Modal";
 import { Card, EmptyState, Hint, Pill, TableShell, Td, Th, Tr } from "@/components/ui/kit";
 import { formatDate } from "@/lib/format";
+import { canCancelSession, sessionIsOn, sessionStatusLabel } from "@/lib/session-status";
 import { safeAction } from "@/lib/action-guard";
 
 /**
@@ -212,6 +215,8 @@ export function TimetablePanel({
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<TimetableSessionView | null>(null);
   const [register, setRegister] = useState<TimetableSessionView | null>(null);
+  /** The class being called off (issue C3) - a reason needs a box, so it is a modal not a confirm. */
+  const [cancelling, setCancelling] = useState<TimetableSessionView | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = () => router.refresh();
@@ -312,15 +317,24 @@ export function TimetablePanel({
                     )}
                   </Td>
                   <Td>
-                    <span className="font-medium text-ink">{s.title}</span>
+                    {/* Struck through when called off (issue C3). The row STAYS - this is one of
+                        only two screens that shows a cancelled class, because a coach has to be
+                        able to see the week they really ran, and the reason they gave for it. */}
+                    <span className={`font-medium text-ink ${sessionIsOn(s.status) ? "" : "line-through decoration-muted"}`}>
+                      {s.title}
+                    </span>
                     {s.framework && <span className="block text-caption italic text-muted">{s.framework}</span>}
                     <span className="mt-1 flex flex-wrap items-center gap-2">
+                      {!sessionIsOn(s.status) && <Pill tone="bad">{sessionStatusLabel(s.status)}</Pill>}
                       {s.taskCount > 0 && <span className="text-caption text-muted">{s.taskCount} task{s.taskCount === 1 ? "" : "s"}</span>}
                       {s.markedCount > 0 && (
                         <span className="text-caption text-good">Register taken</span>
                       )}
                       {!s.fromCurriculum && <span className="text-caption text-muted">Added by hand</span>}
                     </span>
+                    {!sessionIsOn(s.status) && s.cancelReason && (
+                      <span className="mt-1 block text-caption text-bad">{s.cancelReason}</span>
+                    )}
                   </Td>
                   <Td>{formatDuration(s.durationMins) ?? "-"}</Td>
                   <Td>
@@ -358,13 +372,56 @@ export function TimetablePanel({
                           {s.delivery === "PRE_RECORDED" ? "Watch" : "Join"}
                         </a>
                       )}
-                      {batch.canManage && s.delivery === "LIVE" && s.isPast && (
+                      {batch.canManage && s.delivery === "LIVE" && s.isPast && sessionIsOn(s.status) && (
                         <IconButton label={`Take the register for ${s.title}`} size="sm" onClick={() => setRegister(s)}>
                           <ClipboardCheck size={14} />
                         </IconButton>
                       )}
                       {batch.canManage && (
                         <>
+                          {/*
+                            CALL IT OFF, OR PUT IT BACK ON (issue C3).
+
+                            Offered only for a LIVE class that has not already finished - the
+                            rule is `canCancelSession` in lib/session-status.ts, asked here as
+                            well as on the server so the button is absent rather than offered
+                            and then refused. Cancelling a class that ran last Tuesday would
+                            silently take the attendance off every student marked PRESENT at it.
+
+                            A PRE_RECORDED module is excluded: it has no clock and no register,
+                            so "cancelled" is not a state it can be in - it is published or it
+                            is removed.
+                          */}
+                          {s.delivery === "LIVE" && !sessionIsOn(s.status) && (
+                            <IconButton label={`Put ${s.title} back on`} size="sm" onClick={async () => {
+                              const ok = await askConfirm({
+                                title: `Put “${s.title}” back on?`,
+                                body: "The cohort sees it as happening again. Its register, homework and resources are untouched - they never went anywhere.",
+                                confirmLabel: "Put it back on",
+                              });
+                              if (!ok) return;
+                              const res = await safeAction(() => restoreBatchSession(s.id));
+                              if (!res.ok) return toast(res.error, "error");
+                              toast("Class is back on");
+                              refresh();
+                            }}>
+                              <RotateCcw size={14} />
+                            </IconButton>
+                          )}
+                          {s.delivery === "LIVE" && sessionIsOn(s.status) &&
+                            canCancelSession(
+                              { status: s.status, startsAt: new Date(s.startsAt), durationMins: s.durationMins },
+                              new Date(),
+                            ).ok && (
+                              <IconButton
+                                label={`Cancel ${s.title}`}
+                                size="sm"
+                                tone="danger"
+                                onClick={() => { setCancelling(s); setError(null); }}
+                              >
+                                <CalendarOff size={14} />
+                              </IconButton>
+                            )}
                           <IconButton label={`Edit ${s.title}`} size="sm" onClick={() => { setEditing(s); setError(null); }}>
                             <Pencil size={14} />
                           </IconButton>
@@ -465,6 +522,54 @@ export function TimetablePanel({
           onClose={() => setRegister(null)}
           onSaved={() => { setRegister(null); refresh(); }}
         />
+      )}
+
+      {cancelling && (
+        <Modal open title={`Call off “${cancelling.title}”?`} onClose={() => setCancelling(null)}>
+          <form
+            action={async (fd) => {
+              setError(null);
+              const res = await safeAction(() => cancelBatchSession(cancelling.id, fd));
+              if (!res.ok) return setError(res.error);
+              setCancelling(null);
+              toast(fd.get("status") === "POSTPONED" ? "Class postponed" : "Class cancelled");
+              refresh();
+            }}
+            className="space-y-4"
+          >
+            <Hint>
+              The class stays on the timetable, struck through, so the cohort can see what
+              happened. Its register, homework and resources are kept. It leaves every attendance
+              rate, sends no reminder and shows no join link.
+            </Hint>
+
+            <Field label="Which is it?">
+              <Select
+                name="status"
+                defaultValue="CANCELLED"
+                options={[
+                  { value: "CANCELLED", label: "Cancelled - it is not happening" },
+                  { value: "POSTPONED", label: "Postponed - a new time is coming" },
+                ]}
+              />
+            </Field>
+
+            {/*
+              Optional, and asked for anyway. The students see this verbatim, and
+              "Cancelled" on its own leaves them guessing whether to expect a replacement -
+              which is the question the whole notice exists to answer.
+            */}
+            <Field label="Reason" hint="Shown to the cohort exactly as you write it. Optional.">
+              <TextArea name="reason" kind="text" maxLength={500} placeholder="e.g. Tutor unwell - we'll run this on Sunday instead" />
+            </Field>
+
+            <FormError message={error} />
+            <div className="flex justify-end gap-2">
+              <Btn type="button" onClick={() => setCancelling(null)}>Keep it on</Btn>
+              <SubmitButton tone="action">Call it off</SubmitButton>
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   );

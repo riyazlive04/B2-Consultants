@@ -19,7 +19,7 @@ import {
   type UserStatus,
 } from "@/lib/capabilities";
 import { INVITE_TTL_DAYS, mintInviteToken, unguessablePlaceholderPassword } from "@/lib/invite-token";
-import { normalizePassword } from "@/lib/credentials";
+import { MIN_PASSWORD_LENGTH, PASSWORD_TOO_SHORT, normalizePassword } from "@/lib/credentials";
 import { rule } from "@/lib/field-rules";
 import { consumeAccessRequest } from "./access-requests";
 import { getOwnershipInventory, migrateOwnership, type LeadDestination } from "./termination";
@@ -776,7 +776,7 @@ export async function setUserPassword(
    * at sign-in means both ends agree on the same string.
    */
   const password = normalizePassword(String(form.get("password") ?? ""));
-  if (password.length < 8) return { ok: false, error: "Password must be at least 8 characters" };
+  if (password.length < MIN_PASSWORD_LENGTH) return { ok: false, error: PASSWORD_TOO_SHORT };
   try {
     const ctx = await auth.$context;
     const hash = await ctx.password.hash(password);

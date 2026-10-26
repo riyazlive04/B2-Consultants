@@ -13,6 +13,7 @@ import { Modal } from "@/components/ui/Modal";
 import { LevelChip, StatusChip } from "./LevelChip";
 import { safeAction } from "@/lib/action-guard";
 import { PhoneField } from "@/components/ui/PhoneField";
+import { MIN_PASSWORD_LENGTH, PASSWORD_HINT } from "@/lib/credentials";
 
 /**
  * Batch membership + portal logins. Students can be added BEFORE they have a
@@ -234,8 +235,8 @@ export function MembersPanel({
             <Field label="Login email">
               <TextInput kind="email" name="email" required defaultValue={loginFor.email ?? ""} />
             </Field>
-            <Field label="Password" hint="At least 8 characters - a temporary one; they set their own at first sign-in.">
-              <TextInput name="password" type="password" required minLength={8} />
+            <Field label="Password" hint={`${PASSWORD_HINT} A temporary one; they set their own at first sign-in.`}>
+              <TextInput name="password" type="password" required minLength={MIN_PASSWORD_LENGTH} />
             </Field>
             <CheckboxField name="notify" defaultChecked label="Send the login details by email and WhatsApp" />
             <div className="flex items-center justify-between gap-3">

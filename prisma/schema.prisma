@@ -106,6 +106,8 @@ model User {
   attendanceMarked         SessionAttendance[]        @relation("AttendanceMarkedBy")
   attendanceWindowsOpened  ClassSession[]             @relation("AttendanceWindowOpenedBy")
   attendancePublished      ClassSession[]             @relation("AttendancePublishedBy")
+  /// Classes this person called off (issue C3). See `ClassSession.status`.
+  sessionsCancelled        ClassSession[]             @relation("SessionCancelledBy")
   attendanceReasonsAsked   SessionAttendance[]        @relation("AttendanceReasonAskedBy")
   sprintLogEntries         SprintLogEntry[]           @relation("SprintLogLoggedBy")
   sprintLogRemovals        SprintLogEntry[]           @relation("SprintLogDeletedBy")
@@ -159,6 +161,9 @@ model User {
   opportunitiesArchived    Opportunity[]              @relation("OpportunityArchivedBy")
   tasksArchived            ContactTask[]              @relation("ContactTaskArchivedBy")
   incomesArchived          Income[]                   @relation("IncomeArchivedBy")
+  /// Payments this person recorded as reversed (issue C2). NOT the same as archived -
+  /// see `Income.reversedAt` for why those are two different facts.
+  incomesReversed          Income[]                   @relation("IncomeReversedBy")
   expensesArchived         Expense[]                  @relation("ExpenseArchivedBy")
   invoicesArchived         Invoice[]                  @relation("InvoiceArchivedBy")
   pendingPaymentsArchived  PendingPayment[]           @relation("PendingPaymentArchivedBy")
@@ -366,11 +371,26 @@ enum PaymentMethod {
   OTHER
 }
 
+/// ════════════════════════════════════════════════════════════════════════════════════════
+///  THE STATES A RECEIVABLE CAN END IN  (issue C2)
+/// ════════════════════════════════════════════════════════════════════════════════════════
+///
+/// WRITTEN_OFF is new, and it is the state this enum was missing rather than a nicety. There
+/// was no way to say "we are not going to collect this": a genuinely uncollectable plan sat as
+/// OVERDUE for ever, inflating the receivables figure on the founder's wall and the runway
+/// calculation that reads it, and being chased by the dunning ladder until FINAL - after which
+/// it was chased never again but still counted.
+///
+/// DROPPED and WRITTEN_OFF are deliberately different, and conflating them would undo §8 of the
+/// agreement. DROPPED is about the STUDENT (they left; they still owe the instalments they
+/// signed for - see `lib/enrollment-lifecycle.ts`, where a test asserts no money module reads
+/// enrolment status). WRITTEN_OFF is about the MONEY, and only the founder may say it.
 enum PendingPaymentStatus {
   ACTIVE
   PAID_IN_FULL
   OVERDUE
   DROPPED
+  WRITTEN_OFF
 }
 
 /// Which business a cost belongs to (§1.4). Income derives its line from the programme
@@ -435,6 +455,38 @@ model Income {
   instalmentExtraInrMinor BigInt              @default(0) // paise
   instalmentExtraEurMinor BigInt              @default(0) // cents
   notes                   String?
+
+  /// ══════════════════════════════════════════════════════════════════════════════════════
+  ///  DID THIS PAYMENT ACTUALLY CLEAR?  (issue C2)
+  /// ══════════════════════════════════════════════════════════════════════════════════════
+  ///
+  /// There is no payment processor in this app: `publicToken` serves a read-only invoice page
+  /// with no Pay button, and every row here is a human recording a claim about something that
+  /// happened in a bank. So a payment that REVERSES - bounced cheque, reversed UPI, recalled
+  /// transfer, a wrong amount keyed in - is routine, and the money model had no state for it.
+  ///
+  /// What people did instead was edit or archive the row, and that is wrong twice over:
+  ///
+  ///   1. It destroys the fact that money appeared to arrive and then did not. The ledger has
+  ///      already posted it; `revenue-recognition`, commission accrual and the runway have all
+  ///      read it. Deleting the row leaves no trace of why the figures moved.
+  ///   2. It leaves the DUNNING LADDER silenced for ever. `stageFor` fires each rung once, from
+  ///      the `DunningEvent` rows - so the instalment re-opens with every stage already "sent"
+  ///      and is never chased again. See `Instalment.dunningCycle`, which this field drives.
+  ///
+  /// So a reversal is recorded, not erased. `reversedAt` set means this payment no longer
+  /// settles anything: `lib/payment-allocation` skips it, the instalment it cleared goes back to
+  /// DUE, and the instalment's `dunningCycle` is bumped so the ladder may chase it again.
+  ///
+  /// NOT a soft delete, and deliberately a separate field from `deletedAt`. Archiving says "this
+  /// row should not have been entered"; reversing says "it was entered correctly and the money
+  /// went away again". Only the second one is a fact about the bank.
+  reversedAt              DateTime?
+  /// Why it reversed, in the founder's words. Free text: the vocabulary is the bank's, not ours.
+  reversedReason          String?
+  reversedById            String?
+  reversedBy              User?               @relation("IncomeReversedBy", fields: [reversedById], references: [id], onDelete: SetNull)
+
   source                  Source              @default(MANUAL)
   manualOverride          Boolean             @default(false)
   externalRef             String? // e.g. Razorpay payment id - de-dupe key for ingest
@@ -452,6 +504,9 @@ model Income {
   @@index([pendingPaymentId])
   @@index([programLevel, date])
   @@index([deletedAt])
+  /// Every money read filters on this, exactly as it filters on `deletedAt` - a reversed payment
+  /// must not be summed. Indexed for the same reason that one is.
+  @@index([reversedAt])
   @@map("income")
 }
 
@@ -587,6 +642,30 @@ model Instalment {
   pendingPaymentId String
   pendingPayment   PendingPayment   @relation(fields: [pendingPaymentId], references: [id], onDelete: Cascade)
   seq              Int // 1-based instalment number
+  /// ════════════════════════════════════════════════════════════════════════════════════
+  ///  WHICH PASS UP THE CHASE LADDER THIS INSTALMENT IS ON  (issue C1)
+  /// ════════════════════════════════════════════════════════════════════════════════════
+  ///
+  /// `stageFor` fires each rung ONCE, ever, reading the stages already sent from
+  /// `DunningEvent`. That is exactly right for a chase ladder and it had one fatal
+  /// consequence, because there is no payment processor in this app - every payment is a
+  /// human recording a claim about something that happened outside it:
+  ///
+  ///   instalment chased → FINAL sent → student pays → settled → the payment REVERSES
+  ///   (bounced cheque, reversed UPI, failed transfer) → finance corrects the Income row →
+  ///   the instalment is open again → `stageFor` returns null for every stage, FOREVER.
+  ///
+  /// The instalment went permanently un-chased, silently, and appeared on no list. Reversal
+  /// is not an edge case here; it is routine.
+  ///
+  /// A cycle is one pass up the ladder. Reversing a settlement opens a new one, and
+  /// `stageFor` is only ever shown the events of the CURRENT cycle - so UPCOMING, MISSED and
+  /// FINAL are all available again while the old cycle's rows stay exactly where they are.
+  /// The trail is still append-only and still answers "what did we send this student, when";
+  /// it just no longer silences the ladder for the rest of time.
+  ///
+  /// Starts at 0 so every existing row is "cycle 0" with no backfill.
+  dunningCycle     Int              @default(0)
   amountInrMinor   BigInt           @default(0) // paise
   amountEurMinor   BigInt           @default(0) // cents
   fxRateUsed       Decimal          @db.Decimal(14, 6)
@@ -632,6 +711,10 @@ model DunningEvent {
   instalmentId String
   instalment   Instalment   @relation(fields: [instalmentId], references: [id], onDelete: Cascade)
   stage        DunningStage
+  /// The `Instalment.dunningCycle` in force when this rung fired. See that field: a reversed
+  /// payment opens a new cycle, and the ladder only reads the current one. Part of the unique
+  /// key below, so cycle 1 may legitimately send an UPCOMING that cycle 0 already sent.
+  cycle        Int          @default(0)
   /// EMAIL / WHATSAPP / BOTH, as configured for the stage at the time it fired. Snapshotted
   /// rather than read live, because "why did this go by email" must stay answerable after the
   /// config changes.
@@ -645,7 +728,9 @@ model DunningEvent {
   messageId    String?
   note         String?
 
-  @@unique([instalmentId, stage])
+  /// One row per rung per CYCLE. Was `[instalmentId, stage]`, which is what made a reversal
+  /// unchaseable - a second UPCOMING could not be written even once the ladder wanted one.
+  @@unique([instalmentId, stage, cycle])
   @@index([sentAt])
   @@map("dunning_event")
 }
@@ -1661,7 +1746,44 @@ model Invoice {
   totalEurMinor      BigInt            @default(0)
   fxRateUsed         Decimal           @db.Decimal(14, 6)
   notes              String?
-  publicToken        String            @unique @default(cuid())
+  /// ══════════════════════════════════════════════════════════════════════════════════════
+  ///  THE PUBLIC LINK  (issue B5)
+  /// ══════════════════════════════════════════════════════════════════════════════════════
+  ///
+  /// `/i/<publicToken>` serves this invoice to the customer, and the token is the WHOLE
+  /// credential: the page shows their name, postal address, email, phone, the amount, the
+  /// service period and the agreement reference.
+  ///
+  /// It used to be `@default(cuid())`, which was out of step with every other public token in
+  /// this codebase and in the wrong direction:
+  ///
+  ///   invite     `randomBytes(32)` · SHA-256 at rest · 7-day TTL  · single use
+  ///   agreement  `randomBytes(32)` · SHA-256 at rest · ≤90-day TTL · voidable
+  ///   signer     `randomBytes(32)` · SHA-256 at rest · inherits    · voidable
+  ///   invoice    cuid()            · plaintext       · NO TTL      · NOT revocable
+  ///
+  /// A cuid embeds a timestamp and a monotonic counter, so two issued near each other are
+  /// structurally related - a far weaker guess target than 256 random bits. And with no expiry
+  /// and no revocation, a link forwarded once in an email worked for ever.
+  ///
+  /// It is now minted by `lib/invoice-token.ts` with the same 32 random bytes as its neighbours.
+  /// The default is REMOVED so the database cannot quietly hand out a cuid again; every write
+  /// path supplies one.
+  ///
+  /// ── Why this one is NOT hashed at rest, unlike the other three ────────────────────────
+  /// Those three are shown once, in a link that is then sent. An invoice link has to be
+  /// RE-SHOWABLE - an admin resends it, copies it into a WhatsApp reply, reads it out. Hashing
+  /// would mean the link could never be displayed again, so the trade here is 256 bits of
+  /// entropy plus an expiry plus revocation, which is what actually bounds the exposure. If
+  /// invoices ever get a "the link is shown once" flow, hash it and drop this paragraph.
+  publicToken        String            @unique
+  /// When the link stops working. Null = no expiry, which is what every row issued before this
+  /// field has and what a founder may deliberately choose for a long-running subscription.
+  publicTokenExpiresAt DateTime?
+  /// Set to kill the link without voiding the invoice - a wrong address, a forwarded email, a
+  /// customer who asks. Distinct from `status: VOID`, which is a statement about the DOCUMENT;
+  /// this is a statement about one URL. `rotateInvoiceLink` clears it and mints a fresh token.
+  publicTokenRevokedAt DateTime?
   sentAt             DateTime?
   paidAt             DateTime?
   createdById        String?
@@ -2026,7 +2148,7 @@ model SlotRelease {
   @@map("slot_release")
 }
 
-/// SSS (Success Strategy Session) slot - the founder-run sales/closing call calendar. Distinct
+/// SSS (Solution Strategy Session) slot - the founder-run sales/closing call calendar. Distinct
 /// from AppointmentSlot (the public discovery booking): an SSS slot is booked by linking an
 /// existing OutreachJourney, not a fresh BANT intake. Reuses SlotStatus (OPEN/BOOKED/BLOCKED).
 ///
@@ -3272,6 +3394,20 @@ model ClassSession {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
+  /// ── CANCELLED / POSTPONED ───────────────────────────────────────────────────────────
+  /// See `SessionStatus`. SCHEDULED is the only state that counts towards an attendance rate,
+  /// opens a register or shows a join link; the other two are excluded at every one of those
+  /// call sites rather than by a Prisma middleware, the same discipline as the soft-delete
+  /// archive and `Enrollment.status`.
+  status           SessionStatus @default(SCHEDULED)
+  /// Why, and who said so. The reason is free text because "why was this class called off" has
+  /// no useful vocabulary - unlike `Enrollment.discontinueReason`, this is not a metric anybody
+  /// aggregates, it is a sentence the cohort is shown.
+  cancelReason     String?
+  cancelledAt      DateTime?
+  cancelledById    String?
+  cancelledBy      User?         @relation("SessionCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
+
   tasks            SessionTask[]
   attendance       SessionAttendance[]
   whatsappMessages WhatsAppMessage[]
@@ -3285,6 +3421,34 @@ model ClassSession {
   /// held.
   @@index([attendanceClosesAt])
   @@map("class_session")
+}
+
+/// ════════════════════════════════════════════════════════════════════════════════════════
+///  WAS THIS CLASS CANCELLED?  (issue C3)
+/// ════════════════════════════════════════════════════════════════════════════════════════
+///
+/// `ClassSession` had no status at all, so a class could only be RE-TIMED or DELETED - and
+/// `deleteBatchSession` refuses once a register exists ("that class has a register against it").
+/// Between those two the common real event had nowhere to go:
+///
+///   · Cancelled BEFORE the register. Delete worked, the row vanished, every student's timetable
+///     silently lost a class, and nobody was told - absence notices fire on PUBLISH, not on
+///     removal.
+///   · Cancelled AFTER the window was opened. Three students had already checked in, so the row
+///     is undeletable AND unmarkable-as-cancelled. The students who did not check in sit
+///     unmarked or absent, the cohort's attendance rate drops for a class that never happened,
+///     and §3.3's "every live session is recorded" promise has nothing behind it.
+///
+/// So cancelling is now a STATE rather than a deletion, which is the honest shape: the class was
+/// scheduled, people were told, and then it was called off. That history is worth keeping, and a
+/// deleted row keeps none of it.
+///
+/// POSTPONED is distinct from CANCELLED on purpose. "Not happening" and "happening, date to
+/// follow" are different sentences to a student, and only one of them should stop them waiting.
+enum SessionStatus {
+  SCHEDULED
+  CANCELLED
+  POSTPONED
 }
 
 /// What a session's coursework asks the student to do (ER v2 TASK.type).
@@ -4012,6 +4176,34 @@ enum WhatsAppKind {
   /// A portal login was created or its password reset: link, login email, temporary password.
   /// The password is redacted from the logged params (sendWhatsApp `secretVars`).
   LOGIN_CREDENTIALS
+  /// ════════════════════════════════════════════════════════════════════════════════════════
+  ///  PASSWORD RESET BY WHATSAPP  (issue C4)
+  /// ════════════════════════════════════════════════════════════════════════════════════════
+  ///
+  /// Credentials go out on BOTH channels - `sendLoginCredentials` emails them and WhatsApps them,
+  /// because for this user base WhatsApp is the one that is read. Resetting them goes out on
+  /// ONE: `sendResetPassword` in lib/auth.ts is a direct Resend call and nothing else. For a
+  /// student body that was onboarded over WhatsApp, that is backwards, and three things compound
+  /// it:
+  ///
+  ///   · `/forgot-password` answers generically for an unknown address (correct - it must not be
+  ///     an enumeration oracle), so a student whose email was mistyped at intake sees "a reset
+  ///     link is on its way" and nothing ever arrives. For ever.
+  ///   · the `lead_email` history fix means a returning prospect's NEWEST address wins on the
+  ///     Lead, while `User.email` keeps whatever was set at provisioning - so the two can differ
+  ///     and nobody notices until a reset is needed.
+  ///   · with `EMAIL_ENABLED` off the reset throws a visible error, which is the right
+  ///     behaviour and still leaves the person locked out.
+  ///
+  /// So the code can go to the number instead. Its own kind rather than a reuse of
+  /// AGREEMENT_OTP: one WATI template is bound per kind, that one's approved text says
+  /// "agreement signing code", and a person resetting a password would be sent a sentence about
+  /// a contract. Same reasoning as AGREEMENT_COPY not reusing AGREEMENT_SEND.
+  ///
+  /// AUTHENTICATION category at Meta, like AGREEMENT_OTP - a one-time passcode submitted as
+  /// UTILITY is rejected. The code is redacted from the logged params exactly as the temporary
+  /// password is (`sendWhatsApp` `secretVars`).
+  PASSWORD_RESET_OTP
   CHECKIN_NUDGE // student coaching check-in due
   SPRINT_MISS_NUDGE // student missed a sprint-week target
   AGREEMENT_SEND // coaching agreement is ready - carries the tokenized signing link

@@ -404,12 +404,48 @@ function servicePeriodText(start: Date | null, end: Date | null): string | null 
   return end ? `${formatDate(start)} - ${formatDate(end)}` : formatDate(start);
 }
 
+/**
+ * ════════════════════════════════════════════════════════════════════════════════════════
+ *  IS THIS PUBLIC LINK STILL GOOD?  (issue B5)
+ * ════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * ONE function, called by all three public entry points - the page, the PDF and the receipt.
+ * Before this, each of them repeated `status === "DRAFT" || status === "VOID"` and NONE of them
+ * could check anything else, because there was nothing else to check: the token had no expiry
+ * and no way to be revoked, so a link forwarded once in an email worked for ever.
+ *
+ * Three questions, and every one of them must fail CLOSED and fail SILENTLY:
+ *
+ *   1. Is the document publishable at all? DRAFT and VOID are not.
+ *   2. Has the link been revoked? (`publicTokenRevokedAt` - a wrong address, a forwarded email,
+ *      a customer who asks. Distinct from `status: VOID`, which is about the DOCUMENT.)
+ *   3. Has it expired? (`publicTokenExpiresAt` - null means no expiry, which is every row issued
+ *      before the field existed and a deliberate choice for a long-running subscription.)
+ *
+ * All four failures return the same `null`, which the callers turn into the same 404. A page that
+ * distinguished "revoked" from "never existed" would be an oracle telling the holder of a wrong
+ * link that they nearly had a right one, and telling anyone enumerating tokens which ones to
+ * keep trying.
+ */
+type PublicInvoiceRow = {
+  status: string;
+  publicTokenRevokedAt: Date | null;
+  publicTokenExpiresAt: Date | null;
+};
+
+export function publicLinkIsLive(i: PublicInvoiceRow, now: Date = new Date()): boolean {
+  if (i.status === "DRAFT" || i.status === "VOID") return false;
+  if (i.publicTokenRevokedAt !== null) return false;
+  if (i.publicTokenExpiresAt !== null && i.publicTokenExpiresAt.getTime() <= now.getTime()) return false;
+  return true;
+}
+
 export async function getPublicInvoice(token: string): Promise<InvoiceDocument | null> {
   const i = await prisma.invoice.findUnique({
     where: { publicToken: token },
     include: DOCUMENT_INCLUDE,
   });
-  if (!i || i.status === "DRAFT" || i.status === "VOID") return null;
+  if (!i || !publicLinkIsLive(i)) return null;
   return invoiceDocument(i);
 }
 
@@ -432,7 +468,10 @@ function asPdfData(doc: InvoiceDocument): InvoicePdfData {
  */
 export async function getPublicInvoicePdfData(token: string): Promise<InvoicePdfData | null> {
   const i = await prisma.invoice.findUnique({ where: { publicToken: token }, include: DOCUMENT_INCLUDE });
-  if (!i || i.status === "DRAFT" || i.status === "VOID") return null;
+  // Same gate as the page - see `publicLinkIsLive`. A PDF route that accepted a revoked or
+  // expired token would make the page's check decorative, which is how a "fixed" link leak
+  // stays leaked.
+  if (!i || !publicLinkIsLive(i)) return null;
   return asPdfData(await invoiceDocument(i, { plainMoney: true }));
 }
 
@@ -518,9 +557,16 @@ async function receiptDocument(paymentId: string): Promise<ReceiptPdfData | null
 export async function getPublicReceiptPdfData(token: string, receiptNumber: string): Promise<ReceiptPdfData | null> {
   const p = await prisma.invoicePayment.findFirst({
     where: { receiptNumber, invoice: { publicToken: token } },
-    select: { id: true },
+    select: {
+      id: true,
+      // The receipt rides on the invoice's link, so it has to honour the invoice's link rules -
+      // revoking a leaked invoice URL that still served every receipt under it would revoke
+      // nothing worth revoking. See `publicLinkIsLive`.
+      invoice: { select: { status: true, publicTokenRevokedAt: true, publicTokenExpiresAt: true } },
+    },
   });
-  return p ? receiptDocument(p.id) : null;
+  if (!p || !publicLinkIsLive(p.invoice)) return null;
+  return receiptDocument(p.id);
 }
 
 /** Same receipt by payment id, for the staff side (download + email). */

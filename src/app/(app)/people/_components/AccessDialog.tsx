@@ -75,9 +75,31 @@ export function AccessDialog({
   onClose: () => void;
   onInvited: (link: { url: string; expiresInDays: number }) => void;
 }) {
-  // A requested role is a suggestion, not a grant - and never Admin off a public form.
+  /**
+   * A REQUESTED ROLE IS A SUGGESTION, NOT A GRANT (issue B2).
+   *
+   * Everything in a `prefill` arrived from an unauthenticated stranger on the login screen, so
+   * the only safe thing to carry into a create-user form is the stuff an admin will read and
+   * correct anyway (name, email). The ROLE decides what the account can do on the day it is
+   * created, and it is the one field where a pre-ticked value plus a tired Friday is the whole
+   * attack.
+   *
+   * So the allow-list here mirrors `submitAccessRequest`'s enum rather than being wider than it.
+   * It used to admit "HEAD", which is the second-widest grant in the app - and that mattered
+   * even after HEAD stopped being requestable, because rows filed BEFORE that change are still
+   * sitting in the queue carrying `role: "HEAD"` (and some carry "ADMIN", from before that was
+   * removed). An old row must not be able to pre-tick a grant the form no longer offers.
+   *
+   * Anything outside the list falls back to USER - the narrowest staff role - and
+   * `prefillRoleIgnored` below tells the admin that is what happened, so the fallback is visible
+   * rather than silent.
+   */
+  const REQUESTABLE: readonly AppRole[] = ["USER", "COACH", "TUTOR"];
+  const requestedRole = prefill?.role as AppRole | undefined;
+  const prefillRoleIgnored =
+    !user && !!requestedRole && !REQUESTABLE.includes(requestedRole);
   const initialRole: AppRole =
-    user?.role ?? (prefill?.role === "HEAD" || prefill?.role === "USER" ? prefill.role : "USER");
+    user?.role ?? (requestedRole && REQUESTABLE.includes(requestedRole) ? requestedRole : "USER");
 
   const [name, setName] = useState(user?.name ?? prefill?.name ?? "");
   const [email, setEmail] = useState(user?.email ?? prefill?.email ?? "");
@@ -189,6 +211,14 @@ export function AccessDialog({
           <div className="mt-2">
             <SegmentedControl grow ariaLabel="Role" value={role} onChange={pickRole} options={roleOptions} />
           </div>
+          {/* The fallback above, said out loud. An admin who sees "requested: Head coach" on the
+              queue row and "Telecaller" pre-ticked here needs to know which one the form means. */}
+          {prefillRoleIgnored && (
+            <p role="status" className="mt-2 rounded-field bg-watch-soft px-3 py-2 text-xs font-medium text-watch">
+              This request asked for <b>{requestedRole}</b>, which can&apos;t be granted from a public
+              request. Starting from Telecaller - pick the role deliberately.
+            </p>
+          )}
         </div>
 
         {/*

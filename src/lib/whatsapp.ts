@@ -27,6 +27,7 @@ export const WHATSAPP_KINDS = [
   "AGREEMENT_COPY",
   "STUDENT_WELCOME",
   "LOGIN_CREDENTIALS",
+  "PASSWORD_RESET_OTP",
   "MANUAL",
   "SOP_INTRO",
   "SOP_FOLLOWUP",
@@ -63,6 +64,7 @@ export const WHATSAPP_KIND_LABELS: Record<WhatsAppKind, string> = {
   EMI_PRE_DUE: "EMI due-soon reminder",
   STUDENT_WELCOME: "Student welcome",
   LOGIN_CREDENTIALS: "Login details",
+  PASSWORD_RESET_OTP: "Password reset code",
   CHECKIN_NUDGE: "Check-in nudge",
   SPRINT_MISS_NUDGE: "Sprint-miss nudge",
   AGREEMENT_SEND: "Agreement signing link",
@@ -107,6 +109,8 @@ export const WHATSAPP_KIND_HINTS: Record<WhatsAppKind, string> = {
     "Sent ONCE when a student is seated in a batch - names their tutor, their first class and where to follow their own progress.",
   LOGIN_CREDENTIALS:
     "A portal login was created (or its password reset) - the sign-in link, the login email and the temporary password, which they must change on first sign-in.",
+  PASSWORD_RESET_OTP:
+    "Somebody asked to reset their own password and chose WhatsApp - the one-time code, nothing else. AUTHENTICATION category at Meta, so bind an authentication template: the code is the only variable it may carry.",
   CHECKIN_NUDGE: "A student whose coaching check-in date has arrived / passed.",
   SPRINT_MISS_NUDGE: "A student who missed a sprint-week target.",
   AGREEMENT_SEND: "The founder countersigned an agreement - carries the tokenized signing link.",
@@ -131,7 +135,7 @@ export const WHATSAPP_KIND_HINTS: Record<WhatsAppKind, string> = {
   BOOKING_CONFIRM_REQUEST: "Bookings confirmation loop - asks the prospect to reply YES to hold an upcoming booked slot.",
   BOOKING_RESCHEDULED: "Bookings confirmation loop - the call was moved to a new time (manual postpone or promoted into a freed earlier slot).",
   BOOKING_AUTO_CANCELLED: "Bookings confirmation loop - no confirmation before the cut-off, so the slot was released; invites them to rebook.",
-  SSS_RESCHEDULED: "SSS calendar - the Success Strategy Session was moved to a new time (founder blocked the slot/day, or a manual/drag reschedule).",
+  SSS_RESCHEDULED: "SSS calendar - the Solution Strategy Session was moved to a new time (founder blocked the slot/day, or a manual/drag reschedule).",
   BOOK_ORDER: "Sent to the book PUBLISHER, not the student - the order for a student's level books. Triggered by hand from Students → Book orders.",
   CLASS_REMINDER:
     "Sent to every student on a batch's roster before a live class, at each lead time set in Cadence. Pre-recorded modules are never reminded about - they have no start time.",
@@ -211,6 +215,19 @@ const BASE_AVAILABLE_VARS: Record<WhatsAppKind, readonly string[]> = {
    * the first sign-in.
    */
   LOGIN_CREDENTIALS: ["name", "login_url", "login_email", "temp_password"],
+  /**
+   * JUST THE CODE (issue C4).
+   *
+   * An AUTHENTICATION template accepts nothing else, and the one-variable list is deliberate
+   * rather than minimal: a touchpoint that OFFERED `name` would let somebody bind a template
+   * declaring it, and `b2_agreement_otp`'s note records what happens then - an extra declared
+   * variable shifts WATI's positional parameters by one and the send is rejected as "cannot
+   * have typos or blank text".
+   *
+   * Compare LOGIN_CREDENTIALS above, which offers four: that one is a UTILITY message carrying
+   * a link and an address. This one is a passcode, and Meta's format for a passcode is a code.
+   */
+  PASSWORD_RESET_OTP: ["code"],
   CHECKIN_NUDGE: ["name"],
   SPRINT_MISS_NUDGE: ["name"],
   // `sign_url` is the full tokenized link. If the approved template puts the token in a dynamic

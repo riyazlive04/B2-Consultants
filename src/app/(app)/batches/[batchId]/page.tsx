@@ -42,7 +42,10 @@ export default async function BatchPage({
 }) {
   const session = await requireSession();
   const batch = await getBatchDetail(params.batchId, session);
-  if (!batch) redirect("/?denied=batch");
+  // `batches`, not `batch` (issue A7): AccessDeniedToast looks the key up in the section
+  // catalogue to name the thing refused, and "batch" is not a key - it fell through to the raw
+  // string and announced "You don't have access to batch."
+  if (!batch) redirect("/?denied=batches");
   // German Note cohorts are run from their own screen; land anyone who arrives here there.
   if (batch.line === "GERMAN_NOTE") redirect(`/german-note/${batch.id}`);
 

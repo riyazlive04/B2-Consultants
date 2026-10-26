@@ -14,6 +14,7 @@ import { TaskChecklist } from "@/components/classroom/TaskChecklist";
 import { Modal } from "@/components/ui/Modal";
 import { Btn } from "@/components/ui/controls";
 import { formatDate } from "@/lib/format";
+import { sessionIsOn, sessionStatusLabel } from "@/lib/session-status";
 import { safeAction } from "@/lib/action-guard";
 
 /**
@@ -39,11 +40,32 @@ function SessionCard({ s, onChanged }: { s: ClassroomSessionView; onChanged: () 
   const pre = s.delivery === "PRE_RECORDED";
   const dow = DAY_NAMES[new Date(`${s.dateYmd}T00:00:00Z`).getUTCDay()];
   const mark = s.myAttendance ? ATTENDANCE_PILL[s.myAttendance] : null;
+  /**
+   * CALLED OFF (issue C3).
+   *
+   * The card stays on the timetable rather than disappearing. A class that silently vanishes
+   * from a week a student was already told about is worse than no notice: they turn up, or they
+   * assume they misread it, and either way they never learn what happened. So it is dimmed,
+   * struck through, labelled, and carries the coach's reason - and the affordances that imply
+   * the class is happening (the join link and the three attendance pills) are withheld below.
+   *
+   * The CHECK-IN button is already gone by then: `getMyOpenCheckIns` spreads `SESSION_ON`, so a
+   * cancelled class is never in the set the dashboard offers. Withheld at the query, like a
+   * recording past its window - a button a student may not press should not be in their page.
+   */
+  const off = !sessionIsOn(s.status);
+  const offLabel = sessionStatusLabel(s.status);
 
   return (
     <div
       className={`rounded-card border bg-surface p-4 shadow-card ${
-        s.isLive ? "border-primary" : s.isPast ? "border-line opacity-80" : "border-line"
+        off
+          ? "border-dashed border-line opacity-70"
+          : s.isLive
+            ? "border-primary"
+            : s.isPast
+              ? "border-line opacity-80"
+              : "border-line"
       }`}
     >
       <div className="flex flex-wrap items-start gap-2">
@@ -53,23 +75,41 @@ function SessionCard({ s, onChanged }: { s: ClassroomSessionView; onChanged: () 
           <CalendarClock size={15} className="mt-0.5 text-primary" aria-hidden />
         )}
         <div className="min-w-0 flex-1">
-          <h4 className="font-display text-[15px] font-semibold text-ink">{s.title}</h4>
+          <h4 className={`font-display text-[15px] font-semibold text-ink ${off ? "line-through decoration-muted" : ""}`}>
+            {s.title}
+          </h4>
           {s.framework && <p className="text-caption italic text-muted">{s.framework}</p>}
         </div>
-        {s.isLive && (
+        {/* The called-off pill replaces every other badge on this row - see `off` above. */}
+        {off && offLabel && <Pill tone="bad">{offLabel}</Pill>}
+        {!off && s.isLive && (
           <Pill tone="primary">
             <span className="inline-flex items-center gap-1">
               <Radio size={11} aria-hidden /> Starting now
             </span>
           </Pill>
         )}
-        {mark && <Pill tone={mark.tone}>{mark.label}</Pill>}
+        {!off && mark && <Pill tone={mark.tone}>{mark.label}</Pill>}
         {/* A register taken but not yet released. Saying so beats the alternative, which is a
             card that looks identical to a class nobody marked at all - a student would read
             that silence as having been forgotten. */}
-        {!mark && s.attendancePending && (
+        {!off && !mark && s.attendancePending && (
           <Pill tone="neutral" title="Your coach has taken the register but not shared it yet">
             Attendance pending
+          </Pill>
+        )}
+        {/*
+          THE THIRD STATE, which was the silent one (issue A8).
+          "Attendance pending" already distinguished a withheld mark from a shown one. What
+          looked identical to both was a past live class with NO register at all - the card
+          simply carried no pill, which a student reads as "I have been forgotten" or, worse,
+          assumes is an absence they cannot see. Naming it closes the set: shown, withheld,
+          never taken. Live and past only - a pre-recorded module has no register by design,
+          and a future class has not happened.
+        */}
+        {!off && !mark && !s.attendancePending && !pre && s.isPast && (
+          <Pill tone="neutral" title="No register has been taken for this class yet - it does not count against you">
+            Not marked yet
           </Pill>
         )}
       </div>
@@ -86,12 +126,24 @@ function SessionCard({ s, onChanged }: { s: ClassroomSessionView; onChanged: () 
         {formatDuration(s.durationMins) ? ` · ${formatDuration(s.durationMins)}` : ""}
       </p>
 
+      {/* The coach's own words. This is the sentence the whole feature exists to deliver -
+          "Cancelled" alone leaves a student guessing whether to expect a replacement. */}
+      {off && (
+        <p className="mt-1.5 text-sm text-bad">
+          {s.cancelReason?.trim()
+            ? s.cancelReason
+            : offLabel === "Postponed"
+              ? "Your coach will confirm a new time."
+              : "This class is not going ahead."}
+        </p>
+      )}
+
       {s.notes && <p className="mt-1 whitespace-pre-wrap text-sm text-muted">{s.notes}</p>}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {/* The join link appears an hour before and disappears when the class ends - a link to
             a meeting that finished last month is worse than no link. */}
-        {!pre && s.joinUrl && !s.isPast && (
+        {!off && !pre && s.joinUrl && !s.isPast && (
           <a
             href={s.joinUrl}
             target="_blank"

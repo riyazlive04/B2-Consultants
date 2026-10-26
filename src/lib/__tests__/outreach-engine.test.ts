@@ -1,9 +1,9 @@
 /**
  * Outreach SOP - timing, branch and data-integrity tests.
  *
- * Maps to the QA checklist's Steps 2–5. The engine is pure, so every SLA boundary is tested by
+ * Maps to the QA checklist's Steps 2-5. The engine is pure, so every SLA boundary is tested by
  * passing `now` explicitly - no fake timers, no DB, no flake. Each timing case is checked at
- * boundary−1min / boundary / boundary+1min, which is what the checklist asks for ("test the
+ * boundary-1min / boundary / boundary+1min, which is what the checklist asks for ("test the
  * boundary condition, not just 'roughly'").
  *
  * Run: npm test
@@ -176,7 +176,7 @@ describe("Step 5 - Check 1 fires exactly 2h after OPT-IN", () => {
     assert.equal(due.getTime(), at(2 * HR).getTime());
   });
 
-  test("not actionable at boundary − 1min", () => {
+  test("not actionable at boundary - 1min", () => {
     assert.equal(isActionable(step({ status: "DUE", dueAt: due }), new Date(due.getTime() - MIN)), false);
   });
 
@@ -294,7 +294,7 @@ describe("Step 11 - Qualified derives from BANT", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// STEPS 13–16 - the Disco ladder (checklist §M, §N)
+// STEPS 13-16 - the Disco ladder (checklist §M, §N)
 // ═══════════════════════════════════════════════════════════════════
 
 function qualifiedState(q: "YES" | "MAYBE" | "NO", discoAt: Date): JourneyState {
@@ -376,7 +376,7 @@ describe("Steps 14/15/16 - confirmation ladder fires at discrete offsets", () =>
     ["Step 15", "DISCO_CONFIRM_2", 24, ["DISCO_CONFIRM_1"]],
     ["Step 16 cancel", "DISCO_CANCEL_MSG", 12, ["DISCO_CONFIRM_1", "DISCO_CONFIRM_2", "DISCO_CONFIRM_CALL_1", "DISCO_CONFIRM_CALL_2"]],
   ] as const) {
-    describe(`${label} - T−${hours}h`, () => {
+    describe(`${label} - T-${hours}h`, () => {
       const s = ladder(prereq as unknown as OutreachStep[]);
       const due = planned(s, T0, stepKey as OutreachStep)!.dueAt;
 
@@ -516,7 +516,7 @@ describe("Step 18 - Highly Qualified gate", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// STEPS 19–21 - the SSS ladder (checklist §Q)
+// STEPS 19-21 - the SSS ladder (checklist §Q)
 // ═══════════════════════════════════════════════════════════════════
 
 describe("Steps 19-21 - SSS ladder fires at 24h/12h/6h/3h/2h", () => {
@@ -536,7 +536,7 @@ describe("Steps 19-21 - SSS ladder fires at 24h/12h/6h/3h/2h", () => {
     ["Step 20c", "SSS_CONFIRM_CALL", 3, ["SSS_CONFIRM_1", "SSS_CONFIRM_2", "SSS_CONFIRM_3"]],
     ["Step 21", "SSS_CANCEL_MSG", 2, ["SSS_CONFIRM_1", "SSS_CONFIRM_2", "SSS_CONFIRM_3", "SSS_CONFIRM_CALL"]],
   ] as const) {
-    describe(`${label} - T−${hours}h`, () => {
+    describe(`${label} - T-${hours}h`, () => {
       const due = planned(ladder(prereq as unknown as OutreachStep[]), T0, stepKey as OutreachStep)!.dueAt;
 
       test(`due exactly ${hours}h before the SSS`, () => {
@@ -588,7 +588,7 @@ describe("Steps 19-21 - SSS ladder fires at 24h/12h/6h/3h/2h", () => {
   });
 
   test("SSS ladder mirrors Disco but uses its OWN offsets - no copy-paste bug (checklist §Q)", () => {
-    // Disco confirm 2 is T−24h; SSS confirm 2 is T−12h. If someone copy-pasted the Disco ladder,
+    // Disco confirm 2 is T-24h; SSS confirm 2 is T-12h. If someone copy-pasted the Disco ladder,
     // this is the assertion that catches it.
     const sssDue = planned(ladder(["SSS_CONFIRM_1"]), T0, "SSS_CONFIRM_2")!.dueAt;
     assert.equal(sssDue.getTime(), sssAt.getTime() - 12 * HR);
@@ -730,8 +730,27 @@ describe("Templates", () => {
     assert.ok(out.includes("*YES*"), "the literal *YES* instruction must survive");
   });
 
-  test("SSS confirm 1 keeps the video-attachment placeholder", () =>
-    assert.ok(stepBody("SSS_CONFIRM_1")!.includes("<< ATTACH VIDEO TO THIS MESSAGE>>")));
+  /**
+   * ── STEP 19 NO LONGER CARRIES A VIDEO  (reviewer, 26 Oct 2026) ────────────────────────
+   *
+   * Inverted, not deleted. The old assertion guarded a real property - the SOP's Step 19 ended
+   * in `<< ATTACH VIDEO TO THIS MESSAGE>>`, and `submissionBody` strips exactly that marker
+   * because it becomes a media header rather than body text.
+   *
+   * The reviewer rewrote the body without the video, and that one marker was the whole reason
+   * Step 19 was pinned to MANUAL sending: a per-prospect video means uploading each one to WATI
+   * and passing its media id, which this app does not do. With it gone the step is an ordinary
+   * templated send.
+   *
+   * So the test now asserts the absence, for the same reason it used to assert the presence: if
+   * somebody puts the video back, that is a decision to re-open the manual-only constraint and
+   * it should fail here rather than be discovered when the sends stop.
+   */
+  test("SSS confirm 1 no longer carries a video placeholder, so the step can be automated", () =>
+    assert.ok(
+      !stepBody("SSS_CONFIRM_1")!.includes("<< ATTACH VIDEO TO THIS MESSAGE>>"),
+      "the reviewer removed the video from Step 19 - putting it back pins the step to manual sending again",
+    ));
 });
 
 // ═══════════════════════════════════════════════════════════════════

@@ -7,14 +7,14 @@ import { sendSssRescheduled } from "./whatsapp";
 import { syncJourneyMeeting } from "./zoom-meetings";
 
 /**
- * SSS (Success Strategy Session) slot engine - the founder-run sales call calendar.
+ * SSS (Solution Strategy Session) slot engine - the founder-run sales call calendar.
  *
  * Mirrors the discovery booking-automation engine, adapted to SssSlot (which links an
  * OutreachJourney rather than a public BookingRequest). Three ideas:
  *
  *   - GENERATE / BOOK - the founder lays out OPEN slots; a prospect's journey is booked into one,
  *     which sets `slot.status = BOOKED`, `slot.journeyId`, and mirrors `journey.sssAt = startsAt`
- *     so the SSS confirmation ladder (SOP steps 19–21, anchored on sssAt) keeps working.
+ *     so the SSS confirmation ladder (SOP steps 19-21, anchored on sssAt) keeps working.
  *   - BLOCK / UNBLOCK - the founder marks a slot (or a whole IST day) unavailable. Blocking a
  *     BOOKED slot first RELOCATES its prospect to the next OPEN same-owner slot within the config
  *     window, resets the SSS confirmation, and WhatsApps the new time. No open slot in range →
@@ -169,7 +169,7 @@ export async function bookJourneyIntoSlot(journeyId: string, slotId: string): Pr
   if (!ok) return { ok: false, error: "That slot was just taken - pick another" };
 
   /**
-   * Fill in the Zoom link the SOP's confirmation steps (19–21) need.
+   * Fill in the Zoom link the SOP's confirmation steps (19-21) need.
    *
    * This is the field somebody has been pasting by hand out of the Discovery Specialist's
    * calendar, and those steps REFUSE to send while it is empty - so when Zoom is armed this is

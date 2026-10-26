@@ -9,6 +9,7 @@ import { askConfirm, toast } from "@/components/ui/feedback";
 import { Btn } from "@/components/ui/controls";
 import { Field, FormError, SubmitButton, TextInput } from "@/components/ui/form";
 import { safeAction } from "@/lib/action-guard";
+import { MIN_PASSWORD_LENGTH, PASSWORD_HINT } from "@/lib/credentials";
 
 /** Tutor accounts (Role.TUTOR): they see ONLY the German Note section. */
 export function TutorsPanel({ tutors }: { tutors: GnTutorRow[] }) {
@@ -53,8 +54,8 @@ export function TutorsPanel({ tutors }: { tutors: GnTutorRow[] }) {
             <Field label="Email">
               <TextInput kind="email" name="email" required />
             </Field>
-            <Field label="Password" hint="At least 8 characters.">
-              <TextInput name="password" type="password" required minLength={8} />
+            <Field label="Password" hint={PASSWORD_HINT}>
+              <TextInput name="password" type="password" required minLength={MIN_PASSWORD_LENGTH} />
             </Field>
           </div>
           <div className="mt-4 flex items-center justify-between gap-3">

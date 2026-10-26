@@ -129,7 +129,7 @@ function RouteModal({ call, onClose }: { call: L2Call; onClose: () => void }) {
             closer to place, and no reminder goes out naming a date nobody agreed. */}
         {outcome === "QUALIFIED_FOR_SSS" && (
           <Field
-            label="Success Strategy Session (IST)"
+            label="Solution Strategy Session (IST)"
             hint="The time you agreed on the call. Leave blank and the closer will book it."
           >
             <TextInput type="datetime-local" name="sssAt" />

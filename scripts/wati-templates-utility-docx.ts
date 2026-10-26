@@ -30,6 +30,9 @@ import {
   WidthType,
 } from "docx";
 import { writeFileSync } from "node:fs";
+// The SOP pack, for the --all document. Isomorphic (no server-only), so a script may read it.
+import { SUBMISSION_TEMPLATES, submissionBody, type SubmissionTemplate } from "../src/lib/whatsapp-submission";
+import { STEP_BY_KEY } from "../src/lib/outreach-sop";
 import path from "node:path";
 
 // ── palette ──
@@ -58,9 +61,235 @@ type Tpl = {
   vars: { name: string; sample: string }[];
   body: string;
   note?: { warn?: boolean; tag: string; text: string };
+  /**
+   * Set ONLY by `actionTemplates()`, for the action document.
+   *
+   * Not a property of a template - a template does not know whether anybody has submitted
+   * it - so it is attached when that one list is built, and absent everywhere else. That is
+   * why every reader of it is optional-chained rather than asserted.
+   */
+  action?: { group: Action; label: string; why: string; categoryChanged?: boolean };
+};
+
+/**
+ * WHICH DOCUMENT IS BEING GENERATED. One value, not a bag of booleans.
+ *
+ * This was `isBatch` and then `isBatch` plus `isAll`, which is two flags with three legal states
+ * and one illegal one that had to be caught at runtime (`--batch and --all are different
+ * documents`). A fourth document would have made that four flags, twelve illegal combinations and
+ * a `cover(list, isBatch, isAll, isAction)` whose argument order is the only thing standing
+ * between the reader and the wrong title. One `mode` cannot be in two states at once, and the
+ * three records below are exhaustive by type - adding a mode without giving it a title, a file
+ * and an npm script does not compile.
+ */
+type Mode = "inventory" | "batch" | "all" | "action";
+
+const DOC_TITLE: Record<Mode, string> = {
+  inventory: "WhatsApp Templates - Full Inventory",
+  batch: "WhatsApp Templates - Awaiting Submission",
+  all: "WhatsApp Templates - Complete Set",
+  action: "WhatsApp Templates - Action Required",
+};
+const DOC_FILE: Record<Mode, string> = {
+  inventory: "WhatsApp_Templates_UTILITY_Submission_Pack.docx",
+  batch: "WhatsApp_Templates_Awaiting_Submission.docx",
+  all: "WhatsApp_Templates_Complete_Set.docx",
+  action: "WhatsApp_Templates_Action_Required.docx",
+};
+const NPM_SCRIPT: Record<Mode, string> = {
+  inventory: "docs:whatsapp:utility",
+  batch: "docs:whatsapp:batch",
+  all: "docs:whatsapp:all",
+  action: "docs:whatsapp:action",
 };
 
 const catColor = (c: Category) => (c === "UTILITY" ? UTILITY : c === "AUTHENTICATION" ? AUTH : MARKETING);
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════════════════════
+ *  THE BATCH STILL AWAITING SUBMISSION  (26 October 2026)
+ * ════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * `TEMPLATES` below is the full INVENTORY - everything the app can send, approved or not. This is
+ * the subset nobody has submitted yet, so that the person doing the submitting has one list to
+ * work from rather than a 50-template document to diff against WATI by eye.
+ *
+ * Run `npm run docs:whatsapp:batch` to get these on their own, in the same layout.
+ *
+ * ── WHY A NAMED LIST RATHER THAN A DERIVED ONE ──────────────────────────────────────────────
+ * The rule "anything ending `_u`, anything starting `b2_stage_`, plus the reset code" would be
+ * shorter and would rot the first time a template is approved: it describes how these happen to
+ * be named, not what is true about them. Being pending is a fact about a MOMENT, not a property
+ * of a template - so it is written down, dated, and each entry says why it is here. Delete a line
+ * as it is approved.
+ *
+ * `wati-template-catalogue.test.ts` asserts every name below resolves to a real entry in
+ * `TEMPLATES`, so a typo or a rename fails the suite instead of quietly shrinking the batch.
+ */
+export const PENDING_SUBMISSION: { name: string; why: string }[] = [
+  // ── The seven `_u` rewrites are GONE (26/10/2026) ───────────────────────────────────────────
+  // They were here for a week while B2 decided whether to keep the SOP's promotional bodies or
+  // the stripped UTILITY ones. The approval sheet settled every case: four were "template ok"
+  // (keep the original, stays MARKETING) and three were rewritten by the reviewer under their
+  // ORIGINAL names (so those templates are now UTILITY in the SOP pack, and a `_u` twin would
+  // just duplicate them). See the removal note at the bottom of TEMPLATES.
+
+  // ── Seventeen pipeline stage messages (issue W2) ────────────────────────────────────────────
+  // The WhatsApp half of Stage Messages has NEVER had a template. Every stage change sends its
+  // email and logs the WhatsApp attempt as skipped, so the feature has been half-armed since it
+  // was built. Five of these overlap an engine that already covers the same moment - each says so
+  // in its own note, because getting them approved and binding them are separate decisions.
+  { name: "b2_stage_new_lead", why: "no template has ever existed for this stage" },
+  { name: "b2_stage_whatsapp_sent", why: "no template has ever existed for this stage" },
+  { name: "b2_stage_strategy_call_booked", why: "no template has ever existed for this stage" },
+  { name: "b2_stage_disco_booked", why: "no template has ever existed for this stage" },
+  { name: "b2_stage_disco_not_booked", why: "no template has ever existed for this stage" },
+  { name: "b2_stage_disco_completed", why: "no template has ever existed for this stage" },
+  { name: "b2_stage_sss_booked", why: "no template has ever existed for this stage" },
+  { name: "b2_stage_sss_completed", why: "no template has ever existed for this stage" },
+  { name: "b2_stage_proposal_sent", why: "no template has ever existed for this stage" },
+  { name: "b2_stage_sent_to_workshop", why: "no template has ever existed for this stage" },
+  { name: "b2_stage_workshop_followup", why: "no template has ever existed for this stage" },
+  { name: "b2_stage_offer_followup", why: "no template has ever existed for this stage" },
+  { name: "b2_stage_deposit_followup", why: "no template has ever existed for this stage" },
+  { name: "b2_stage_deposit_paid", why: "no template has ever existed for this stage" },
+  { name: "b2_stage_won", why: "no template has ever existed for this stage" },
+  { name: "b2_stage_lost", why: "no template has ever existed for this stage" },
+  { name: "b2_stage_no_show", why: "no template has ever existed for this stage" },
+
+  // ── One new touchpoint (issue C4) ───────────────────────────────────────────────────────────
+  // This is the BLOCKING item for the WhatsApp password-reset route: the screens are worth
+  // nothing until the template exists, because a send through an unapproved template is silent.
+  { name: "b2_password_reset_otp", why: "new touchpoint - blocks the WhatsApp password-reset route entirely" },
+];
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════════════════════
+ *  WHAT STILL NEEDS SOMETHING DOING TO IT  (26 October 2026)
+ * ════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * `PENDING_SUBMISSION` above answers "what has never been submitted". That is NOT the same
+ * question as "what do I have to do something about", and the gap between them is where a
+ * template gets lost: a body that changed after it was approved is not pending by any list, and
+ * yet it is the most urgent item there is - Meta approves ONE body per (name, language), so an
+ * edited template is a REPLACEMENT in review, and its touchpoint sends nothing at all until the
+ * new body clears. Nobody notices, because the app logs a skip rather than failing.
+ *
+ * So this is the work list: everything awaiting a first approval, everything whose approved body
+ * has since changed, and everything carrying a wording decision that is cheaper to take now than
+ * after the next approval. Run `npm run docs:whatsapp:action` for it on its own.
+ *
+ * The first group is DERIVED from `PENDING_SUBMISSION` rather than retyped - the two documents
+ * must never disagree about which templates have no approval, and the only way to guarantee that
+ * is for one of them not to have its own copy of the names.
+ *
+ * WHAT THIS LIST CANNOT KNOW: which template names already exist in B2's WATI account. That is
+ * recorded here by hand, in this file, and nowhere else - so the first instruction in the
+ * generated document is to open WATI's template list and tick off anything already APPROVED with
+ * the same body. Delete a line here as it clears.
+ */
+type Action = "APPROVE" | "RESUBMIT" | "DECIDE";
+
+/** The heading each group gets in the action document, and the order the groups appear in. */
+const ACTION_GROUP: Record<Action, string> = {
+  APPROVE: "1 · Never submitted — needs a first approval",
+  RESUBMIT: "2 · Approved once, the body has changed — re-submit",
+  DECIDE: "3 · No body change, but a wording decision is open",
+};
+const ACTION_LABEL: Record<Action, string> = {
+  APPROVE: "Submit for approval",
+  RESUBMIT: "Re-submit — replaces the approved body",
+  DECIDE: "Decide the wording before the next submission",
+};
+const ACTION_ORDER: Action[] = ["APPROVE", "RESUBMIT", "DECIDE"];
+
+export const NEEDS_ACTION: {
+  name: string;
+  action: Action;
+  why: string;
+  /**
+   * True where the re-submission also changes Meta's CATEGORY, which is a second thing to set
+   * in the same edit and the one most easily forgotten - a stripped body left declared
+   * MARKETING is billed as MARKETING and stays subject to the per-user marketing cap.
+   *
+   * Written down rather than inferred: nothing in either pack records what a template's
+   * category USED to be, so there is nothing to diff against.
+   */
+  categoryChanged?: boolean;
+}[] = [
+  // ── Never submitted ──
+  // Derived, deliberately. See the note above.
+  ...PENDING_SUBMISSION.map((e) => ({ name: e.name, action: "APPROVE" as Action, why: e.why })),
+
+  // Two SOP templates sit outside `PENDING_SUBMISSION` because that list only covers THIS pack's
+  // inventory. They are just as unapproved, and the SOP pack says so on each one's own page.
+  {
+    name: "b2_sop_not_qualified",
+    action: "APPROVE",
+    why:
+      "never submitted - written for the founder's flow of 25/08/2026, after the last submission round. " +
+      "Until it clears, DISCO_REJECT_MSG has no bound template and every rejection waits in the queue for a human.",
+  },
+  {
+    name: "b2_sop_sss_confirm_3",
+    action: "APPROVE",
+    why:
+      "never submitted, and it carries a wording question: the SOP's text ends on {{zoom_link}}, and Meta commonly " +
+      "rejects a body that ends with a variable, so the body below adds a short closing line after the link. " +
+      "Confirm that line before submitting. Meanwhile SOP_SSS_CONFIRM_3 is bound to b2_sop_sss_confirm_2, whose text is the same.",
+  },
+
+  // ── Approved once, body has changed since ──
+  // The group that no other list catches, and the only group where doing nothing BREAKS something
+  // that used to work.
+  {
+    name: "b2_book_order",
+    action: "RESUBMIT",
+    why:
+      "approved 03/08/2026; the body changed 26/10/2026 to add the Visual Dictionary, at the reviewer's instruction. " +
+      "One body per (name, language), so this edit replaces the approved template in review - and BOOK_ORDER sends " +
+      "nothing until it clears. A wording decision is still open on it: read the note on its page BEFORE submitting, " +
+      "because taking it afterwards costs a second re-approval.",
+  },
+  {
+    name: "b2_sop_sss_confirm_1",
+    action: "RESUBMIT",
+    categoryChanged: true,
+    why:
+      "the reviewer rewrote the body on 26/10/2026 - the call is the \"Solution\" Strategy Session, not \"Success\", and " +
+      "the promotional copy is gone. That moves it MARKETING → UTILITY. A changed body and a changed category are each " +
+      "a fresh submission on their own. The sample video is also gone, which is what unblocks Step 19 from being manual-only.",
+  },
+  {
+    name: "b2_sop_sss_confirm_2",
+    action: "RESUBMIT",
+    categoryChanged: true,
+    why:
+      "the reviewer rewrote the body on 26/10/2026, same two changes as b2_sop_sss_confirm_1, so MARKETING → UTILITY. " +
+      "Note the body stops at the Zoom link on purpose: the app appends \"Please reply *YES* to confirm.\" at send time, " +
+      "so submitting it with that line would send it twice.",
+  },
+  {
+    name: "b2_sop_sss_cancel",
+    action: "RESUBMIT",
+    categoryChanged: true,
+    why:
+      "the reviewer rewrote the body on 26/10/2026, same two changes again, so MARKETING → UTILITY. Each page below " +
+      "carries the exact text it replaced, so a reviewer can see what changed rather than taking it on trust.",
+  },
+
+  // ── A decision with no edit attached, yet ──
+  {
+    name: "b2_payment_reminder",
+    action: "DECIDE",
+    why:
+      "nothing to re-submit today - the body is unchanged and the reviewer confirmed it. But the question they asked " +
+      "has to be answered before it is ever submitted again. There is ONE payment-reminder touchpoint and one template " +
+      "on it, and the body names B2 Consultants, so a German Note student in arrears either gets a message signed by " +
+      "the wrong business or gets nothing at all. Fixing it needs either a second touchpoint or a {{business}} variable " +
+      "on this one - and a variable added later costs a re-approval, while a variable added to the next submission costs nothing.",
+  },
+];
 
 // ────────────────── The templates awaiting Meta approval ──────────────────
 //
@@ -70,6 +299,9 @@ const catColor = (c: Category) => (c === "UTILITY" ? UTILITY : c === "AUTHENTICA
 const AREA_A = "A · Discovery-call & booking lifecycle";
 const AREA_I = "I · Class reminders";
 const AREA_J = "J · Missing a class & catching up";
+const AREA_K = "K · Pipeline stage messages";
+const AREA_SOP = "F · Outreach Specialist SOP (Steps 3–21)";
+const AREA_H = "H · Portal accounts";
 
 /**
  * The warning every Zoom-link variant carries. One constant because it is one fact, and three
@@ -237,25 +469,6 @@ export const TEMPLATES: Tpl[] = [
   },
   {
     area: "A · Discovery-call & booking lifecycle",
-    name: "b2_booking_auto_cancelled",
-    kind: "BOOKING_AUTO_CANCELLED",
-    sub: "Auto-cancelled - slot released",
-    category: "UTILITY",
-    fires: "When no confirmation arrives before the cut-off, so the slot is released; invites a rebook.",
-    vars: [
-      { name: "name", sample: "Priya" },
-      { name: "booking_url", sample: "https://app.b2consultants.de/book" },
-    ],
-    body:
-      "Hi {{name}}, as we didn't receive your confirmation in time, your discovery call slot has been released.\n\n" +
-      "If you'd still like to speak with us, you can book a new time here whenever suits you: {{booking_url}}",
-    note: {
-      tag: "Note",
-      text: "States a fact about an appointment the prospect made and offers the same booking function - it reads as UTILITY. Keep the copy factual (no “don't miss out”, no offer language) or it tips into MARKETING.",
-    },
-  },
-  {
-    area: "A · Discovery-call & booking lifecycle",
     name: "b2_no_show_followup",
     kind: "NO_SHOW_FOLLOWUP",
     sub: "No-show follow-up",
@@ -296,19 +509,19 @@ export const TEMPLATES: Tpl[] = [
 
   // ── B · SSS calendar ──
   {
-    area: "B · Success Strategy Session calendar",
+    area: "B · Solution Strategy Session calendar",
     name: "b2_sss_rescheduled",
     kind: "SSS_RESCHEDULED",
     sub: "SSS rescheduled notice",
     category: "UTILITY",
-    fires: "When a Success Strategy Session is moved - founder blocked the slot/day, or a manual/drag reschedule.",
+    fires: "When a Solution Strategy Session is moved - founder blocked the slot/day, or a manual/drag reschedule.",
     vars: [
       { name: "name", sample: "Priya" },
       { name: "slot_time", sample: "Mon 20 Jul, 06:30 PM" },
       { name: "sss_url", sample: "https://optin.b2consultants.de/sss" },
     ],
     body:
-      "Hi {{name}}, your Success Strategy Session has been rescheduled to *{{slot_time}}* IST.\n\n" +
+      "Hi {{name}}, your Solution Strategy Session has been rescheduled to *{{slot_time}}* IST.\n\n" +
       "If this time doesn't work for you, you can choose another here at your convenience: {{sss_url}}",
   },
 
@@ -351,6 +564,52 @@ export const TEMPLATES: Tpl[] = [
       warn: true,
       tag: "Use AUTHENTICATION, not UTILITY",
       text: "A one-time passcode is Meta's AUTHENTICATION category, which has a fixed format (code + copy button, no marketing) and its own pricing. Meta rejects OTP-style copy submitted as UTILITY. Build it with WATI's authentication template flow. Only the code parameter is declared here - AUTHENTICATION templates allow nothing else, and the app's AGREEMENT_OTP touchpoint offers `name` as well, which is harmless because a template never has to use everything on offer.",
+    },
+  },
+  {
+    /**
+     * ════════════════════════════════════════════════════════════════════════════════════════
+     *  PASSWORD RESET BY WHATSAPP  (issue C4)
+     * ════════════════════════════════════════════════════════════════════════════════════════
+     *
+     * NEEDS APPROVAL BEFORE THE FLOW CAN SHIP, which is why the template is in this pack ahead
+     * of the screens: Meta approval is the long-lead item - days - and the code to send through
+     * an unapproved template is the code that silently sends nothing.
+     *
+     * Credentials go out on BOTH channels today (`server/login-credentials.ts` emails them AND
+     * WhatsApps them, because for this user base WhatsApp is the one that is read). Resetting
+     * them goes out on ONE: `sendResetPassword` in `lib/auth.ts` is a direct Resend call. For a
+     * student onboarded over WhatsApp whose email was mistyped at intake, `/forgot-password`
+     * then says "a reset link is on its way" - it has to answer generically, or it becomes an
+     * address-enumeration oracle - and nothing ever arrives, with no second route to try.
+     *
+     * A DIFFERENT TEMPLATE FROM b2_agreement_otp, deliberately. One WATI template is bound per
+     * WhatsAppKind, and that one's approved text says "agreement signing code" - a person
+     * resetting a password would be sent a sentence about a contract. Same reasoning as
+     * AGREEMENT_COPY not reusing AGREEMENT_SEND's template.
+     */
+    // "H · Portal accounts", the area that already holds b2_login_credentials - not an area of
+    // its own. A reset code and a set of login details are the same job at two moments, and a
+    // new letter would have collided with "B · Solution Strategy Session calendar" in the merged
+    // document, giving it two different B sections.
+    area: AREA_H,
+    name: "b2_password_reset_otp",
+    kind: "PASSWORD_RESET_OTP",
+    sub: "Portal password-reset code",
+    category: "AUTHENTICATION",
+    fires: "When a student or team member asks to reset their password and chooses WhatsApp.",
+    // Only the code, for the same reason b2_agreement_otp declares only the code: an
+    // AUTHENTICATION template accepts nothing else, and declaring an unused variable shifts
+    // WATI's positional parameters by one and earns a rejection.
+    vars: [{ name: "code", sample: "719204" }],
+    body:
+      "{{code}} is your B2 Consultants password reset code. It is valid for a short time. " +
+      "Do not share it with anyone.",
+    note: {
+      warn: true,
+      tag: "Use AUTHENTICATION, not UTILITY",
+      text:
+        "A one-time passcode is Meta's AUTHENTICATION category, which has a fixed format (code + copy button, no marketing) and its own pricing - OTP copy submitted as UTILITY is rejected. Build it with WATI's authentication template flow, exactly as b2_agreement_otp was. Until this is APPROVED AND BOUND the WhatsApp reset route does not exist and /forgot-password stays email-only, so this is the blocking item rather than the screens.",
     },
   },
   {
@@ -400,6 +659,14 @@ export const TEMPLATES: Tpl[] = [
     body:
       "Hi {{name}}, this is a reminder that a payment of *{{amount}}* is currently due on your B2 Consultants account.\n\n" +
       "If you've already paid, please ignore this message. Otherwise, reply here and we'll assist.",
+    note: {
+      warn: true,
+      tag: "B2 only - German Note students get nothing",
+      text:
+        "REVIEWER ASKED (26/10/2026): “how does it work for German Note?, because it says B2 Consultants only”. ANSWER, confirmed by B2: “currently the template is only for b2 consultants”. " +
+        "WHAT THAT COSTS, stated plainly: there is ONE PAYMENT_REMINDER touchpoint and one template bound to it, so a German Note student in arrears either receives a message signed by the wrong business or - if the touchpoint is left unbound for them - receives nothing. The app cannot tell them apart here: the reminder is raised off `PendingPayment`, which carries a `programLevel` and therefore a business line, but the touchpoint has no {{business}} variable to switch on. " +
+        "FIXING IT LATER means either a second touchpoint (PAYMENT_REMINDER_GN, its own template) or a {{business}} variable on this one - and the second costs a re-approval, so it is cheaper to decide before submitting than after.",
+    },
   },
   {
     area: "D · Finance & payments",
@@ -487,6 +754,13 @@ export const TEMPLATES: Tpl[] = [
     vars: [{ name: "name", sample: "Priya" }],
     body:
       "Hi {{name}}, it's time for your scheduled coaching check-in with B2 Consultants. Please reply to this message to arrange your session.",
+    note: {
+      tag: "What the check-in is, and who receives this",
+      text:
+        "REVIEWER ASKED (26/10/2026): “what is check-in here, I am not aware of this”. ANSWER: “this is the template to connect with Mr. Karthik” - correct, with one detail worth being exact about, because it decides whose phone rings. " +
+        "THE MESSAGE GOES TO THE STUDENT, not to the head coach. `server/whatsapp.ts` sends it `to: e.student.phone` for every ACTIVE enrolment whose `nextCheckInDate` has arrived or passed, so it is the nudge that gets the STUDENT to come and book their coaching session - which is the session Karthick runs. He is the subject of the message, never its recipient. " +
+        "The body deliberately does not name him: it says “your scheduled coaching check-in with B2 Consultants”, so a change of head coach does not need a re-approval. Throttled by `studentRepeatHours` so a student past their date is not nudged daily.",
+    },
   },
   {
     area: "E · Student coaching",
@@ -547,143 +821,24 @@ export const TEMPLATES: Tpl[] = [
       text: "Same reason as Step 3 - chasing an un-booked lead is re-engagement. Submit as MARKETING.",
     },
   },
-  {
-    area: "F · Outreach Specialist SOP (Steps 3–21)",
-    name: "b2_sop_disco_welcome",
-    kind: "SOP_DISCO_WELCOME",
-    sub: "SOP Step 13 · Disco welcome",
-    category: "UTILITY",
-    fires: "When the BANT verdict is YES/MAYBE and the call is booked.",
-    vars: [
-      { name: "name", sample: "Priya" },
-      { name: "sender", sample: "Nilofer" },
-      { name: "date", sample: "Sat 18 Jul" },
-      { name: "time", sample: "07:00 PM" },
-    ],
-    body:
-      "Hi {{name}}, this is {{sender}} from B2 Consultants. This confirms your discovery call is scheduled for *{{date}}* at *{{time}}* IST.\n\n" +
-      "Our team is preparing for your call and will be in touch if we need anything further before then. See you soon.",
-    note: {
-      tag: "Made UTILITY",
-      text: "Original Step 13 linked the case-studies page (social proof). That link is removed here - it is what would force MARKETING. The confirmation itself is transactional.",
-    },
-  },
-  {
-    area: "F · Outreach Specialist SOP (Steps 3–21)",
-    name: "b2_sop_disco_confirm_1",
-    kind: "SOP_DISCO_CONFIRM_1",
-    sub: "SOP Step 14 · Disco confirmation 1",
-    category: "UTILITY",
-    fires: "At least 36h before the booked discovery call. Blocked until a Zoom link is on the card.",
-    vars: [
-      { name: "name", sample: "Priya" },
-      { name: "date", sample: "Sat 18 Jul" },
-      { name: "time", sample: "07:00 PM" },
-      { name: "zoom_link", sample: "https://us02web.zoom.us/j/85512345678" },
-    ],
-    body:
-      "Hi {{name}}, a reminder about your discovery call scheduled for *{{date}}* at *{{time}}* IST.\n\n" +
-      "You can join using this link: {{zoom_link}}\n\n" +
-      "Please reply *YES* to confirm your attendance.",
-    note: {
-      tag: "Made UTILITY",
-      text: "The sales copy (“the possibilities of your next job in Germany”, “figure out your next best steps”) is removed. What remains - appointment time, join link, reply-YES - is a textbook UTILITY confirmation.",
-    },
-  },
-  {
-    area: "F · Outreach Specialist SOP (Steps 3–21)",
-    name: "b2_sop_disco_confirm_2",
-    kind: "SOP_DISCO_CONFIRM_2",
-    sub: "SOP Step 15 · Disco confirmation 2",
-    category: "UTILITY",
-    fires: "At least 24h before, if Step 14 drew no reply.",
-    vars: [
-      { name: "name", sample: "Priya" },
-      { name: "date", sample: "Sat 18 Jul" },
-      { name: "time", sample: "07:00 PM" },
-      { name: "zoom_link", sample: "https://us02web.zoom.us/j/85512345678" },
-    ],
-    body:
-      "Hi {{name}}, we haven't yet received your confirmation for your discovery call on *{{date}}* at *{{time}}* IST.\n\n" +
-      "Your joining link is: {{zoom_link}}\n\n" +
-      "Please reply *YES* to confirm your attendance.",
-    note: {
-      tag: "Made UTILITY",
-      text: "“*FREE* Personalized Discovery Call” is reduced to a plain “discovery call”. No offer language remains.",
-    },
-  },
-  {
-    area: "F · Outreach Specialist SOP (Steps 3–21)",
-    name: "b2_sop_disco_cancel",
-    kind: "SOP_DISCO_CANCEL",
-    sub: "SOP Step 16 · Disco cancellation",
-    category: "UTILITY",
-    fires: "At least 12h before, unconfirmed after two confirmation calls.",
-    vars: [{ name: "name", sample: "Priya" }],
-    body:
-      "Hi {{name}}, as we didn't receive your confirmation, your discovery call slot has been released.\n\n" +
-      "If you'd still like to speak with us, you can book another time here whenever suits you: https://optin.b2consultants.de/apply",
-    note: {
-      tag: "Made UTILITY",
-      text: "States the slot was released (a fact about the prospect's own appointment) with one functional rebook link. Kept factual - no “don't miss out”.",
-    },
-  },
-  {
-    area: "F · Outreach Specialist SOP (Steps 3–21)",
-    name: "b2_sop_sss_confirm_1",
-    kind: "SOP_SSS_CONFIRM_1",
-    sub: "SOP Step 19 · SSS confirmation 1",
-    category: "UTILITY",
-    fires: "At least 24h before the SSS. In the SOP this carries a personalised video.",
-    vars: [
-      { name: "name", sample: "Priya" },
-      { name: "sender", sample: "Nilofer" },
-      { name: "date", sample: "Mon 20 Jul" },
-      { name: "time", sample: "06:30 PM" },
-    ],
-    body:
-      "Hi {{name}}, this is {{sender}} from B2 Consultants. This is a reminder that your Success Strategy Session is scheduled for *{{date}}* at *{{time}}* IST.\n\n" +
-      "Please reply *YES* to confirm your attendance.",
-    note: {
-      warn: true,
-      tag: "Decision needed",
-      text: "The SOP's “personalised game plan / video” copy is promotional and is removed to keep this UTILITY. If B2 wants the personalised video, send it as a separate free-form (session) message after the prospect replies, or accept that a video-led template must be MARKETING. As-is, this stays a plain UTILITY confirmation.",
-    },
-  },
-  {
-    area: "F · Outreach Specialist SOP (Steps 3–21)",
-    name: "b2_sop_sss_confirm_2",
-    kind: "SOP_SSS_CONFIRM_2",
-    sub: "SOP Step 20 · SSS confirmation 2",
-    category: "UTILITY",
-    fires: "At least 12h before the SSS, if Step 19 drew no reply.",
-    vars: [
-      { name: "name", sample: "Priya" },
-      { name: "date", sample: "Mon 20 Jul" },
-      { name: "time", sample: "06:30 PM" },
-      { name: "zoom_link", sample: "https://us02web.zoom.us/j/85512345678" },
-    ],
-    body:
-      "Hi {{name}}, we haven't yet received your confirmation for your Success Strategy Session on *{{date}}* at *{{time}}* IST.\n\n" +
-      "Your joining link is: {{zoom_link}}\n\n" +
-      "Please reply *YES* to confirm.",
-    note: {
-      tag: "Made UTILITY",
-      text: "“He's prepared something very specific… would love to see you there” is removed. A closing line was added so the body doesn't end on the link variable (Meta rejects that).",
-    },
-  },
-  {
-    area: "F · Outreach Specialist SOP (Steps 3–21)",
-    name: "b2_sop_sss_cancel",
-    kind: "SOP_SSS_CANCEL",
-    sub: "SOP Step 21 · SSS cancellation",
-    category: "UTILITY",
-    fires: "At least 10h before the SSS, still unconfirmed.",
-    vars: [{ name: "name", sample: "Priya" }],
-    body:
-      "Hi {{name}}, as we didn't receive your confirmation, your Success Strategy Session slot has been released.\n\n" +
-      "If you'd still like to attend, you can book another time here whenever suits you: https://optin.b2consultants.de/sss",
-  },
+  /*
+   * REMOVED 26/10/2026: `b2_sop_disco_cancel_u` - a UTILITY rewrite for SOP Step 16.
+   *
+   * It was redundant, and keeping it would have left SOP_DISCO_CANCEL with two candidate
+   * templates for a founder to pick between on a screen that offers no way to tell them apart.
+   *
+   * `b2_booking_auto_cancelled`, two hundred lines above, is ALREADY APPROVED, is already the
+   * UTILITY body for this exact event, and says the identical thing: no confirmation arrived, so
+   * the slot was released, here is a link to book again. `src/lib/whatsapp-submission.ts` binds
+   * Step 16 to it deliberately for that reason. One approved template serving both the Bookings
+   * confirm-loop and the SOP's Step 16 is correct - the words are true at both - and a second
+   * submission saying the same thing is one more thing to keep in step for no gain.
+   *
+   * The entry this replaces carried the body kept below for the record, which is what
+   * `b2_booking_auto_cancelled` already says:
+   *   "Hi {{name}}, as we didn't receive your confirmation, your discovery call slot has been
+   *    released. If you'd still like to speak with us, you can book another time here..."
+   */
 
   // ── G · Book publisher orders ──
   {
@@ -703,19 +858,23 @@ export const TEMPLATES: Tpl[] = [
     ],
     body:
       "Hello {{publisher_name}}, this is a book order from B2 Consultants (ref *{{order_ref}}*).\n\n" +
-      "Please arrange the German *{{level}}* course books for our student {{student_name}}.\n\n" +
+      "Please arrange the German *{{level}}* course books set and Visual dictionary for our student {{student_name}}.\n\n" +
       "Ship to: {{ship_to}}\n" +
       "Contact on delivery: {{ship_phone}}\n\n" +
       "Kindly confirm the quotation and expected dispatch date. Thank you.",
     note: {
-      tag: "Approved and wired",
-      text: "Approved 3 Aug 2026 and live in the app: Students → Book orders → Update → “Send to publisher”. {{publisher_name}} comes from the Vendor, {{order_ref}} is allocated as BO-YYYY-NNNN on first send, {{level}} is the level's display label, and {{student_name}}/{{ship_to}}/{{ship_phone}} come from the order's snapshot - not live off the Student, so a later address edit cannot rewrite where a past parcel went. Sending is MANUAL by design; a status change never places an order. The publisher's number must be opted-in for a business-initiated template to deliver.",
+      warn: true,
+      tag: "Re-approval needed, and one wording decision open",
+      text:
+        "RE-SUBMIT. The body changed on 26 Oct 2026 to add the Visual Dictionary, at the reviewer’s instruction (“a visual dictionary has to be ordered”), so it goes with every order and is fixed text rather than a variable. It was approved on 3 Aug 2026 as “…the German *{{level}}* course books for our student…”. Meta approves one body per (name, language), so this edit sends the template back through review - and until it clears, BOOK_ORDER has no approved template and sends nothing. " +
+        "OPEN QUESTION - A BUNDLE READS BADLY, which is what the reviewer’s own question exposes. {{level}} is the level’s display label, and the catalogue has a GERMAN_BUNDLE kind labelled “German bundle” (lib/levels.ts) - so a bundle order renders as “the German *German bundle* course books set”. Dropping the literal word “German” from the body fixes both cases at once: “the *German A1* course books set” and “the *German bundle* course books set” both read correctly. NOT applied - it changes what the publisher reads, which is B2’s call, and taking it later would cost a second re-approval. Decide it before submitting, not after. " +
+        "Otherwise unchanged and live in the app: Students → Book orders → Update → “Send to publisher”. {{publisher_name}} comes from the Vendor, {{order_ref}} is allocated as BO-YYYY-NNNN on first send, {{level}} is the level's display label, and {{student_name}}/{{ship_to}}/{{ship_phone}} come from the order's snapshot - not live off the Student, so a later address edit cannot rewrite where a past parcel went. Sending is MANUAL by design; a status change never places an order. The publisher's number must be opted-in for a business-initiated template to deliver.",
     },
   },
 
   // ── H · Portal accounts ──
   {
-    area: "H · Portal accounts",
+    area: AREA_H,
     name: "b2_login_credentials",
     kind: "LOGIN_CREDENTIALS",
     sub: "Portal login details",
@@ -932,6 +1091,366 @@ export const TEMPLATES: Tpl[] = [
         "watched at 40% still receives this.",
     },
   },
+
+  // ════════════════════════════════════════════════════════════════════════════════════════════
+  //  K · PIPELINE STAGE MESSAGES  (issue W2)
+  // ════════════════════════════════════════════════════════════════════════════════════════════
+  //
+  // Seventeen touchpoints, one per LeadStage, and until now NOT ONE of them had a template in
+  // either submission pack. `lib/stage-messages.ts` says what that cost: "WhatsApp is
+  // template-only (Meta rule for business-initiated messages) ... Until one is bound, that stage
+  // sends its email only and the WhatsApp attempt is logged once as skipped." So the feature has
+  // been shipping half-armed since it was built - every stage change sent its email and silently
+  // dropped its WhatsApp.
+  //
+  // ── EVERY BODY DECLARES {{name}} AND NOTHING ELSE, AND THAT IS THE WHOLE DESIGN ─────────────
+  // A STAGE_* touchpoint offers eight variables (`LEAD_TEMPLATE_VARS`), and declaring any of the
+  // other seven would break these templates for most of the leads they are meant to reach,
+  // because `sendWhatsApp` SKIPS a send whose declared variable resolves to nothing:
+  //
+  //   `slot_time` / `date` / `time`   filled only from a LIVE booking. A lead dragged to
+  //                                   "Disco booked" on the board by hand has no BookingRequest
+  //                                   row, so a template declaring the time would reach the
+  //                                   automatic leads and silently skip the manual ones - the
+  //                                   worst kind of failure, because it half-works.
+  //   `zoom_link`                     filled only once the Zoom reconciler has run.
+  //   `sss_url` / `booking_url`       always filled, but they resolve to a DIFFERENT host from
+  //                                   the one the stage EMAILS use (`/book` vs the opt-in page).
+  //                                   Two halves of one feature must not send people to two
+  //                                   places, so the link is written into the body as a constant
+  //                                   matching `lib/stage-messages.ts`'s own BOOK.
+  //   `sender`                        always filled, and deliberately unused: a stage change is
+  //                                   the SYSTEM noticing something, not a person writing. A
+  //                                   name on it invites a reply to somebody who never typed it.
+  //
+  // ── THE CATEGORY RULE, STATED ONCE ──────────────────────────────────────────────────────────
+  // UTILITY where the message is about an appointment or a payment THAT ALREADY EXISTS - the
+  // prospect's own transaction, reported back to them. MARKETING where its purpose is to get them
+  // to take a step they have not taken, which is every "book it", "come back" and "any questions
+  // about the offer" message however politely it is worded. Eight UTILITY, nine MARKETING.
+  //
+  // Meta judges by the body, not by our label: see the rationale at the top of
+  // `src/lib/whatsapp-submission.ts` for what a declaration that flatters the copy actually buys.
+  //
+  // Bodies are derived from `DEFAULT_COPY` in `lib/stage-messages.ts` - the same message the email
+  // half sends - rewritten for WhatsApp: no subject line, no sign-off block, short paragraphs, and
+  // the persuasive asides dropped wherever they were the only thing standing between a message and
+  // UTILITY.
+  //
+  // ── FIVE OF THEM OVERLAP A TEMPLATE THAT IS ALREADY APPROVED ────────────────────────────────
+  // New Lead, Disco Booked, Won, Lost and No-show each say roughly what some other engine already
+  // says at roughly the same moment. They are submitted for completeness - a touchpoint with no
+  // approved template can never be turned on later - but each carries a note saying which engine
+  // it collides with, because binding both is how a prospect hears from us twice in a day.
+
+  {
+    area: AREA_K,
+    name: "b2_stage_new_lead",
+    kind: "STAGE_NEW_LEAD",
+    sub: "Stage · New lead",
+    category: "MARKETING",
+    fires: "Every time a lead enters New Lead - the first thing a brand-new opt-in hears from us.",
+    vars: [{ name: "name", sample: "Priya" }],
+    body:
+      "Hi {{name}}, thanks for your interest in finding your next job in Germany.\n\n" +
+      "The next step is a free 20-minute Personalized Discovery Call with our team so we can " +
+      "understand your situation. You can book a time that suits you here: " +
+      "https://optin.b2consultants.de/apply",
+    note: {
+      tag: "Overlaps SOP Step 3 - bind only one",
+      text:
+        "b2_sop_intro says almost the same thing at almost the same moment: the SOP's Step 3 fires on opt-in, and a lead's first stage IS New Lead. Binding both sends two first messages. Decide which engine owns the opening - the SOP ladder or stage messages - and leave the other one unbound.",
+    },
+  },
+  {
+    area: AREA_K,
+    name: "b2_stage_whatsapp_sent",
+    kind: "STAGE_WHATSAPP_SENT",
+    sub: "Stage · WhatsApp sent",
+    category: "MARKETING",
+    fires: "Every time a lead enters WhatsApp Sent.",
+    vars: [{ name: "name", sample: "Priya" }],
+    body:
+      "Hi {{name}}, just checking you received our message about your move to Germany.\n\n" +
+      "Whenever you are ready, you can book your free Discovery Call here: " +
+      "https://optin.b2consultants.de/apply",
+    note: {
+      warn: true,
+      tag: "Consider leaving this one unbound",
+      text:
+        "The stage means we have sent them a WhatsApp, and the email half says exactly that - which reads sensibly in an inbox and absurdly on WhatsApp, where it is a message announcing itself. The body above is rewritten as a plain nudge instead, but the honest answer may be to get it approved and bind nothing: the SOP's Step 6 already chases an un-booked lead, with better timing.",
+    },
+  },
+  {
+    area: AREA_K,
+    name: "b2_stage_strategy_call_booked",
+    kind: "STAGE_STRATEGY_CALL_BOOKED",
+    sub: "Stage · Strategy call booked",
+    category: "UTILITY",
+    fires: "Every time a lead enters Strategy Call Booked.",
+    vars: [{ name: "name", sample: "Priya" }],
+    body:
+      "Hi {{name}}, your Personalized Discovery Call with B2 Consultants is booked.\n\n" +
+      "Our team is preparing for it and will be in touch if we need anything more from you.",
+    note: {
+      tag: "Made UTILITY",
+      text:
+        "The email half closes with a link to the case-studies page, which is social proof and would make this MARKETING on its own. It is dropped here: this message's job is to confirm an appointment the prospect has just made, and the case studies reach them through the SOP ladder anyway. No time is quoted - see the note on variables at the top of this section.",
+    },
+  },
+  {
+    area: AREA_K,
+    name: "b2_stage_disco_booked",
+    kind: "STAGE_DISCO_BOOKED",
+    sub: "Stage · Discovery call booked",
+    category: "UTILITY",
+    fires: "Every time a lead enters Disco Booked.",
+    vars: [{ name: "name", sample: "Priya" }],
+    body:
+      "Hi {{name}}, your Discovery Call is confirmed.\n\n" +
+      "Please keep the time free and join a few minutes early. If anything changes, reply to this " +
+      "message and we will move it for you.",
+    note: {
+      tag: "Overlaps b2_booking_confirmation",
+      text:
+        "A prospect who books through /book already receives b2_booking_confirmation from the booking engine, WITH the time in it. This stage fires as well, so binding both sends two confirmations for one appointment. Bind this only for leads whose stage is moved by hand - or, more simply, leave it unbound and let the booking engine own the confirmation.",
+    },
+  },
+  {
+    area: AREA_K,
+    name: "b2_stage_disco_not_booked",
+    kind: "STAGE_DISCO_NOT_BOOKED",
+    sub: "Stage · Discovery call not booked",
+    category: "MARKETING",
+    fires: "Every time a lead enters Disco Not Booked - including from the no-slots capture on /book.",
+    vars: [{ name: "name", sample: "Priya" }],
+    body:
+      "Hi {{name}}, you have not booked your free Personalized Discovery Call yet.\n\n" +
+      "It takes 20 minutes and there is no obligation. You can pick a time here: " +
+      "https://optin.b2consultants.de/apply",
+    note: {
+      tag: "Now also reaches the no-slots capture",
+      text:
+        "Since the 26 Oct change to /book, a prospect who arrives when the calendar is empty is captured at this stage rather than lost (issue A6). They are the one audience for whom you have not booked yet is unfair - they tried - so consider a separate wording for them if that capture becomes common. The email half's spots are limited each week, and we do not want you to miss out is dropped: it is scarcity copy, and it was the main thing making this message read as an advert.",
+    },
+  },
+  {
+    area: AREA_K,
+    name: "b2_stage_disco_completed",
+    kind: "STAGE_DISCO_COMPLETED",
+    sub: "Stage · Discovery call completed",
+    category: "UTILITY",
+    fires: "Every time a lead enters Disco Completed.",
+    vars: [{ name: "name", sample: "Priya" }],
+    body:
+      "Hi {{name}}, thank you for taking the time to speak with our team today.\n\n" +
+      "We are going through what you shared and will be in touch shortly with your next steps.",
+  },
+  {
+    area: AREA_K,
+    name: "b2_stage_sss_booked",
+    kind: "STAGE_SSS_BOOKED",
+    sub: "Stage · Solution Strategy Session booked",
+    category: "UTILITY",
+    fires: "Every time a lead enters SSS Booked.",
+    vars: [{ name: "name", sample: "Priya" }],
+    body:
+      "Hi {{name}}, your Solution Strategy Session with B2 Consultants is booked.\n\n" +
+      "In this session we map out your personal plan for landing a job in Germany. We will send you " +
+      "a reminder before the call.",
+    note: {
+      tag: "Why no time is quoted here in particular",
+      text:
+        "The SSS time lives on OutreachJourney.sssAt, and leadTemplateVars fills slot_time from it ONLY when the caller asks for the SSS flavour. The stage sweep is generic and does not, so a slot_time here would resolve to the DISCOVERY call's time - the wrong appointment, confidently stated. The SOP's Step 19 confirmation carries the real one.",
+    },
+  },
+  {
+    area: AREA_K,
+    name: "b2_stage_sss_completed",
+    kind: "STAGE_SSS_COMPLETED",
+    sub: "Stage · Solution Strategy Session completed",
+    category: "UTILITY",
+    fires: "Every time a lead enters SSS Completed.",
+    vars: [{ name: "name", sample: "Priya" }],
+    body:
+      "Hi {{name}}, thank you for your time in the Solution Strategy Session.\n\n" +
+      "If anything came up afterwards that you would like to go over, reply to this message.",
+  },
+  {
+    area: AREA_K,
+    name: "b2_stage_proposal_sent",
+    kind: "STAGE_PROPOSAL_SENT",
+    sub: "Stage · Proposal sent",
+    category: "MARKETING",
+    fires: "Every time a lead enters Proposal Sent.",
+    vars: [{ name: "name", sample: "Priya" }],
+    body:
+      "Hi {{name}}, you now have our offer for the B2 Consultants coaching programme.\n\n" +
+      "Take your time with it. If anything is unclear, reply to this message and we will walk you " +
+      "through it.",
+    note: {
+      tag: "MARKETING, and not arguable",
+      text:
+        "A message whose subject is a commercial offer is MARKETING whatever its tone. Declaring it UTILITY would be the gaming that earns an account flag rather than a cheaper message - see the rationale at the top of src/lib/whatsapp-submission.ts.",
+    },
+  },
+  {
+    area: AREA_K,
+    name: "b2_stage_sent_to_workshop",
+    kind: "STAGE_SENT_TO_WORKSHOP",
+    sub: "Stage · Sent to workshop",
+    category: "MARKETING",
+    fires: "Every time a lead enters Sent to Workshop.",
+    vars: [{ name: "name", sample: "Priya" }],
+    body:
+      "Hi {{name}}, we think our workshop is the right next step for you. It covers what it really " +
+      "takes to get a job in Germany.\n\n" +
+      "Our team will share the date and the joining details with you shortly.",
+  },
+  {
+    area: AREA_K,
+    name: "b2_stage_workshop_followup",
+    kind: "STAGE_WORKSHOP_FOLLOWUP",
+    sub: "Stage · Workshop follow-up",
+    category: "MARKETING",
+    fires: "Every time a lead enters Workshop Follow-up.",
+    vars: [{ name: "name", sample: "Priya" }],
+    body:
+      "Hi {{name}}, thank you for joining our workshop.\n\n" +
+      "We would like to hear what you took away from it, and to help with your next step. Just " +
+      "reply to this message.",
+  },
+  {
+    area: AREA_K,
+    name: "b2_stage_offer_followup",
+    kind: "STAGE_OFFER_FOLLOWUP",
+    sub: "Stage · Offer follow-up",
+    category: "MARKETING",
+    fires: "Every time a lead enters Offer Follow-up.",
+    vars: [{ name: "name", sample: "Priya" }],
+    body:
+      "Hi {{name}}, checking in about the offer we shared with you.\n\n" +
+      "If anything is holding you back, reply and tell us what it is - we would rather know than " +
+      "leave you deciding on your own.",
+  },
+  {
+    area: AREA_K,
+    name: "b2_stage_deposit_followup",
+    kind: "STAGE_DEPOSIT_FOLLOWUP",
+    sub: "Stage · Deposit follow-up",
+    category: "UTILITY",
+    fires: "Every time a lead enters Deposit Follow-up.",
+    vars: [{ name: "name", sample: "Priya" }],
+    body:
+      "Hi {{name}}, the only step left to secure your place in the programme is the deposit.\n\n" +
+      "Reply to this message if you need the payment details again, or if you have any questions.",
+    note: {
+      tag: "UTILITY, on the same footing as b2_payment_reminder",
+      text:
+        "This is a payment step on a purchase the prospect has already agreed to, which is Meta's own UTILITY example and exactly the footing b2_payment_reminder is submitted on. The email half's we are glad you have decided to join us is dropped - warm, and the one persuasive line in it.",
+    },
+  },
+  {
+    area: AREA_K,
+    name: "b2_stage_deposit_paid",
+    kind: "STAGE_DEPOSIT_PAID",
+    sub: "Stage · Deposit paid",
+    category: "UTILITY",
+    fires: "Every time a lead enters Deposit Paid.",
+    vars: [{ name: "name", sample: "Priya" }],
+    body:
+      "Hi {{name}}, we have received your deposit and your place in the programme is confirmed.\n\n" +
+      "Our team will be in touch with your onboarding details shortly.",
+  },
+  {
+    area: AREA_K,
+    name: "b2_stage_won",
+    kind: "STAGE_WON",
+    sub: "Stage · Won",
+    category: "UTILITY",
+    fires: "Every time a lead enters Won.",
+    vars: [{ name: "name", sample: "Priya" }],
+    body:
+      "Hi {{name}}, welcome to the B2 Consultants programme.\n\n" +
+      "Your coach will contact you with your first steps. Everything after this - your classes, " +
+      "your payments and your documents - lives in your student portal.",
+    note: {
+      tag: "Overlaps b2_student_welcome",
+      text:
+        "b2_student_welcome fires ONCE when the student is seated in a batch, and names their tutor and their first class. This one fires when the DEAL is won, which is earlier and knows neither. Both are legitimate and they are not the same message - but bind both and a new student hears from us twice in a day. Pick the one that matches when you actually start teaching them.",
+    },
+  },
+  {
+    area: AREA_K,
+    name: "b2_stage_lost",
+    kind: "STAGE_LOST",
+    sub: "Stage · Lost",
+    category: "MARKETING",
+    fires: "Every time a lead enters Lost.",
+    vars: [{ name: "name", sample: "Priya" }],
+    body:
+      "Hi {{name}}, thank you for your interest in B2 Consultants.\n\n" +
+      "If now is not the right time, that is completely fine. Whenever you are ready, you are " +
+      "welcome to come back to us: https://optin.b2consultants.de/apply\n\n" +
+      "All the best with your plans for Germany.",
+    note: {
+      warn: true,
+      tag: "Check this one against the lost reason before binding",
+      text:
+        "A MARKETING message to somebody who has just been marked Lost is the likeliest in this pack to earn a block report, and a block costs the whole number's quality rating rather than this one send. lib/outbound-allowlist.ts already stops a send to anyone who opted out; what it cannot know is WHY the lead was lost. Consider binding this only once a lost-reason gate exists - or not at all.",
+    },
+  },
+  {
+    area: AREA_K,
+    name: "b2_stage_no_show",
+    kind: "STAGE_NO_SHOW",
+    sub: "Stage · No-show",
+    category: "MARKETING",
+    fires: "Every time a lead enters No-show.",
+    vars: [{ name: "name", sample: "Priya" }],
+    body:
+      "Hi {{name}}, we were looking forward to speaking with you but it looks like you could not " +
+      "make your call.\n\n" +
+      "No problem - you can pick a new time here: https://optin.b2consultants.de/apply",
+    note: {
+      tag: "Overlaps two other templates, one already approved",
+      text:
+        "b2_no_show_followup (the Bookings engine) and b2_sop_disco_cancel (the SOP's L2 no-show step) both already say this, and b2_sop_disco_cancel is approved. Three templates for one event is two too many: get this approved for completeness, then bind whichever engine you actually run no-shows from.",
+    },
+  },
+  /*
+   * ════════════════════════════════════════════════════════════════════════════════════════════
+   *  REMOVED 26/10/2026: THE SEVEN `_u` UTILITY REWRITES
+   * ════════════════════════════════════════════════════════════════════════════════════════════
+   *
+   *   b2_sop_disco_welcome_u · b2_sop_disco_confirm_1_u · b2_sop_disco_confirm_2_u
+   *   b2_sop_sss_confirm_1_u · b2_sop_sss_confirm_2_u   · b2_sop_sss_cancel_u
+   *   b2_booking_auto_cancelled_u
+   *
+   * They existed for one week, for one reason: this pack and `src/lib/whatsapp-submission.ts`
+   * described the same seven template NAMES two different ways - one MARKETING carrying the SOP's
+   * own promotional body, one UTILITY with that copy stripped. Meta approves one body per
+   * (name, language), so they were competing submissions, and the `_u` suffix let both exist
+   * while B2 decided which it wanted.
+   *
+   * B2 HAS NOW DECIDED, template by template, in the approval sheet - so there is nothing left to
+   * defer, and a variant kept "just in case" is only a second thing for somebody to bind by
+   * mistake:
+   *
+   *   disco_welcome · disco_confirm_1 · disco_confirm_2 · booking_auto_cancelled
+   *       "Template ok" / "Template is fine" - the SUBMITTED body stays, promotional copy and
+   *       all. They remain MARKETING in the SOP pack. No rewrite was ever wanted.
+   *
+   *   sss_confirm_1 · sss_confirm_2 · sss_cancel
+   *       The reviewer wrote the stripped body out in full under the ORIGINAL name - identical,
+   *       word for word, to what these variants carried. Those templates now hold that body and
+   *       are submitted as UTILITY, so a separate `_u` name would duplicate a template that
+   *       already says the same thing.
+   *
+   * Net effect on the batch: 25 templates down to 18. Nothing is lost - every body these carried
+   * is now in the SOP pack under its original name, or was never asked for.
+   */
+
 ];
 
 // ─────────────────────────────── small builders ───────────────────────────────
@@ -1064,7 +1583,18 @@ function bodyBox(text: string): Paragraph[] {
 
 // ─────────────────────────────── document sections ───────────────────────────────
 
-function cover(): Paragraph[] {
+function cover(list: Tpl[], mode: Mode): Paragraph[] {
+  /**
+   * EVERY COUNT IS READ OFF `list`. The header of this file has said since it was written that
+   * the count is never to be typed out, because the comment and the array drift the moment
+   * anything is added - and by 26 Oct 2026 it had drifted in four places at once ("26 templates",
+   * "Three of the 26", "All 25 templates", and the document's own description). A submission pack
+   * that misstates how many templates it contains is the one error its reader cannot check.
+   */
+  const areas = new Set(list.map((t) => t.area)).size;
+  const marketing = list.filter((t) => t.category === "MARKETING");
+  const auth = list.filter((t) => t.category === "AUTHENTICATION");
+  const byAction = (a: Action) => list.filter((t) => t.action?.group === a).length;
   return [
     new Paragraph({
       spacing: { after: 60 },
@@ -1072,44 +1602,127 @@ function cover(): Paragraph[] {
     }),
     new Paragraph({
       spacing: { after: 100 },
-      children: [new TextRun({ text: "WhatsApp Templates - UTILITY Submission Pack", size: 40, bold: true, color: INK, font: FONT })],
+      children: [new TextRun({ text: DOC_TITLE[mode], size: 40, bold: true, color: INK, font: FONT })],
     }),
-    p("Every business-initiated WhatsApp message the application sends must be a template Meta has approved. This is the complete inventory - 26 templates across seven areas - written to qualify as UTILITY wherever that is honestly possible, each with the sample values Meta requires at submission.", {
-      size: 22,
-      color: MUTED,
-    }),
+    p(
+      mode === "action"
+        ? `Every business-initiated WhatsApp message the application sends must be a template Meta has approved. These ${list.length} are the only ones with work outstanding: ${byAction("APPROVE")} have never been submitted, ${byAction("RESUBMIT")} were approved once and have had their body changed since, and ${byAction("DECIDE")} carries a wording decision that is cheaper to take now than after its next approval. Everything the app can send, approved or not, is in the complete set.`
+        : mode === "batch"
+          ? `Every business-initiated WhatsApp message the application sends must be a template Meta has approved. These ${list.length} are the ones NOT YET SUBMITTED, grouped by the part of the app they belong to, each with the sample values Meta requires. Everything else the app can send is in the full inventory pack.`
+          : `Every business-initiated WhatsApp message the application sends must be a template Meta has approved. This is the complete inventory - ${list.length} templates across ${areas} areas - written to qualify as UTILITY wherever that is honestly possible, each with the sample values Meta requires at submission.`,
+      { size: 22, color: MUTED },
+    ),
     spacer(140),
     p("Read this before you submit", { bold: true, size: 22 }),
-    bullet("You asked for these to be UTILITY, so every body is written as a plain, transactional notification - no “*FREE*”, no case-study links, no “personalised game plan”, no sales pitch. That wording is what actually earns the UTILITY category."),
-    bullet("Why the wording, not just the label, matters: since April 2025 Meta categorises a template by reading its content - it re-classifies anything promotional as MARKETING regardless of what you declared, and flags accounts that repeatedly mis-declare. A UTILITY label on selling copy costs you the flag, not a cheaper message."),
-    bullet("Three of the 26 cannot honestly be UTILITY (b2_disco_reminder, b2_sop_intro, b2_sop_followup_not_booked) - they are sent to people who have NOT booked anything, so there is no transaction to notify about. They are marked MARKETING with your options.", RISK),
-    bullet("One template (the signing code, b2_agreement_otp) belongs in Meta's AUTHENTICATION category.", AUTH),
-    bullet("Business-initiated messages stay queued for a human until each template is APPROVED and mapped in the app - nothing breaks in the meantime, it just stays manual."),
+    /**
+     * THE ONE THING THIS DOCUMENT CANNOT CHECK, said first, on the action document only.
+     *
+     * Which names already exist in WATI is recorded by hand in the generator and nowhere else.
+     * Every other fact in here is derived and therefore self-correcting; this one rots the moment
+     * somebody submits a template and does not say so. Putting it at the top is the difference
+     * between a stale line and a wasted afternoon re-submitting approved templates.
+     */
+    ...(mode === "action"
+      ? [
+          bullet(
+            "FIRST, open WATI's template list and compare. Which names already exist is tracked by hand in scripts/wati-templates-utility-docx.ts, not read from WATI - so tick off anything already APPROVED with the same body, and tell whoever maintains that file. A re-submission of an unchanged body is wasted review time; a missed one is a touchpoint that silently sends nothing.",
+            RISK,
+          ),
+          bullet(
+            "A changed body is a REPLACEMENT, not an addition. Meta approves one body per (name, language), so editing an approved template puts it back into review and its touchpoint sends nothing in the meantime - the app logs a skip rather than failing, so nobody notices. That is why group 2 is urgent and group 1 is merely incomplete.",
+          ),
+        ]
+      : []),
+    bullet(
+      "Every body here is written as a plain, transactional notification wherever it honestly can be - no sales pitch, no case-study links, no offer language. That wording is what actually earns the UTILITY category.",
+    ),
+    bullet(
+      "Why the wording, not just the label, matters: since April 2025 Meta categorises a template by reading its content - it re-classifies anything promotional as MARKETING regardless of what you declared, and flags accounts that repeatedly mis-declare. A UTILITY label on selling copy costs you the flag, not a cheaper message.",
+    ),
+    bullet(
+      marketing.length === 0
+        ? "Nothing in this batch is MARKETING."
+        : `${marketing.length} of these ${list.length} cannot honestly be UTILITY - each is either sent to somebody who has booked nothing, or is about a commercial offer, so there is no transaction to notify about. They are marked MARKETING, with the reasoning on each page: ${marketing.map((t) => t.name).join(", ")}.`,
+      RISK,
+    ),
+    ...(auth.length
+      ? [
+          bullet(
+            `${auth.length === 1 ? "One template" : `${auth.length} templates`} belong${auth.length === 1 ? "s" : ""} in Meta's AUTHENTICATION category and must be built with WATI's authentication flow rather than as UTILITY - OTP copy submitted as UTILITY is rejected: ${auth.map((t) => t.name).join(", ")}.`,
+            AUTH,
+          ),
+        ]
+      : []),
+    bullet(
+      "Business-initiated messages stay queued for a human until each template is APPROVED and mapped in the app - nothing breaks in the meantime, it just stays manual.",
+    ),
     rule(),
   ];
 }
 
-function summary(): (Paragraph | Table)[] {
-  const counts = TEMPLATES.reduce(
+function summary(list: Tpl[], mode: Mode): (Paragraph | Table)[] {
+  const counts = list.reduce(
     (a, t) => ((a[t.category] = (a[t.category] ?? 0) + 1), a),
     {} as Record<Category, number>,
   );
+  /**
+   * The "why it is here" column exists only on the batch and action documents, and it is the
+   * column the person submitting actually reads: on the batch, seventeen of these have never had
+   * a template at all while the rest are new touchpoints; on the action list, "never approved"
+   * and "approved, then edited" need completely different care at submission time.
+   */
+  const why = new Map(PENDING_SUBMISSION.map((e) => [e.name, e.why]));
+  const heading =
+    mode === "action"
+      ? `${list.length} templates with work outstanding`
+      : mode === "batch"
+        ? `${list.length} templates awaiting submission`
+        : `All ${list.length} templates at a glance`;
+  const subtitle =
+    `${counts.UTILITY ?? 0} UTILITY  ·  ${counts.AUTHENTICATION ?? 0} AUTHENTICATION  ·  ${counts.MARKETING ?? 0} MARKETING.` +
+    (mode === "action"
+      ? "  Work top to bottom: group 1 is incomplete, group 2 is actively broken until it clears."
+      : mode === "batch"
+        ? "  None of these exists in WATI yet."
+        : "  All are new to this WATI account.");
+
   return [
-    h2("All 25 templates at a glance"),
-    p(
-      `${counts.UTILITY ?? 0} UTILITY  ·  ${counts.AUTHENTICATION ?? 0} AUTHENTICATION  ·  ${counts.MARKETING ?? 0} MARKETING.  All are new to this WATI account.`,
-      { size: 19, color: MUTED, spacing: 140 },
-    ),
-    table(
-      ["#", "Template name", "Category", "App touchpoint"],
-      TEMPLATES.map((t, i) => [
-        String(i + 1),
-        { text: t.name, mono: true },
-        { text: t.category, color: catColor(t.category) },
-        { text: t.kind, mono: true },
-      ]),
-      [6, 40, 22, 32],
-    ),
+    h2(heading),
+    p(subtitle, { size: 19, color: MUTED, spacing: 140 }),
+    mode === "action"
+      ? table(
+          ["#", "Template name", "Do this", "Category", "Why it is here"],
+          list.map((t, i) => [
+            String(i + 1),
+            { text: t.name, mono: true },
+            { text: t.action?.label ?? "", color: t.action?.group === "RESUBMIT" ? RISK : ACCENT },
+            { text: t.category, color: catColor(t.category) },
+            t.action?.why ?? "",
+          ]),
+          [4, 24, 18, 11, 43],
+        )
+      : mode === "batch"
+        ? table(
+            ["#", "Template name", "Category", "App touchpoint", "Why it is here"],
+            list.map((t, i) => [
+              String(i + 1),
+              { text: t.name, mono: true },
+              { text: t.category, color: catColor(t.category) },
+              { text: t.kind, mono: true },
+              why.get(t.name) ?? "",
+            ]),
+            [5, 27, 14, 24, 30],
+          )
+        : table(
+            ["#", "Template name", "Category", "App touchpoint"],
+            list.map((t, i) => [
+              String(i + 1),
+              { text: t.name, mono: true },
+              { text: t.category, color: catColor(t.category) },
+              { text: t.kind, mono: true },
+            ]),
+            [6, 40, 22, 32],
+          ),
     rule(),
   ];
 }
@@ -1143,6 +1756,10 @@ function templateSection(t: Tpl, index: number, firstInArea: boolean): (Paragrap
     table(
       ["Field", "Value"],
       [
+        // First row when there is one, because it is the only row that says what to DO.
+        ...(t.action
+          ? [["Do this", { text: t.action.label, color: t.action.group === "RESUBMIT" ? RISK : ACCENT }]]
+          : []),
         ["Template name", { text: t.name, mono: true }],
         ["Category", { text: t.category, color: catColor(t.category) }],
         ["Language", "en"],
@@ -1164,6 +1781,23 @@ function templateSection(t: Tpl, index: number, firstInArea: boolean): (Paragrap
     spacer(120),
   );
 
+  /**
+   * Repeated from the summary table ON PURPOSE.
+   *
+   * These pages are what somebody actually works from - one template per page, typed into WATI and
+   * ticked off - and a reason that lives only in a table forty pages earlier is a reason they
+   * will not read at the moment it matters.
+   */
+  if (t.action) {
+    out.push(
+      new Paragraph({
+        spacing: { before: 40, after: 60 },
+        children: [new TextRun({ text: "Why it is on the action list", size: 20, bold: true, color: ACCENT, font: FONT })],
+      }),
+      p(t.action.why, { size: 19, color: MUTED, spacing: 120 }),
+    );
+  }
+
   if (t.note) {
     out.push(
       new Paragraph({
@@ -1179,7 +1813,38 @@ function templateSection(t: Tpl, index: number, firstInArea: boolean): (Paragrap
   return out;
 }
 
-function checklist(): (Paragraph | Table)[] {
+function checklist(list: Tpl[], mode: Mode): (Paragraph | Table)[] {
+  /**
+   * PARAMETERISED FOR THE SAME REASON `cover` AND `summary` ARE.
+   *
+   * This read "UTILITY for the 22 ... AUTHENTICATION for the signing code ... MARKETING for the
+   * three re-engagement messages", and named `b2_agreement_otp` as the one to build through
+   * WATI's authentication flow. Every one of those was a count or a name typed out by hand, and
+   * on the BATCH document all of them were wrong: the batch has no `b2_agreement_otp` in it at
+   * all, so its own closing checklist told the reader to go and build a template that is not in
+   * the document they are holding. A submission pack's final instruction naming the wrong
+   * template is the worst place in the file for this particular rot.
+   *
+   * So the counts and the names come off `list`, and the two sentences that only make sense for
+   * the full inventory are dropped from the batch.
+   */
+  const counts = list.reduce((a, t) => ((a[t.category] = (a[t.category] ?? 0) + 1), a), {} as Record<Category, number>);
+  const auth = list.filter((t) => t.category === "AUTHENTICATION");
+  const marketing = list.filter((t) => t.category === "MARKETING");
+  const resubmit = list.filter((t) => t.action?.group === "RESUBMIT");
+  const decide = list.filter((t) => t.action?.group === "DECIDE");
+  // Named, never counted by hand: the sentence that used to say "Three of these" was wrong
+  // the first time the list changed.
+  const flips = list.filter((t) => t.action?.categoryChanged);
+  const linkVars = new Set<string>();
+  for (const t of list) for (const v of t.vars) if (/_url$/.test(v.name)) linkVars.add(`{{${v.name}}}`);
+
+  const categoryLine =
+    `Set the category as marked: ${counts.UTILITY ?? 0} UTILITY` +
+    (auth.length ? `, ${auth.length} AUTHENTICATION` : "") +
+    (marketing.length ? `, ${marketing.length} MARKETING` : "") +
+    ". Do NOT re-declare a promotional body UTILITY to save cost - Meta re-categorises it and flags the account.";
+
   return [
     new Paragraph({ pageBreakBefore: true, children: [] }),
     h1("Submitting & going live"),
@@ -1190,33 +1855,264 @@ function checklist(): (Paragraph | Table)[] {
     }),
     h2("Part A - Submit in WATI (per template)"),
     checkbox("Create each template with the EXACT snake_case name shown - the app is mapped to these names.", true),
-    checkbox("Set the category as marked: UTILITY for the 22, AUTHENTICATION for the signing code, MARKETING for the three re-engagement messages. Do NOT re-declare a promotional body UTILITY to save cost - Meta re-categorises it and flags the account."),
+    checkbox(categoryLine),
     checkbox("Paste the body exactly, blank lines included. Keep the *asterisks* - they render as bold in WhatsApp."),
     checkbox("Declare each variable in the order shown and give it the sample value from its card. Meta rejects missing or unrealistic samples."),
-    checkbox("For {{sign_url}} / {{copy_url}}, paste a full real link at submission so the reviewer sees the true format."),
-    checkbox("Language en (use en_GB if WATI forces a locale). Submit and record the date; review is usually minutes but can take 24–48h."),
-    checkbox("Build b2_agreement_otp through WATI's AUTHENTICATION template flow, not as a UTILITY text template."),
+    ...(linkVars.size
+      ? [checkbox(`For ${[...linkVars].sort().join(" / ")}, paste a full real link at submission so the reviewer sees the true format.`)]
+      : []),
+    checkbox("Language en (use en_GB if WATI forces a locale). Submit and record the date; review is usually minutes but can take 24-48h."),
+    ...auth.map((t) =>
+      checkbox(`Build ${t.name} through WATI's AUTHENTICATION template flow, not as a UTILITY text template - OTP copy submitted as UTILITY is rejected.`),
+    ),
+    /**
+     * The action document's extra instructions, and they are the point of it existing.
+     *
+     * A re-submission is NOT the same job as a first submission: you edit a template that is
+     * already live rather than creating one, the touchpoint goes dark while review runs, and any
+     * wording decision has to be taken in the same edit or it costs a second round. Named
+     * template by template off `list`, because a checklist that said "three of these" was wrong
+     * the first time the list changed.
+     */
+    ...(mode === "action"
+      ? [
+          ...(resubmit.length
+            ? [
+                checkbox(
+                  `EDIT, do not create: ${resubmit.map((t) => t.name).join(", ")}. Each already exists in WATI under this exact name with an older body. Creating a second one is not possible - Meta holds one body per (name, language) - and the edit sends it back to review, so its touchpoint sends nothing until it clears. Do these on a quiet day, not mid-campaign.`,
+                  true,
+                ),
+                ...(flips.length
+                  ? [
+                      checkbox(
+                        `${flips.length === 1 ? "One of the re-submissions changes" : `${flips.length} of the re-submissions change`} CATEGORY as well as body (${flips.map((t) => t.name).join(", ")} — MARKETING → UTILITY, because the promotional copy came out). Set the new category in the same edit: a body that no longer sells will not be re-categorised for you, and the declaration is what you are billed on.`,
+                      ),
+                    ]
+                  : []),
+              ]
+            : []),
+          ...decide.map((t) =>
+            checkbox(
+              `${t.name} has NO body change pending - do not re-submit it today. Answer the question on its page first, then fold the answer into its next submission. Taking it after an approval costs another round.`,
+            ),
+          ),
+          checkbox(
+            "Record the date and the body you submitted for each one, back in scripts/wati-templates-utility-docx.ts. This document knows what changed and when only because the last person did that.",
+          ),
+        ]
+      : []),
+    ...(mode === "batch"
+      ? [
+          checkbox(
+            "Five stage templates overlap an engine that already messages the prospect at the same moment (new lead, disco booked, won, lost, no-show). Get them approved anyway - a touchpoint with no approved template can never be switched on later - but read the note on each card before BINDING it, or somebody hears from us twice in a day.",
+          ),
+        ]
+      : []),
     h2("Part B - Wire it into the app (Admin)"),
     checkbox("Set WATI_ENABLED=true, WATI_API_ENDPOINT and WATI_ACCESS_TOKEN in the environment.", true),
-    checkbox("WhatsApp → Settings → Refresh templates. All approved names should appear in the catalogue."),
+    checkbox("WhatsApp -> Settings -> Refresh templates. All approved names should appear in the catalogue."),
     checkbox("Bind each touchpoint to its template using the App touchpoint value on each card. One template per touchpoint."),
-    checkbox("Enter each template's variable list in Settings exactly as approved. A mismatch blocks the send and names the missing variable - it never delivers “Hi ,”."),
+    checkbox("Enter each template's variable list in Settings exactly as approved. A mismatch blocks the send and names the missing variable - it never delivers a half-empty message."),
     checkbox("Send a test to your own number. Confirm variables resolve and the bold renders."),
     checkbox("Turn on sending one low-risk touchpoint at a time; watch the WhatsApp history before enabling the rest."),
     rule(),
-    p(`Generated from scripts/wati-templates-utility-docx.ts - re-run \`npx tsx scripts/wati-templates-utility-docx.ts\` after any edit. The nine SOP bodies are UTILITY rewrites of Script for Outreach Specialist.docx (Steps 3–21); the app currently ships them as MARKETING via src/lib/whatsapp-submission.ts. ${TEMPLATES.length} templates · the free-form MANUAL touchpoint needs no template and is excluded; b2_book_order is a proposed new touchpoint not yet wired.`, {
-      size: 16,
-      color: MUTED,
-      italics: true,
-    }),
+    p(
+      `Generated from scripts/wati-templates-utility-docx.ts - re-run \`npm run ${NPM_SCRIPT[mode]}\` after any edit. ` +
+        `${list.length} templates. ` +
+        (mode === "action"
+          ? "This is the work list only - everything with a first approval, a changed body or an open wording decision outstanding, from both packs. Everything the app can send, approved or not, is in WhatsApp_Templates_Complete_Set.docx."
+          : mode === "batch"
+            ? "This is the batch awaiting submission; the full inventory of everything the app can send is in WhatsApp_Templates_UTILITY_Submission_Pack.docx."
+            : mode === "all"
+              ? "This is every template from both packs. The free-form MANUAL touchpoint needs no template and is excluded. The subset still needing approval, a re-submission or a decision is in WhatsApp_Templates_Action_Required.docx."
+              : "The free-form MANUAL touchpoint needs no template and is excluded. The 13 Outreach SOP bodies are maintained in src/lib/whatsapp-submission.ts and are not in this pack; WhatsApp_Templates_Complete_Set.docx has both."),
+      { size: 16, color: MUTED, italics: true },
+    ),
   ];
+}
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════════════════════
+ *  THE SOP PACK, FLATTENED INTO THIS ONE'S SHAPE  (for the --all document)
+ * ════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * B2's templates live in two files for a real reason: the thirteen Outreach SOP messages are
+ * DERIVED from `Script_for_Outreach_Specialist.docx` (so their bodies are generated by
+ * `submissionBody`, and changing one is a decision recorded as a proposedFix/acceptedFix),
+ * while everything else is written directly here. That split is right for authoring and wrong
+ * for submitting: the person typing templates into WATI wants one list, not two documents to
+ * diff against each other.
+ *
+ * So `--all` renders both through the renderer below, which needs one shape. This adapter is
+ * that, and it is deliberately LOSSLESS in the direction that matters - every field the SOP pack
+ * carries that a submitter needs (category rationale, the notes, the open proposedFix, the
+ * settled acceptedFix and its superseded wording) ends up in the note text rather than being
+ * dropped on the floor.
+ *
+ * It does NOT replace either document. The SOP pack keeps its own richer rendering, with each
+ * body shown beside the SOP step it was transcribed from; this is the flat view.
+ */
+function fromSopPack(t: SubmissionTemplate): Tpl {
+  const def = STEP_BY_KEY[t.step];
+
+  /**
+   * "When it fires", built from the engine rather than retyped.
+   *
+   * The SOP pack has no `fires` field - its reader is looking at the SOP document and already
+   * knows the step. A flat list has no such context, so it is assembled from the step definition
+   * (`label`, and the SLA key that sets its offset) plus the Zoom dependency, which is the one
+   * piece of timing that decides whether a template can be bound at all.
+   */
+  const fires = [
+    `${t.sopStep} - ${def?.label ?? t.step}.`,
+    def?.slaKey ? `Offset driven by the “${def.slaKey}” SLA.` : null,
+    def?.needsZoom ? "BLOCKED until a Zoom link is resolved on the prospect's card." : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  /**
+   * Everything the SOP pack would have shown on its own page, folded into one note.
+   *
+   * Order is deliberate: the decision a submitter must ACT on comes first (an open proposedFix,
+   * or a settled acceptedFix and what it replaced), then the per-template notes, then the
+   * category rationale - which is reference material, and is also the longest.
+   */
+  const parts: string[] = [];
+  if (t.proposedFix) {
+    parts.push(
+      `DECISION OPEN - B2 MUST CHOOSE BEFORE SUBMITTING. ${t.proposedFix.reason} The body above is the SOP text as it stands; the proposed replacement is: “${t.proposedFix.body.replace(/\s+/g, " ").trim()}”`,
+    );
+  }
+  if (t.acceptedFix) {
+    parts.push(
+      `WORDING CHANGE ALREADY APPROVED (${t.acceptedFix.decidedOn}) - the body above is the one to submit. ${t.acceptedFix.reason} It replaced: “${t.acceptedFix.was.replace(/\s+/g, " ").trim()}”`,
+    );
+  }
+  if (t.header) parts.push(`HEADER: ${t.header}`);
+  parts.push(...(t.notes ?? []));
+  parts.push(`Why this category: ${t.categoryNote}`);
+
+  return {
+    area: AREA_SOP,
+    name: t.name,
+    kind: t.kind,
+    sub: `${t.sopStep} · ${def?.label ?? t.step}`,
+    category: t.category as Category,
+    fires,
+    vars: t.vars.map((v) => ({ name: v.name, sample: v.sample })),
+    body: submissionBody(t),
+    note: {
+      // Amber whenever there is still a decision in it - that is what a submitter needs to see
+      // before they start typing, not after.
+      warn: Boolean(t.proposedFix),
+      tag: t.proposedFix ? "Read this before submitting" : "From the Outreach SOP",
+      text: parts.join(" · "),
+    },
+  };
+}
+
+/**
+ * Every template B2 can submit, from both packs, in one list.
+ *
+ * De-duplicated by NAME, and the SOP pack wins a tie. Two names appear in both files -
+ * `b2_sop_intro` and `b2_sop_followup_not_booked` - because this pack carries them unchanged for
+ * completeness; the SOP pack's version of each is the authored one, with the category rationale
+ * and the superseded wording attached, so that is the copy worth printing.
+ */
+function allTemplates(): Tpl[] {
+  const byName = new Map<string, Tpl>();
+  for (const t of TEMPLATES) byName.set(t.name, t);
+  for (const t of SUBMISSION_TEMPLATES) byName.set(t.name, fromSopPack(t));
+  // Grouped by area, and within an area in the order each pack declares - which is funnel order
+  // for the lifecycle areas and SOP step order for the SOP one.
+  const areas = [...new Set([...byName.values()].map((t) => t.area))];
+  return areas.flatMap((a) => [...byName.values()].filter((t) => t.area === a));
+}
+
+/**
+ * The work list, resolved against BOTH packs.
+ *
+ * Resolved off `allTemplates()` rather than `TEMPLATES`, because three of the entries live in the
+ * SOP pack - and that is the whole reason this document is worth generating. "What needs
+ * approval" is a question about B2's WATI account, not about a source file, so an answer that
+ * covers only one of the two files is not an answer.
+ *
+ * Grouped by what has to be DONE, not by part of the app: the area headings are replaced with the
+ * action group, because a person working through this is deciding "do I create this or edit it",
+ * and three UTILITY rewrites of SSS messages have more in common with each other here than any of
+ * them has with the rest of the SSS calendar.
+ */
+function actionTemplates(): Tpl[] {
+  const byName = new Map(allTemplates().map((t) => [t.name, t]));
+  const missing = NEEDS_ACTION.filter((e) => !byName.has(e.name)).map((e) => e.name);
+  if (missing.length) {
+    // Loud and fatal, for the same reason the batch check is: a work list that silently drops a
+    // template gives its reader no way to know it is short, and the dropped one never gets done.
+    throw new Error(`NEEDS_ACTION names templates that are in neither pack: ${missing.join(", ")}`);
+  }
+  // Sorted into group order rather than trusting the declaration order to stay that way, so that
+  // adding an entry in the wrong place cannot interleave the groups and break the page breaks.
+  return ACTION_ORDER.flatMap((group) =>
+    NEEDS_ACTION.filter((e) => e.action === group).map((e) => ({
+      ...byName.get(e.name)!,
+      area: ACTION_GROUP[group],
+      action: { group, label: ACTION_LABEL[group], why: e.why, categoryChanged: e.categoryChanged },
+    })),
+  );
 }
 
 // ─────────────────────────────── assemble ───────────────────────────────
 
+/**
+ * ════════════════════════════════════════════════════════════════════════════════════════════
+ *  TWO DOCUMENTS, ONE RENDERER
+ * ════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ *   no flag   this pack's own templates - everything except the thirteen Outreach SOP bodies,
+ *             which are authored in src/lib/whatsapp-submission.ts and have their own document.
+ *   --batch   only `PENDING_SUBMISSION` - the ones nobody has submitted yet. The working
+ *             document, for whoever sits down in WATI and types them in.
+ *   --all     EVERY template B2 can submit, both packs merged into one file. The document to
+ *             hand somebody who wants the whole set without cross-referencing three files.
+ *
+ * A flag on the existing script rather than a second script, because the alternative is two
+ * copies of a two-hundred-line docx layout drifting apart - which is precisely the failure the
+ * two submission PACKS just had with each other (issue W1), and it would be odd to fix that by
+ * creating a third place for it to happen.
+ */
 async function main() {
+  const flags = new Set(process.argv.slice(2));
+  const picked: Mode[] = ([["--batch", "batch"], ["--all", "all"], ["--action", "action"]] as const)
+    .filter(([flag]) => flags.has(flag))
+    .map(([, mode]) => mode);
+  if (picked.length > 1) throw new Error(`These are different documents; pass one, not ${picked.length}.`);
+  const mode: Mode = picked[0] ?? "inventory";
+
+  let list: Tpl[];
+  if (mode === "all") {
+    list = allTemplates();
+  } else if (mode === "action") {
+    list = actionTemplates();
+  } else if (mode === "batch") {
+    const byName = new Map(TEMPLATES.map((t) => [t.name, t]));
+    const missing = PENDING_SUBMISSION.filter((e) => !byName.has(e.name)).map((e) => e.name);
+    if (missing.length) {
+      // Loud, and fatal. A batch document that silently omits a template is worse than no batch
+      // document: the reader has no way to know it is short. `wati-template-catalogue.test.ts`
+      // asserts the same thing in CI so this should be unreachable.
+      throw new Error(`PENDING_SUBMISSION names templates that are not in TEMPLATES: ${missing.join(", ")}`);
+    }
+    // Ordered by PENDING_SUBMISSION, not by the inventory: that list is grouped by WHY each one
+    // is pending (the seventeen stage messages, then the one new touchpoint), which is the order
+    // somebody submitting them wants to work in.
+    list = PENDING_SUBMISSION.map((e) => byName.get(e.name)!);
+  } else {
+    list = TEMPLATES;
+  }
+
   const seenAreas = new Set<string>();
-  const templatePages = TEMPLATES.flatMap((t, i) => {
+  const templatePages = list.flatMap((t, i) => {
     const first = !seenAreas.has(t.area);
     seenAreas.add(t.area);
     return templateSection(t, i, first);
@@ -1224,17 +2120,22 @@ async function main() {
 
   const doc = new Document({
     creator: "B2 Consultants",
-    title: "WhatsApp Templates - UTILITY Submission Pack",
-    description: "All 25 WhatsApp templates the app needs WATI to approve, written for UTILITY where possible, with sample values.",
+    title: DOC_TITLE[mode],
+    // Read off the list, like every other count in this file. It used to say "All 25" and was
+    // wrong by a dozen.
+    description:
+      mode === "action"
+        ? `${list.length} WhatsApp templates needing a first approval, a re-submission or a wording decision, with the sample values Meta requires.`
+        : `${list.length} WhatsApp templates${mode === "batch" ? " awaiting WATI/Meta approval" : " the app can send"}, with the sample values Meta requires.`,
     styles: { default: { document: { run: { font: FONT, size: 20, color: INK } } } },
     sections: [
       {
         properties: { page: { margin: { top: 1000, right: 1000, bottom: 1000, left: 1000 } } },
         children: [
-          ...cover(),
-          ...summary(),
+          ...cover(list, mode),
+          ...summary(list, mode),
           ...templatePages,
-          ...checklist(),
+          ...checklist(list, mode),
           spacer(160),
           new Paragraph({
             alignment: AlignmentType.CENTER,
@@ -1253,12 +2154,23 @@ async function main() {
     ],
   });
 
-  const out = path.resolve(process.cwd(), "..", "WhatsApp_Templates_UTILITY_Submission_Pack.docx");
+  const out = path.resolve(process.cwd(), "..", DOC_FILE[mode]);
   writeFileSync(out, await Packer.toBuffer(doc));
 
-  const counts = TEMPLATES.reduce((a, t) => ((a[t.category] = (a[t.category] ?? 0) + 1), a), {} as Record<Category, number>);
+  const counts = list.reduce((a, t) => ((a[t.category] = (a[t.category] ?? 0) + 1), a), {} as Record<Category, number>);
   console.log(`Wrote ${out}`);
-  console.log(`${TEMPLATES.length} templates - ${counts.UTILITY ?? 0} UTILITY, ${counts.AUTHENTICATION ?? 0} AUTHENTICATION, ${counts.MARKETING ?? 0} MARKETING.`);
+  console.log(
+    `${list.length} templates - ${counts.UTILITY ?? 0} UTILITY, ${counts.AUTHENTICATION ?? 0} AUTHENTICATION, ${counts.MARKETING ?? 0} MARKETING.`,
+  );
+  if (mode === "action") {
+    for (const group of ACTION_ORDER) {
+      const n = list.filter((t) => t.action?.group === group).length;
+      if (n) console.log(`  ${n} - ${ACTION_GROUP[group]}`);
+    }
+  } else if (mode !== "batch") {
+    console.log(`${NEEDS_ACTION.length} of them still need something doing - run with --action for just those.`);
+    if (mode !== "all") console.log(`Run with --all for every template in both packs in one document.`);
+  }
 }
 
 /**

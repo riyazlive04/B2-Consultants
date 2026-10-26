@@ -16,6 +16,38 @@ export const ACTIVE = { deletedAt: null } as const;
 /** `where` for the Archived tab and the retention sweep - archived rows only. */
 export const ARCHIVED = { deletedAt: { not: null } } as const;
 
+/**
+ * ════════════════════════════════════════════════════════════════════════════════════════════
+ *  MONEY THAT ACTUALLY ARRIVED  (issue C2)
+ * ════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * `ACTIVE` is not enough for `Income`, because an income row can now fail in TWO different ways
+ * and they are not the same fact:
+ *
+ *   `deletedAt`   archived - "this row should not have been entered". A mis-entry, a duplicate.
+ *   `reversedAt`  reversed - "it was entered correctly and the money went away again". A bounced
+ *                 cheque, a reversed UPI, a recalled transfer.
+ *
+ * Both mean the money is not there, so both must leave every total. They are stored separately
+ * because only the second is a fact about the bank, and only the second re-opens the dunning
+ * ladder (see `Instalment.dunningCycle`) - conflating them would either chase a student over a
+ * typo or stop chasing one whose payment bounced.
+ *
+ * ── SPREAD THIS, NOT `ACTIVE`, INTO ANY SUM OF RECEIVED MONEY ───────────────────────────────
+ * Thirty-one call sites read `income`. `src/server/__tests__/paid-so-far-excludes-archived.test.ts`
+ * reads this file's source and FAILS the suite for any per-student money total that omits it -
+ * which is the only reason to believe a rule spread across thirty-one queries by hand. That
+ * guard was written when the same thing happened with `deletedAt` and two screens disagreed
+ * about whether a student had paid; it now covers both columns.
+ *
+ * Reads that are not about money received - counting rows, listing the archive, the retention
+ * sweep - keep using `ACTIVE`.
+ */
+export const INCOME_COUNTABLE = { deletedAt: null, reversedAt: null } as const;
+
+/** `where` for the reversals list: money that appeared to arrive and then did not. */
+export const INCOME_REVERSED = { deletedAt: null, reversedAt: { not: null } } as const;
+
 /** `data` payload that archives (soft-deletes) a row, recording who did it. */
 export function archiveData(userId?: string | null) {
   return { deletedAt: new Date(), deletedById: userId ?? null };

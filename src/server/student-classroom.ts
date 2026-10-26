@@ -8,6 +8,7 @@ import { isCheckInOpen, studentMaySeeMark } from "@/lib/attendance-window";
 import { accessLabel, daysLeft, isRecordingAvailable } from "@/lib/recording-access";
 import { studentResources, type ResourceView } from "./resources";
 import { getAttendanceConfig } from "./founder-config";
+import { sessionIsOn, type SessionStatusValue } from "@/lib/session-status";
 
 /**
  * THE STUDENT'S CLASSROOM - what is on, when, and what do I owe.
@@ -71,6 +72,18 @@ export type ClassroomSessionView = {
   myAttendance: "PRESENT" | "LATE" | "ABSENT" | "EXCUSED" | null;
   /** A mark exists but the coach has not released this register to the cohort yet. */
   attendancePending: boolean;
+  /**
+   * CANCELLED or POSTPONED, when the class has been called off (issue C3).
+   *
+   * The row deliberately STAYS on the student's timetable, struck through and labelled, rather
+   * than being filtered out. A class that silently disappears from a timetable a student was
+   * told about is worse than no notice at all: they turn up, or they assume they misread the
+   * week, and in neither case do they learn what happened. "Cancelled - tutor unwell" is the
+   * whole point.
+   */
+  status: SessionStatusValue;
+  /** Why, in the coach's words. Shown verbatim under the class. */
+  cancelReason: string | null;
   /** The check-in window is open right now - the classroom shows the same button as the dashboard. */
   checkInOpen: boolean;
   /** Material for THIS class: the curriculum's, then anything posted for this session. */
@@ -166,6 +179,8 @@ export const getMyClassroom = cache(async (userId: string): Promise<StudentClass
           attendanceOpensAt: true,
           attendanceClosesAt: true,
           attendancePublishedAt: true,
+          status: true,
+          cancelReason: true,
           // Scoped to this student - the register as a whole is not theirs to read.
           attendance: { where: { studentId: student.id }, select: { status: true, source: true } },
           tasks: {
@@ -233,7 +248,15 @@ export const getMyClassroom = cache(async (userId: string): Promise<StudentClass
       // absence is the system working - the student told someone - and counting it against them
       // punishes exactly the behaviour we want. Hand-rolling the test here is how the student's
       // own percentage came to disagree with the one their coach reads.
-      if (!pre && start < now && mark) {
+      /**
+       * A CALLED-OFF CLASS IS IN NO DENOMINATOR (issue C3).
+       *
+       * `sessionIsOn` rather than a raw string test, and checked here as well as in the query
+       * on the coach's side, because this is the number the STUDENT reads - and the two have to
+       * agree. Counting a class we cancelled would drop a student's rate for our decision,
+       * which is the same mistake `isCounted` exists to stop for EXCUSED.
+       */
+      if (!pre && start < now && mark && sessionIsOn(e.status)) {
         if (isCounted(mark as AttendanceStatus)) counted += 1;
         if (isAttended(mark as AttendanceStatus)) attended += 1;
       }
@@ -283,6 +306,8 @@ export const getMyClassroom = cache(async (userId: string): Promise<StudentClass
         recordingDaysLeft: e.recording ? daysLeft(e.recording.availableUntil, nowDate) : null,
         myAttendance: mark as ClassroomSessionView["myAttendance"],
         attendancePending: row !== null && !visible,
+        status: e.status as SessionStatusValue,
+        cancelReason: e.cancelReason,
         checkInOpen: isCheckInOpen(
           { opensAt: e.attendanceOpensAt, closesAt: e.attendanceClosesAt },
           new Date(now),
@@ -322,7 +347,9 @@ export const getMyClassroom = cache(async (userId: string): Promise<StudentClass
   let next: StudentClassroom["next"] = null;
   for (const b of views) {
     for (const s of b.sessions) {
-      if (s.delivery === "PRE_RECORDED" || s.isPast) continue;
+      // A cancelled class is never "the next thing that happens" (issue C3) - the dashboard
+      // leads with this, and leading with a class that is off is the worst place to be wrong.
+      if (s.delivery === "PRE_RECORDED" || s.isPast || !sessionIsOn(s.status)) continue;
       if (!next || s.startsAt < next.session.startsAt) next = { batch: b, session: s };
     }
   }

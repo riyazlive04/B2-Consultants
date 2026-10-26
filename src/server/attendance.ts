@@ -20,6 +20,7 @@ import {
 import { getAttendanceConfig } from "./founder-config";
 import { BATCH_MEMBERSHIP_SELECT } from "./batch-membership";
 import { mergeBatchSeats } from "@/lib/batch";
+import { SESSION_ON } from "@/lib/session-status";
 
 /**
  * Attendance - the reads and writes.
@@ -402,7 +403,11 @@ export async function getBatchAttendance(batchId: string): Promise<StudentAttend
 
   const [sessions, batch] = await Promise.all([
     prisma.classSession.findMany({
-      where: { batchId },
+      // A class that never happened is not in anybody's attendance rate (issue C3). The same
+      // reasoning `isCounted` applies to EXCUSED: a denominator that includes our own
+      // cancellation punishes the student for it. The register rows survive - see
+      // `cancelBatchSession` - they are simply not read here.
+      where: { batchId, ...SESSION_ON },
       select: {
         id: true,
         startsAt: true,
@@ -475,7 +480,8 @@ export async function getBatchAttendanceSummary(batchId: string): Promise<{
 }> {
   const [sessions, counts] = await Promise.all([
     prisma.classSession.findMany({
-      where: { batchId },
+      // Same exclusion as the board above - the two numbers have to agree.
+      where: { batchId, ...SESSION_ON },
       select: { id: true, attendance: { select: { status: true } } },
     }),
     prisma.batch.findUnique({

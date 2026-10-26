@@ -248,11 +248,27 @@ describe("Submission pack - categories", () => {
     // promotional copy has to come OUT of the body, which is a proposedFix and a business
     // decision. Flipping the category alone would earn a silent re-categorisation from Meta and
     // an abuse flag, which is exactly the mistake this test exists to catch.
-    // The ONE documented exception. b2_sop_not_qualified tells someone a booked appointment has
-    // been cancelled: no offer, no link, no persuasion. That is a transaction update, and
-    // declaring it UTILITY is correct usage rather than the gaming this test guards against.
-    // Any OTHER template claiming UTILITY is the mistake, and still fails here.
-    const UTILITY_ALLOWED = new Set(["b2_sop_not_qualified"]);
+    // THE DOCUMENTED EXCEPTIONS. Everything else claiming UTILITY is still the mistake this
+    // test guards against, and still fails here.
+    //
+    // b2_sop_not_qualified tells someone a booked appointment has been cancelled: no offer, no
+    // link, no persuasion. A transaction update, so UTILITY is correct usage.
+    //
+    // The three SSS steps were added on 26 Oct 2026, and ONLY because the reviewer rewrote their
+    // bodies. That is the condition this file's own header set: "to move any of Steps 13-21 back
+    // to UTILITY, the promotional lines must come out of the body first - and that is a
+    // proposedFix, because it changes what a prospect reads." The reviewer took that trade and
+    // wrote the stripped bodies, so the precondition is met rather than waived. Each carries an
+    // `acceptedFix` naming the decision and the superseded transcription.
+    //
+    // ⚠ Adding a name here is not a way to quiet this test. It is a claim that the body no
+    // longer sells, and `a template stays MARKETING on its copy` below checks the copy itself.
+    const UTILITY_ALLOWED = new Set([
+      "b2_sop_not_qualified",
+      "b2_sop_sss_confirm_1",
+      "b2_sop_sss_confirm_2",
+      "b2_sop_sss_cancel",
+    ]);
     for (const t of SUBMISSION_TEMPLATES) {
       if (UTILITY_ALLOWED.has(t.name)) {
         assert.ok(
@@ -265,19 +281,40 @@ describe("Submission pack - categories", () => {
     }
   });
 
-  test("a template stays MARKETING on its copy, not on whether it asks for a YES", () => {
-    // Guards the reasoning, not just the values. A "reply YES to confirm" is the textbook UTILITY
-    // case and is NOT what disqualifies these. The proof is the two cancellations: they ask for
-    // nothing, and they are still MARKETING, because they carry a re-booking CTA. If someone ever
-    // strips the promo copy to win UTILITY back, the YES must not be what they remove.
-    const cancels = SUBMISSION_TEMPLATES.filter(
-      (t) => t.step === "DISCO_CANCEL_MSG" || t.step === "SSS_CANCEL_MSG",
-    );
-    assert.equal(cancels.length, 2);
-    for (const t of cancels) {
-      assert.doesNotMatch(submissionBody(t), /reply \*?YES/i, `${t.name} asks for no confirmation…`);
-      assert.equal(t.category, "MARKETING", `…yet ${t.name} is still MARKETING`);
+  test("a template's category follows its copy, not whether it asks for a YES", () => {
+    /**
+     * Guards the REASONING, not the values - and the two cancellations now demonstrate it from
+     * both ends, which they could not before the reviewer's 26 Oct rewrite.
+     *
+     * A "reply *YES* to confirm" is the textbook UTILITY case and has never been what
+     * disqualified these bodies. Neither cancellation asks for a YES at all, and yet:
+     *
+     *   DISCO_CANCEL_MSG  still MARKETING - its copy still sells ("book a call at your
+     *                     convenience", the re-engagement CTA).
+     *   SSS_CANCEL_MSG    now UTILITY - and the ONLY thing that changed is the copy. The
+     *                     reviewer removed "we had to release your slot for another candidate"
+     *                     and the book-a-call-with-Ameen line; the YES was never there to
+     *                     remove.
+     *
+     * So the pair proves the rule in both directions: the copy decides, and a template can cross
+     * the line only by changing what it says. If somebody ever strips promo copy to win UTILITY
+     * back on another step, the YES must still not be what they take out.
+     */
+    const byStep = (step: string) => SUBMISSION_TEMPLATES.find((t) => t.step === step)!;
+    const disco = byStep("DISCO_CANCEL_MSG");
+    const sss = byStep("SSS_CANCEL_MSG");
+
+    for (const t of [disco, sss]) {
+      assert.doesNotMatch(submissionBody(t), /reply \*?YES/i, `${t.name} asks for no confirmation`);
     }
+    assert.equal(disco.category, "MARKETING", "…and the one whose copy still sells is MARKETING");
+    assert.equal(sss.category, "UTILITY", "…while the one whose copy was stripped is UTILITY");
+
+    // The stripped body must actually be stripped - otherwise the line above is a label, which is
+    // the one thing this whole describe block exists to prevent.
+    const body = submissionBody(sss);
+    assert.doesNotMatch(body, /another candidate/i, "the pressure line is still in the SSS cancellation");
+    assert.doesNotMatch(body, /Ameen/i, "the book-a-call-with-Ameen CTA is still in the SSS cancellation");
   });
 
   test("every template explains its category", () => {

@@ -3,7 +3,7 @@ import { cache } from "react";
 import type { WhatsAppStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decideBookOrder } from "@/lib/book-order";
-import { ACTIVE } from "@/lib/soft-delete";
+import { ACTIVE, INCOME_COUNTABLE } from "@/lib/soft-delete";
 import { getBookOrderConfig } from "./founder-config";
 
 /**
@@ -103,7 +103,7 @@ export const getBookOrderData = cache(async () => {
   const sums = studentIds.length
     ? await prisma.income.groupBy({
         by: ["studentId"],
-        where: { ...ACTIVE, studentId: { in: studentIds } },
+        where: { ...INCOME_COUNTABLE, studentId: { in: studentIds } },
         _sum: { amountInrMinor: true },
       })
     : [];

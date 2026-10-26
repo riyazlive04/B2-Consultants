@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { KeyRound, Loader2 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
-import { normalizePassword } from "@/lib/credentials";
+import { MIN_PASSWORD_LENGTH, PASSWORD_HINT, normalizePassword } from "@/lib/credentials";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { BrandLogo } from "@/components/shell/BrandLogo";
 
@@ -46,7 +46,7 @@ export default function ResetPasswordForm({ token }: { token: string | null }) {
       return;
     }
     if (next.length < 8) {
-      setError("Your password must be at least 8 characters.");
+      setError(`Your password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
       return;
     }
     setBusy(true);
@@ -79,7 +79,7 @@ export default function ResetPasswordForm({ token }: { token: string | null }) {
           </div>
 
           <h2 className="font-display text-[23px] font-bold text-ink">Choose a new password</h2>
-          <p className="mt-1 text-[13px] text-ink-2">At least 8 characters.</p>
+          <p className="mt-1 text-[13px] text-ink-2">{PASSWORD_HINT}</p>
 
           {token ? (
             <form onSubmit={submit} className="mt-5 flex flex-col gap-4">
@@ -88,7 +88,7 @@ export default function ResetPasswordForm({ token }: { token: string | null }) {
                 <input
                   type="password"
                   required
-                  minLength={8}
+                  minLength={MIN_PASSWORD_LENGTH}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
@@ -103,7 +103,7 @@ export default function ResetPasswordForm({ token }: { token: string | null }) {
                 <input
                   type="password"
                   required
-                  minLength={8}
+                  minLength={MIN_PASSWORD_LENGTH}
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}
                   placeholder="••••••••"

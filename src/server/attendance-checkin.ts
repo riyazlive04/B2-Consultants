@@ -3,6 +3,7 @@ import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { remainingMs } from "@/lib/attendance-window";
 import { getAttendanceConfig } from "./founder-config";
+import { SESSION_ON } from "@/lib/session-status";
 
 /**
  * "ATTENDANCE IS OPEN" - the student's half of the window.
@@ -64,6 +65,10 @@ export const getMyOpenCheckIns = cache(async (userId: string): Promise<OpenCheck
   const sessions = await prisma.classSession.findMany({
     where: {
       delivery: "LIVE",
+      // Called-off classes accept no check-in (issue C3). `cancelBatchSession` already moves
+      // `attendanceClosesAt` back to now, so this is belt-and-braces - but the two must agree,
+      // and the one that is a RULE rather than a side effect belongs in the `where`.
+      ...SESSION_ON,
       // The index does the work: a window that has not closed yet. `opensAt` is not tested
       // here for the same reason `windowState` does not test it - opening is immediate.
       attendanceClosesAt: { gte: now },

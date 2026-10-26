@@ -81,7 +81,7 @@ export async function routeDiscoveryCall(form: FormData): Promise<ActionResult> 
   const routesToLevel3 = d.outcome === "QUALIFIED_FOR_SSS";
 
   /**
-   * The Success Strategy Session the specialist agreed on the call.
+   * The Solution Strategy Session the specialist agreed on the call.
    *
    * A datetime-local carries no zone and the specialist types IST, so the fixed +05:30 offset is
    * exact (India has no DST) - the same conversion `setHighlyQualified` and `setContactedAt` do.
@@ -94,7 +94,7 @@ export async function routeDiscoveryCall(form: FormData): Promise<ActionResult> 
     const when = new Date(`${d.sssAt}:00+05:30`);
     if (Number.isNaN(when.getTime())) return { ok: false, error: "That isn't a valid SSS date/time" };
     // A session in the past would arm the whole ladder at once and tell the prospect their
-    // Success Strategy Session "is scheduled for" a date that has already gone.
+    // Solution Strategy Session "is scheduled for" a date that has already gone.
     if (when.getTime() <= Date.now()) return { ok: false, error: "Pick an SSS date/time in the future" };
     sssAt = when;
   }

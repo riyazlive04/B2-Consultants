@@ -532,7 +532,7 @@ export async function runDueOutreach(): Promise<OutreachRun> {
           entityType: "OutreachJourney",
           entityId: id,
           summary: isSss
-            ? `Released ${lead.name}'s Success Strategy Session${res.freedSlot ? " and re-opened the slot" : ""}`
+            ? `Released ${lead.name}'s Solution Strategy Session${res.freedSlot ? " and re-opened the slot" : ""}`
             : `Released ${lead.name}'s discovery call${res.freedSlot ? " and re-opened the slot" : ""}`,
           meta: { freedSlot: res.freedSlot, step: c.step },
         });

@@ -22,6 +22,7 @@ import type { WeeklyReport } from "@/lib/weekly-report";
 import { signalForStudent } from "@/lib/signals";
 import { formatDate, formatInrMinor, formatPct } from "@/lib/format";
 import { safeAction } from "@/lib/action-guard";
+import { MIN_PASSWORD_LENGTH, PASSWORD_HINT } from "@/lib/credentials";
 import {
   LEAD_SOURCE_LABELS, MILESTONE_LABELS, optionsFrom, OUTCOME_ACHIEVED_LABELS,
   PROGRAM_LEVEL_LABELS, SIGNAL_LABELS, STUDENT_STATUS_LABELS, TASK_COMPLETION_LABELS,
@@ -736,8 +737,8 @@ export function StudentDetailClient({
                 </Field>
               </div>
               <div className="w-56">
-                <Field label="Temporary password" hint="Min 8 characters">
-                  <TextInput name="password" required minLength={8} defaultValue="" placeholder="e.g. journey-2026" />
+                <Field label="Temporary password" hint={PASSWORD_HINT}>
+                  <TextInput name="password" required minLength={MIN_PASSWORD_LENGTH} defaultValue="" placeholder="e.g. journey-sprint-2026" />
                 </Field>
               </div>
               <div className="w-full">

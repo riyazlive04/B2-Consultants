@@ -445,7 +445,7 @@ export const DEFAULT_BOOKING_CALENDARS_CONFIG: BookingCalendarsConfig = { calend
  * The old shape is a bare `SlotPatternConfig` under the same AppSetting key. Rather than a data
  * migration - which would have to run before the first deploy that reads this, and would strand
  * anyone who rolled back - the old shape is simply understood on read and rewritten the next
- * time the console saves. Production's live pattern (Asma, Mon–Fri 18:00–21:00) therefore keeps
+ * time the console saves. Production's live pattern (Asma, Mon-Fri 18:00-21:00) therefore keeps
  * generating slots across the deploy without anyone touching it.
  */
 export function coerceBookingCalendarsConfig(value: unknown): BookingCalendarsConfig {
@@ -616,7 +616,7 @@ export const commissionRulesConfigSchema = z.object({
   /**
    * The stand-in's share of a covered leg (spec Part 2 §7.1: "the substitute keeps 20%, the
    * original owner keeps 80% of that portion - configurable"). Applies ONLY to a leg whose
-   * DiscoveryOutcome names a `coveredForId`; the owner takes the remainder (100 − this).
+   * DiscoveryOutcome names a `coveredForId`; the owner takes the remainder (100 - this).
    *
    * It splits the leg, it does not add to it: a covered discovery still costs the business
    * splitPct of the payment, just divided between two people.
@@ -1314,7 +1314,7 @@ export function timeInputToIstMinutes(value: string): number | null {
 // ───────────────────────────── SSS (sales) call ─────────────────────────────
 
 /**
- * Success Strategy Session config - the founder-run sales/closing call. Founder-editable via
+ * Solution Strategy Session config - the founder-run sales/closing call. Founder-editable via
  * AppSetting("sssConfig"), same lazy-default pattern as the configs above. Read by the SSS slot
  * engine (`server/sss-slots.ts`).
  *

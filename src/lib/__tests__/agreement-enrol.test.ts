@@ -39,7 +39,7 @@ test("a contact with exactly one student is adopted, not duplicated", () => {
   assert.deepEqual(state, { kind: "enrolled", studentId: "stu_9", code: "B2-0009" });
 });
 
-test("a contact with several students refuses to guess", () => {
+test("a contact with several students refuses to guess - and names the candidates", () => {
   const state = enrolmentState({
     student: null,
     lead: lead([
@@ -47,7 +47,23 @@ test("a contact with several students refuses to guess", () => {
       { id: "stu_2", code: "B2-0002" },
     ]),
   });
-  assert.deepEqual(state, { kind: "ambiguous", count: 2 });
+  /**
+   * The CANDIDATES ride along now (issue C6).
+   *
+   * The refusal to guess is unchanged and is still what this test is about. What was wrong is
+   * that it was a dead end: the card could only say "two records, link it by hand", naming
+   * neither and linking to neither - so the one state that exists because a human must decide
+   * was the one state with nothing to decide with. Listing them is not guessing; the server
+   * still demands an explicit `adoptStudentId` and re-checks it belongs to this lead.
+   */
+  assert.deepEqual(state, {
+    kind: "ambiguous",
+    count: 2,
+    candidates: [
+      { id: "stu_1", code: "B2-0001" },
+      { id: "stu_2", code: "B2-0002" },
+    ],
+  });
 });
 
 test("an agreement raised against nobody has nothing to enrol", () => {

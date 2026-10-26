@@ -16,5 +16,21 @@ export const CONSENT_POLICY_VERSION = "2026-07-17";
 export const CONSENT_LABEL =
   "I agree that B2 Consultants may store the details I've entered here and contact me about my discovery call.";
 
+/**
+ * The wording for the no-slots capture on /book (issue A6).
+ *
+ * A SEPARATE string rather than a reuse of CONSENT_LABEL, because the two agreements are not the
+ * same agreement: that one is about a call the person has just booked, this one is about being
+ * contacted when a time opens up. Storing the booking wording against a waitlist sign-up would
+ * make the ConsentRecord say something the person was never shown, which is the one thing that
+ * file's header rules out.
+ *
+ * CONSENT_POLICY_VERSION is deliberately NOT bumped: that version names the privacy policy in
+ * force, and adding a second purpose does not change the policy. The `purpose` column is what
+ * records which sentence was on screen.
+ */
+export const CONSENT_LABEL_NO_SLOTS =
+  "I agree that B2 Consultants may store the details I've entered here and contact me when a discovery call time opens up.";
+
 /** The value the checkbox posts. Absence - an unticked box posts nothing - must read as refusal. */
 export const CONSENT_VALUE = "yes";

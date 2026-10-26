@@ -131,6 +131,33 @@ type SectionCatalogueEntry = {
   /** hidden in code: ships disabled by default (nav + route), but the console can still re-enable it */
   readonly hidden?: boolean;
   /**
+   * THE SCREENS WHERE THE READ IS THE RISK  (issue B7)
+   *
+   * ── The asymmetry this names ────────────────────────────────────────────────────────────
+   * `lib/capabilities.ts` is explicit that seeing and doing are separate concerns, so that "a
+   * Head coach can be given the Finance screen to read the numbers without being able to post
+   * to the ledger". That holds for the WRITES: `finance.write` is a capability, granted
+   * per-person, deliberately, ADMIN-only by default.
+   *
+   * The READ had no such ceremony. It is step 5 of `sectionAllowed` - `s.roles.includes(role)` -
+   * where `s.roles` comes from the founder's saved JSON. So adding USER to `finance` in
+   * Console → Sections is one unconfirmed checkbox that hands every telecaller the P&L, the
+   * runway, the receivables ledger and the owner's equity. The destructive action was gated and
+   * the confidential one was a toggle, which is backwards: a bad write is visible and
+   * reversible, and a disclosure is neither.
+   *
+   * This flag does NOT change what `sectionAllowed` decides. It is metadata the Console reads to
+   * require a typed confirmation before WIDENING one of these sections to a new role, and to
+   * mark the row so the founder can see which checkboxes are the expensive ones. Narrowing is
+   * never gated - taking access away should always be one click.
+   *
+   * ── Why it is a property of the catalogue ───────────────────────────────────────────────
+   * Whether a screen shows the company's money is a fact about the screen, like `personal` and
+   * unlike a label. If it lived in the saved config the founder could switch off the
+   * confirmation on the very section it exists to protect.
+   */
+  readonly sensitive?: boolean;
+  /**
    * OFF THE RAIL, STILL OPEN.
    *
    * Distinct from `hidden`, and the distinction matters: `hidden` sets `enabled: false`, which
@@ -167,8 +194,8 @@ export const SECTION_CATALOGUE = [
   // First on the rail by the founder's choice (17 Sep 2026): Finance is what Ameen opens most.
   // Admin-only except Bonus & Commission, so a Head sees that one item at the top and no other role
   // sees this block at all.
-  { key: "finance", label: "Finance", href: "/finance", phase: 1, icon: "wallet", group: "Finance", roles: ["ADMIN"] },
-  { key: "cash", label: "Cash Health", href: "/cash", phase: 3, icon: "landmark", group: "Finance", roles: ["ADMIN"] },
+  { key: "finance", label: "Finance", href: "/finance", phase: 1, icon: "wallet", group: "Finance", roles: ["ADMIN"], sensitive: true },
+  { key: "cash", label: "Cash Health", href: "/cash", phase: 3, icon: "landmark", group: "Finance", roles: ["ADMIN"], sensitive: true },
   /*
    * REMOVED 23/10/2026: `ledger` - the read-only journal, trial balance and audit-chain check.
    *
@@ -188,12 +215,12 @@ export const SECTION_CATALOGUE = [
    * screen can call them with no new engine code - see the note at the top of server/ledger.ts.
    */
   // Synamate Payments parity (Phase 3): invoices, estimates, products, subscriptions.
-  { key: "payments", label: "Payments", href: "/payments", phase: 3, icon: "receipt", group: "Finance", roles: ["ADMIN"] },
+  { key: "payments", label: "Payments", href: "/payments", phase: 3, icon: "receipt", group: "Finance", roles: ["ADMIN"], sensitive: true },
   // Kept last in the Finance group on purpose: the default sidebar order follows this
   // catalogue order, so placing "Bonus & Commission" after Payments drops it to the bottom of Finance.
   // §3 "Commissions - all": Head R. The telecaller tiers get their OWN commission on My Desk, not
   // the whole-team board - §3 gives them `O` here, not `R`.
-  { key: "telecaller", label: "Bonus & Commission", href: "/telecaller", phase: 1, icon: "phone", group: "Finance", roles: ["ADMIN", "HEAD"] },
+  { key: "telecaller", label: "Bonus & Commission", href: "/telecaller", phase: 1, icon: "phone", group: "Finance", roles: ["ADMIN", "HEAD"], sensitive: true },
 
   // ─────────────────────────────── My Work ───────────────────────────────
   // What the person signed in is doing today, first, because it is the only block that is
@@ -391,7 +418,7 @@ export const SECTION_CATALOGUE = [
   // §3: Head R · L1/L2/L3 E. Tutor and Student are `O` - their own calls surface on their own
   // screens, and this is the whole-team calendar, so they are not granted it.
   { key: "bookings", label: "Bookings", href: "/bookings", phase: 1, icon: "calendar-check", group: "Sales", roles: ["ADMIN", "HEAD", "USER"] },
-  // The Outreach Specialist SOP queue (Script_for_Outreach_Specialist.docx, Steps 1–23) + the
+  // The Outreach Specialist SOP queue (Script_for_Outreach_Specialist.docx, Steps 1-23) + the
   // Key Metrics sheet it feeds. USER is in the default list because the outreach specialist IS a
   // USER - this is their day's work, not an admin report.
   { key: "outreach", label: "Outreach", href: "/outreach", phase: 1, icon: "message-circle", group: "Sales", roles: ["ADMIN", "USER"], offRail: true },
@@ -499,13 +526,13 @@ export const SECTION_CATALOGUE = [
    * They now sit in different groups AND read differently. `key` is untouched, so no access, no
    * route and no saved config changes.
    */
-  { key: "funnel", label: "Funnel Report", href: "/funnel", phase: 3, icon: "filter", group: "Insights", roles: ["ADMIN"] },
+  { key: "funnel", label: "Funnel Report", href: "/funnel", phase: 3, icon: "filter", group: "Insights", roles: ["ADMIN"], sensitive: true },
 
   // ──────────────────────────────── Admin ────────────────────────────────
   // Who runs the system. Every member is ADMIN-only, so this group simply does not render for
   // anyone else - which is exactly why "App Guide" was moved out of it and up to My Work.
   { key: "console", label: "Founder Console", href: "/console", phase: 1, icon: "sliders", group: "Admin", roles: ["ADMIN"], locked: true },
-  { key: "people", label: "Users", href: "/people", phase: 2, icon: "users", group: "Admin", roles: ["ADMIN"] },
+  { key: "people", label: "Users", href: "/people", phase: 2, icon: "users", group: "Admin", roles: ["ADMIN"], sensitive: true },
   /**
    * What B2 Consultants sells: the coaching tiers, and the GL account each one's revenue posts to.
    *
@@ -578,6 +605,11 @@ export type ResolvedSection = SectionSetting & {
   offRail: boolean;
   /** The signed-in person's own page: STUDENT only, whatever the config says. See the catalogue. */
   personal: boolean;
+  /**
+   * Widening this section to a new role needs a typed confirmation in the Console (issue B7).
+   * Code truth, never read from the saved config - see `sensitive` on the catalogue entry.
+   */
+  sensitive: boolean;
 };
 
 /**
@@ -593,6 +625,7 @@ export function resolveSections(config: SectionsConfig | null): ResolvedSection[
     const hiddenByCode = "hidden" in base && base.hidden === true;
     const offRailByCode = "offRail" in base && base.offRail === true;
     const personal = "personal" in base && base.personal === true;
+    const sensitive = "sensitive" in base && base.sensitive === true;
     return {
       key: base.key,
       href: base.href,
@@ -602,6 +635,9 @@ export function resolveSections(config: SectionsConfig | null): ResolvedSection[
       // page is self-scoped is a fact about the code, not a setting. The founder can still
       // switch the section off entirely, or rename and reorder it.
       personal,
+      // Same reasoning, same reason it is not read from the config: a founder who could switch
+      // this off would be switching off the confirmation that protects the money screens.
+      sensitive,
       label: s?.label?.trim() || base.label,
       icon: s?.icon ?? base.icon,
       group: s?.group ?? base.group,

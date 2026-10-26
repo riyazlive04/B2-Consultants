@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { TEMPLATES } from "../../../scripts/wati-templates-utility-docx";
+import { NEEDS_ACTION, PENDING_SUBMISSION, TEMPLATES } from "../../../scripts/wati-templates-utility-docx";
+import { SUBMISSION_TEMPLATES } from "../whatsapp-submission";
 import { WHATSAPP_AVAILABLE_VARS, WHATSAPP_KINDS } from "../whatsapp";
 
 /**
@@ -146,5 +147,133 @@ describe("Enrolment welcome - the one message a new student gets", () => {
     // Category mismatch is the most common rejection reason. Someone who has signed and paid
     // being told their tutor and start time is service information, not marketing.
     for (const t of welcome) assert.equal(t.category, "UTILITY", `${t.name} is ${t.category}`);
+  });
+});
+
+describe("the batch awaiting submission", () => {
+  /**
+   * `PENDING_SUBMISSION` drives a SECOND document - `npm run docs:whatsapp:batch` - listing only
+   * the templates nobody has typed into WATI yet: the seventeen pipeline stage messages that have
+   * never had a template at all (issue W2), and the password reset code (issue C4).
+   *
+   * The count is not written here. It said "twenty-five: seven UTILITY rewrites whose names used
+   * to collide with the SOP pack's (issue W1), seventeen pipeline stage messages ... and the
+   * password reset code" - and then the approval sheet settled every one of the seven and they
+   * were deleted, leaving a docblock describing a batch almost half of which no longer existed.
+   * Read the count off the array; the assertions below already do.
+   *
+   * It is a hand-written list of NAMES, because being pending is a fact about a moment rather
+   * than a property of a template - so it has to be maintained, which means it can rot. These
+   * two assertions are what stop it rotting SILENTLY, and silence is the whole risk: a batch
+   * document that quietly omits a template gives its reader no way to know it is short, and the
+   * missing one simply never gets submitted.
+   */
+  it("names only templates that exist", () => {
+    const names = new Set(TEMPLATES.map((t) => t.name));
+    const missing = PENDING_SUBMISSION.filter((e) => !names.has(e.name)).map((e) => e.name);
+    assert.deepEqual(
+      missing,
+      [],
+      `PENDING_SUBMISSION names templates not in TEMPLATES - a typo or a rename: ${missing.join(", ")}`,
+    );
+  });
+
+  it("names each one once, and says why each is here", () => {
+    const seen = new Set<string>();
+    const dupes = PENDING_SUBMISSION.filter((e) => (seen.has(e.name) ? true : (seen.add(e.name), false)));
+    assert.deepEqual(dupes.map((e) => e.name), [], "a template listed twice would be submitted twice");
+    for (const e of PENDING_SUBMISSION) {
+      // The "why" is the column the person submitting actually reads - a rewrite that collides
+      // with an approved template needs different care from a touchpoint that has never had one.
+      assert.ok(e.why.trim().length > 10, `${e.name} needs a reason for being in the batch`);
+    }
+  });
+
+  it("covers every stage message, because none of them has ever had a template", () => {
+    // The seventeen are the bulk of the batch and the easiest to leave half-done: they were added
+    // in one pass, and a stage omitted here is a stage whose WhatsApp half stays dead while the
+    // other sixteen come alive - which looks like a bug in Stage Messages rather than a gap in a
+    // submission list.
+    const stageTemplates = TEMPLATES.filter((t) => t.kind.startsWith("STAGE_"));
+    const batch = new Set(PENDING_SUBMISSION.map((e) => e.name));
+    const absent = stageTemplates.filter((t) => !batch.has(t.name)).map((t) => t.name);
+    assert.deepEqual(absent, [], `stage templates missing from the submission batch: ${absent.join(", ")}`);
+    assert.equal(stageTemplates.length, 17, "there are 17 LeadStages, so there should be 17 stage templates");
+  });
+});
+
+describe("the work list", () => {
+  /**
+   * `NEEDS_ACTION` drives a FOURTH document - `npm run docs:whatsapp:action` - and it answers a
+   * different question from `PENDING_SUBMISSION`: not "what has never been submitted" but "what
+   * do I have to do something about". The gap between those two is where a template gets lost. A
+   * body edited after approval is pending on no list, and it is the most urgent item there is,
+   * because Meta holds one body per (name, language) - so the edit REPLACES the approved template
+   * in review and its touchpoint sends nothing until it clears, logging a skip rather than
+   * failing. Nobody notices.
+   *
+   * These assertions guard the two ways that list can rot silently.
+   */
+  it("names only templates that exist in one of the two packs", () => {
+    // Deliberately checked against BOTH packs: three entries are SOP templates, and that is the
+    // reason the document is worth generating - "what needs approval" is a question about B2's
+    // WATI account, not about a source file.
+    const names = new Set([...TEMPLATES.map((t) => t.name), ...SUBMISSION_TEMPLATES.map((t) => t.name)]);
+    const missing = NEEDS_ACTION.filter((e) => !names.has(e.name)).map((e) => e.name);
+    assert.deepEqual(missing, [], `NEEDS_ACTION names templates in neither pack - a typo or a rename: ${missing.join(", ")}`);
+  });
+
+  it("names each one once, and says why", () => {
+    const seen = new Set<string>();
+    const dupes = NEEDS_ACTION.filter((e) => (seen.has(e.name) ? true : (seen.add(e.name), false)));
+    assert.deepEqual(dupes.map((e) => e.name), [], "a template listed twice would be submitted twice");
+    for (const e of NEEDS_ACTION) {
+      assert.ok(e.why.trim().length > 20, `${e.name} needs a reason for being on the work list`);
+    }
+  });
+
+  it("carries every unsubmitted template, so the two documents can never disagree", () => {
+    // The first group of NEEDS_ACTION is DERIVED from PENDING_SUBMISSION rather than retyped, and
+    // this is what holds that derivation in place: if somebody ever replaces the spread with a
+    // hand-written copy of the names, the next template added to the batch is one the work list
+    // silently omits - and the work list is the document people act on.
+    const action = new Set(NEEDS_ACTION.map((e) => e.name));
+    const absent = PENDING_SUBMISSION.filter((e) => !action.has(e.name)).map((e) => e.name);
+    assert.deepEqual(absent, [], `awaiting submission but not on the work list: ${absent.join(", ")}`);
+    for (const e of PENDING_SUBMISSION) {
+      const entry = NEEDS_ACTION.find((a) => a.name === e.name)!;
+      assert.equal(entry.action, "APPROVE", `${e.name} has never been submitted, so its action cannot be ${entry.action}`);
+    }
+  });
+
+  it("only flags a category change on a re-submission", () => {
+    // `categoryChanged` is a second thing to set inside an EDIT of an existing template. On a
+    // first submission there is no old category to change from, so the flag there would print an
+    // instruction with nothing to do, on the one page where a reader is already being careful.
+    const wrong = NEEDS_ACTION.filter((e) => e.categoryChanged && e.action !== "RESUBMIT").map((e) => e.name);
+    assert.deepEqual(wrong, [], `categoryChanged only means something on a re-submission: ${wrong.join(", ")}`);
+  });
+
+  it("marks a re-submission wherever the SOP pack records an accepted rewrite", () => {
+    /**
+     * THE CHECK THAT CATCHES THE EXPENSIVE MISTAKE.
+     *
+     * An `acceptedFix` in the SOP pack means the body B2 will submit is no longer the body B2
+     * submitted last time. That is exactly the "approved once, then edited" case, so every such
+     * template must appear on the work list - unless its rewrite predates the last submission
+     * round, in which case the round carried the new body and there is nothing outstanding.
+     *
+     * Hard-coding the cutoff is the point: it is the date of the last round, a fact about history
+     * that does not change. Anything decided AFTER it has not been through review.
+     */
+    const LAST_SUBMISSION_ROUND = "2026-08-03";
+    const edited = SUBMISSION_TEMPLATES.filter((t) => t.acceptedFix && t.acceptedFix.decidedOn > LAST_SUBMISSION_ROUND);
+    assert.ok(edited.length > 0, "fixture check - there should be rewrites newer than the last round");
+    const onList = new Map(NEEDS_ACTION.map((e) => [e.name, e]));
+    for (const t of edited) {
+      const entry = onList.get(t.name);
+      assert.ok(entry, `${t.name} was rewritten on ${t.acceptedFix!.decidedOn}, after the last submission round, but is not on the work list`);
+      assert.equal(entry!.action, "RESUBMIT", `${t.name} has a changed body, so it is a re-submission, not ${entry!.action}`);
+    }
   });
 });

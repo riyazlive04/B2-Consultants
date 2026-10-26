@@ -116,16 +116,16 @@ const DEFAULT_COPY: Record<LeadStage, { subject: string; body: string }> = {
     body: `Hi {{first_name}},\n\nThank you for taking the time to speak with our team. We will be in touch shortly with the next steps for your move to Germany.`,
   },
   SSS_BOOKED: {
-    subject: `{{first_name}}, your Success Strategy Session is booked`,
-    body: `Hi {{first_name}},\n\nYour Success Strategy Session with B2 Consultants is booked. In this session we will map out your personal plan for landing a job in Germany. We will send you a reminder before the call.`,
+    subject: `{{first_name}}, your Solution Strategy Session is booked`,
+    body: `Hi {{first_name}},\n\nYour Solution Strategy Session with B2 Consultants is booked. In this session we will map out your personal plan for landing a job in Germany. We will send you a reminder before the call.`,
   },
   SSS_COMPLETED: {
-    subject: `{{first_name}}, your Success Strategy Session is confirmed`,
-    body: `Hi {{first_name}},\n\nThanks for confirming your Success Strategy Session. We look forward to speaking with you. If you have any questions before the call, just reply to this email.`,
+    subject: `{{first_name}}, your Solution Strategy Session is confirmed`,
+    body: `Hi {{first_name}},\n\nThanks for confirming your Solution Strategy Session. We look forward to speaking with you. If you have any questions before the call, just reply to this email.`,
   },
   PROPOSAL_SENT: {
     subject: `{{first_name}}, your B2 Consultants offer`,
-    body: `Hi {{first_name}},\n\nThank you for your time in the Success Strategy Session. You now have our offer for the coaching programme. Take your time to go through it, and reply to this email if you have any questions. We are happy to help you decide.`,
+    body: `Hi {{first_name}},\n\nThank you for your time in the Solution Strategy Session. You now have our offer for the coaching programme. Take your time to go through it, and reply to this email if you have any questions. We are happy to help you decide.`,
   },
   SENT_TO_WORKSHOP: {
     subject: `{{first_name}}, you are invited to our workshop`,

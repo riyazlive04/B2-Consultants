@@ -3,7 +3,7 @@ import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { istMonthRange, istToday, istYearRange } from "@/lib/dates";
 import { aggEurMinor, aggInrMinor, sumAgg } from "@/lib/money";
-import { ACTIVE } from "@/lib/soft-delete";
+import { ACTIVE, INCOME_COUNTABLE } from "@/lib/soft-delete";
 import {
   allocatePayments, isSettled, studentKey, type PlanInput, type PaymentInput,
 } from "@/lib/payment-allocation";
@@ -56,7 +56,18 @@ export const getPendingRows = cache(async () => {
       },
     }),
     prisma.income.findMany({
-      where: ACTIVE,
+      /**
+       * `INCOME_COUNTABLE`, not `ACTIVE` (issue C2).
+       *
+       * This is the allocator's input - it decides what every plan on the Finance page has
+       * "Collected" and therefore what is still owed. A reversed payment (bounced cheque,
+       * reversed UPI) is money that is not there, so counting it here would show a plan as
+       * settled while its instalments were plainly still due: the exact per-student
+       * cross-credit bug FIN-12 fixed, arriving through a different column.
+       *
+       * `paid-so-far-excludes-archived.test.ts` enforces this at every per-student money total.
+       */
+      where: INCOME_COUNTABLE,
       select: {
         studentId: true, studentName: true, pendingPaymentId: true,
         amountInrMinor: true, amountEurMinor: true, fxRateUsed: true,

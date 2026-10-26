@@ -369,6 +369,39 @@ export async function unsettleIncome(
     data: { status: "DUE", paidDate: null },
   });
 
+  /**
+   * ════════════════════════════════════════════════════════════════════════════════════════
+   *  RE-OPEN THE CHASE LADDER  (issue C1)
+   * ════════════════════════════════════════════════════════════════════════════════════════
+   *
+   * Putting an instalment back to DUE was only HALF of letting the ladder pick it up again, and
+   * the comment above has been describing the other half as done since it was written: "an
+   * instalment that stayed PAID after its payment was removed is a student the ladder will never
+   * chase for money they have not paid." It stayed un-chased either way.
+   *
+   * `stageFor` fires each rung ONCE, ever, from the `DunningEvent` rows - so an instalment that
+   * had already been chased to FINAL before it was settled came back DUE with every stage
+   * recorded as sent, and `stageFor` returned null for it for the rest of time. Silently, and on
+   * no list.
+   *
+   * Bumping the cycle starts a new pass: the old cycle's rows stay exactly where they are (the
+   * trail is still append-only and still answers "what did we send this student, and when"), and
+   * UPCOMING / MISSED / FINAL are all available again.
+   *
+   * ── Why on EVERY unsettle, not only on a reversal ───────────────────────────────────────
+   * This runs for an archive and an edit as well as for a reversal, and all three leave the same
+   * situation: an instalment that is open and that nobody is going to chase. Whether the payment
+   * was a typo or a bounced cheque changes what the money means; it does not change that the
+   * student still owes this instalment and that the ladder is the only thing that will ask.
+   *
+   * `increment` rather than a read-then-write: two reversals landing together must not settle on
+   * the same cycle number, which is the one way this could re-create the bug it fixes.
+   */
+  await tx.instalment.updateMany({
+    where: { id: { in: prior.instalmentIds } },
+    data: { dunningCycle: { increment: 1 } },
+  });
+
   const nextDue = await tx.instalment.findFirst({
     where: { pendingPaymentId: prior.planId, status: { not: "PAID" } },
     orderBy: [{ dueDate: "asc" }, { seq: "asc" }],

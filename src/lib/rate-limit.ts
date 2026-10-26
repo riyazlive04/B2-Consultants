@@ -149,6 +149,23 @@ export const RATE_RULES = {
   cron: { capacity: 20, refillPerSec: 20 / 60 },
   /** For the 1-minute and 5-minute ticks (outreach, alerts). */
   cronFrequent: { capacity: 120, refillPerSec: 2 },
+
+  /**
+   * "Request access" on the login screen (issue B2).
+   *
+   * This was the one unauthenticated WRITE in the app with no brake at all, and the thing it
+   * writes is the queue an admin approves accounts from - so flooding it is both a
+   * denial-of-onboarding (the pending cap refused every genuine request once it was full) and a
+   * social-engineering surface, because every row is attacker-chosen name/email/role text that
+   * the approval screen pre-fills a create-user form from.
+   *
+   * Tighter than every other rule here, because the legitimate volume is near zero: this app
+   * onboards a handful of people a year, and nobody has a reason to file two requests in an
+   * hour, let alone three. The global rule is what actually matters - a hundred IPs each
+   * politely taking their three would otherwise still fill the queue.
+   */
+  accessRequestPerIp: { capacity: 3, refillPerSec: 3 / 3600 }, // 3 burst, then 3/hour
+  accessRequestGlobal: { capacity: 10, refillPerSec: 10 / 3600 },
 } satisfies Record<string, RateRule>;
 
 /** A real 429 - with `Retry-After`, which Pabbly and WATI both honour and will redeliver on. */

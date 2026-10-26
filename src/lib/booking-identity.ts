@@ -48,6 +48,30 @@ export function findLiveBookingForPerson<T extends BookingContact>(
  * What the prospect is told. It deliberately does NOT repeat the booked time: this is a public,
  * unauthenticated form, and anyone who types a number would otherwise learn when that person's
  * call is. The team can see the booking and move it.
+ *
+ * ── WHY THIS IS NOW CONDITIONAL (issue A5) ──────────────────────────────────────────────
+ * The one wording said "reply to the WhatsApp message we sent you". When WATI is not armed, no
+ * such message was ever sent - `lib/engines.ts` is explicit that with WhatsApp off "no booking
+ * confirmations, reminders, payment nudges or SOP messages reach anyone". So a prospect who had
+ * received nothing was instructed to reply to it, and the only alternative offered was "contact
+ * the B2 Consultants team" with no channel named. That is a dead end at the single most
+ * expensive moment in the funnel: somebody who has already decided to talk to us.
+ *
+ * Both branches now name a channel the prospect can actually use. The caller passes
+ * `whatsappArmed` from `getWatiRuntime().enabled`, which is the same flag that decides whether
+ * the confirmation went out in the first place - so the sentence cannot claim a message the
+ * system did not send.
  */
-export const ALREADY_BOOKED_MESSAGE =
-  "You already have a Discovery Call booked with us. To change the time, reply to the WhatsApp message we sent you, or contact the B2 Consultants team, and we will move it for you.";
+export function alreadyBookedMessage(o: {
+  /** `getWatiRuntime().enabled` - did a confirmation actually go out? */
+  whatsappArmed: boolean;
+  /** The business WhatsApp/phone number to fall back to. */
+  contactNumber: string;
+  /** The business email to fall back to. */
+  contactEmail: string;
+}): string {
+  const change = o.whatsappArmed
+    ? `reply to the WhatsApp message we sent you, or message us on ${o.contactNumber}`
+    : `message us on WhatsApp at ${o.contactNumber}, or email ${o.contactEmail}`;
+  return `You already have a Discovery Call booked with us. To change the time, ${change}, and we will move it for you.`;
+}

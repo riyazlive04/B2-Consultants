@@ -1,7 +1,7 @@
 /**
  * Outreach Specialist SOP - the written process, as data.
  *
- * Source of truth: `Script for Outreach Specialist.docx`, Steps 1–23. The message bodies below are
+ * Source of truth: `Script for Outreach Specialist.docx`, Steps 1-23. The message bodies below are
  * transcribed VERBATIM from that document - including its curly apostrophes (’), its emoji, its
  * `*bold*` WhatsApp markers, its `<<INSERT ZOOM LINK HERE>>` placeholders, and its trailing
  * spaces. The QA checklist (§S) requires a character-diff against the SOP to pass, so DO NOT
@@ -295,8 +295,51 @@ Use this link to book a call: https://optin.b2consultants.de/apply
 
 Wishing you the best. `;
 
-/** Step 19 - SSS Call Confirmation WhatsApp 1 (≥24h before; carries the personalized video). */
-const TPL_SSS_CONFIRM_1 = `Hey [Prospect’s First Name], this is [Your Name] from B2 Consultants
+/**
+ * ════════════════════════════════════════════════════════════════════════════════════════════
+ *  THE THREE SSS BODIES, AS THE REVIEWER REWROTE THEM  (26 Oct 2026)
+ * ════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * These are no longer transcriptions of Script_for_Outreach_Specialist.docx. The reviewer wrote
+ * new bodies for all three in the approval sheet, and the originals are kept below the new ones
+ * exactly as `TPL_INTRO_SUPERSEDED` is kept: the verbatim rule exists so the transcription is
+ * evidence of what the team agreed to say, and a change to it is only defensible while the thing
+ * it replaced is still readable.
+ *
+ * TWO DECISIONS ARE BAKED IN HERE, and both are larger than they look.
+ *
+ * 1. THE CALL IS THE "SOLUTION STRATEGY SESSION". The SOP document said "Success" throughout;
+ *    the reviewer corrected it on four separate templates, so it is a correction and not a
+ *    preference. `lib/outreach-sla.ts` had been saying "Solution Strategy Call" for months.
+ *
+ * 2. THE PROMOTIONAL COPY IS GONE, which is what lets all three be submitted as UTILITY instead
+ *    of MARKETING. What came out: the personalised-video pitch and "we're excited to help you
+ *    take the next step in your career" (Step 19), "he's prepared something very specific for
+ *    your profile" (Step 20), and "we had to release your slot for another candidate" plus the
+ *    book-a-call-with-Ameen line (Step 21). Each was flagged in `whatsapp-submission.ts` as the
+ *    reason that step could not clear Meta's UTILITY bar. The reviewer took the trade.
+ *
+ * ── THE THREE *_SUPERSEDED CONSTANTS SAY "SUCCESS" ON PURPOSE ───────────────────────────────
+ * They are the transcription as the SOP document actually had it, which is the only thing that
+ * makes them evidence. A global rename briefly rewrote them to "Solution" too - i.e. the record
+ * of the old wording claimed the old wording was the new wording - and that is corrected here.
+ * If a search-and-replace ever touches them again, it is wrong: history is not a typo.
+ *
+ * ── AND STEP 19 NO LONGER CARRIES A VIDEO, WHICH UNBLOCKS IT ────────────────────────────────
+ * The old body ended in `<< ATTACH VIDEO TO THIS MESSAGE>>`, and that one marker is why Step 19
+ * was pinned to MANUAL sending: a per-prospect video means uploading each one to WATI and passing
+ * its media id, which this app does not do. The new body has no video, so the step becomes an
+ * ordinary templated send like every other rung on the ladder. If B2 still wants the video, it
+ * goes as a separate message - not as a header on this one.
+ */
+
+/** Step 19 - SSS Call Confirmation WhatsApp 1 (>=24h before). Reviewer's body, 26/10/2026. */
+const TPL_SSS_CONFIRM_1 = `Hi [Prospect’s First Name], this is [Your Name] from B2 Consultants. This is a reminder that your Solution Strategy Session is scheduled for *[DATE]* at *[TIME]* IST.
+
+Please reply *YES* to confirm your attendance.`;
+
+/** The Step 19 body as transcribed from the SOP document, before the reviewer's rewrite. */
+export const TPL_SSS_CONFIRM_1_SUPERSEDED = `Hey [Prospect’s First Name], this is [Your Name] from B2 Consultants
 
 Ameen asked me to send you this quick video he made just for you
 
@@ -314,8 +357,22 @@ We’re excited to help you take the next step in your career.
 
  << ATTACH VIDEO TO THIS MESSAGE>>`;
 
-/** Step 20 - SSS Call Confirmation WhatsApp 2 (≥12h before). */
-const TPL_SSS_CONFIRM_2 = `Just checking in again, [Prospect’s First Name] - are you joining the Success Strategy Session with Ameen on *[DATE]* at *[TIME]*?
+/**
+ * Step 20 - SSS Call Confirmation WhatsApp 2 (>=12h before). Reviewer's body, 26/10/2026.
+ *
+ * It STOPS at the Zoom link on purpose. `BODY_SUFFIX.SSS_CONFIRM_2` in whatsapp-submission.ts
+ * appends "Please reply *YES* to confirm." - the closing line that keeps the submitted body from
+ * ENDING on a variable, which Meta commonly rejects. Putting that sentence here as well would
+ * send it twice.
+ *
+ * Step 20b (SSS_CONFIRM_3) sends this same body later, and gets the same suffix.
+ */
+const TPL_SSS_CONFIRM_2 = `Hi [Prospect’s First Name], we haven’t yet received your confirmation for your Solution Strategy Session on *[DATE]* at *[TIME]* IST.
+
+Your joining link is: <<INSERT ZOOM LINK HERE>>`;
+
+/** The Step 20 body as transcribed from the SOP document, before the reviewer's rewrite. */
+export const TPL_SSS_CONFIRM_2_SUPERSEDED = `Just checking in again, [Prospect’s First Name] - are you joining the Success Strategy Session with Ameen on *[DATE]* at *[TIME]*?
 
 He’s prepared something very specific for your profile and would love to see you there.
 
@@ -338,8 +395,13 @@ https://optin.b2consultants.de/apply
 
 If you have any questions, we’re happy to help.`;
 
-/** Step 21 - SSS Call Cancellation WhatsApp 3 (≥10h before). */
-const TPL_SSS_CANCEL = `Hey [Prospect’s First Name], since we didn’t receive your confirmation, we had to release your Success Strategy Session slot for another candidate.
+/** Step 21 - SSS Call Cancellation WhatsApp 3 (>=10h before). Reviewer's body, 26/10/2026. */
+const TPL_SSS_CANCEL = `Hi [Prospect’s First Name], as we didn’t receive your confirmation, your Solution Strategy Session slot has been released.
+
+If you’d still like to attend, you can book another time here whenever suits you: https://optin.b2consultants.de/sss`;
+
+/** The Step 21 body as transcribed from the SOP document, before the reviewer's rewrite. */
+export const TPL_SSS_CANCEL_SUPERSEDED = `Hey [Prospect’s First Name], since we didn’t receive your confirmation, we had to release your Success Strategy Session slot for another candidate.
 
 No worries - if you're still interested, just let us know and we’ll try to find another time or please use the link below to book a call at your convenience.
 Book a call with Ameen to finalise your plan: https://optin.b2consultants.de/sss`;
@@ -1057,7 +1119,7 @@ export function isInstantIntroSource(source: string): boolean {
  *   Not Qualified  → "NO"
  *
  * The thresholds are Ameen's, already implemented for `BantVerdict` in `src/lib/booking-intake.ts`
- * (>2.4 confirm · 1.6–2.4 doubt · <1.6 cancel, on the 0-4 scale). We reuse those exact boundaries rather than inventing a
+ * (>2.4 confirm · 1.6-2.4 doubt · <1.6 cancel, on the 0-4 scale). We reuse those exact boundaries rather than inventing a
  * second scale, so "Qualified" and "BANT verdict" can never disagree - they are the same decision
  * under the SOP's names and the CRM's names.
  */

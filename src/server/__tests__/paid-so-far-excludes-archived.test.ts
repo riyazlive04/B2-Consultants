@@ -68,13 +68,41 @@ describe("a student's paid-so-far", () => {
 
   test("never counts archived payments, at any call site", () => {
     const offenders = studentIncomeSums()
-      .filter(({ call }) => !/deletedAt|\.\.\.\s*ACTIVE\b|where:\s*ACTIVE\b/.test(call))
+      .filter(({ call }) => !/deletedAt|\.\.\.\s*(?:ACTIVE|INCOME_COUNTABLE)\b|where:\s*(?:ACTIVE|INCOME_COUNTABLE)\b/.test(call))
       .map(({ file, call }) => `${file}: ${call.replace(/\s+/g, " ").slice(0, 120)}`);
 
     assert.deepEqual(
       offenders,
       [],
       `these sum archived income into what a student has paid:\n  ${offenders.join("\n  ")}`,
+    );
+  });
+
+  /**
+   * ── THE SECOND WAY A PAYMENT STOPS BEING MONEY  (issue C2) ──────────────────────────────
+   *
+   * `reversedAt` is new, and it is the column that catches the case there was previously no way
+   * to record: the payment was entered correctly and then the money went away again - a bounced
+   * cheque, a reversed UPI, a recalled transfer. With no payment processor in this app, every
+   * income row is a human recording a claim about a bank, so this is routine rather than exotic.
+   *
+   * What people did instead was ARCHIVE the row, which is why the guard above exists. But the
+   * two are different facts and are stored separately (see `INCOME_COUNTABLE`), so a call site
+   * that honours `deletedAt` and ignores `reversedAt` now counts bounced money as collected -
+   * exactly the bug the first guard was written for, in a new column.
+   *
+   * So the same test, pointed at the new field. The fix at any site it flags is to spread
+   * `INCOME_COUNTABLE` instead of `ACTIVE`, which satisfies both assertions at once.
+   */
+  test("never counts reversed payments, at any call site", () => {
+    const offenders = studentIncomeSums()
+      .filter(({ call }) => !/reversedAt|\.\.\.\s*INCOME_COUNTABLE\b|where:\s*INCOME_COUNTABLE\b/.test(call))
+      .map(({ file, call }) => `${file}: ${call.replace(/\s+/g, " ").slice(0, 120)}`);
+
+    assert.deepEqual(
+      offenders,
+      [],
+      `these count bounced/reversed money as collected:\n  ${offenders.join("\n  ")}`,
     );
   });
 });

@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import { normalizePassword } from "@/lib/credentials";
+import { MIN_PASSWORD_LENGTH, normalizePassword } from "@/lib/credentials";
 import { logActivity } from "./activity-log";
 import type { AppRole } from "@/lib/sections";
 import type { ActionResult } from "./finance-actions";
@@ -38,7 +38,11 @@ export async function changeOwnPassword(form: FormData): Promise<ActionResult> {
    */
   const currentPassword = normalizePassword(String(form.get("currentPassword") ?? ""));
   const newPassword = normalizePassword(String(form.get("newPassword") ?? ""));
-  if (newPassword.length < 8) return { ok: false, error: "New password must be at least 8 characters." };
+  // Length rule from lib/credentials - one constant for the library, the five server gates
+  // and every form hint. See MIN_PASSWORD_LENGTH.
+  if (newPassword.length < MIN_PASSWORD_LENGTH) {
+    return { ok: false, error: `New password must be at least ${MIN_PASSWORD_LENGTH} characters.` };
+  }
   if (currentPassword === newPassword) {
     return { ok: false, error: "Choose a password different from your current one." };
   }

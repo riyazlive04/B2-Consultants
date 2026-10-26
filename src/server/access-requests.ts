@@ -1,10 +1,13 @@
 "use server";
 
+import { createHash } from "crypto";
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { rule } from "@/lib/field-rules";
 import { capabilityCheck, requireCapability } from "@/lib/rbac";
+import { clientIpFrom, takeTokens, RATE_RULES } from "@/lib/rate-limit";
 import { logActivity } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 
@@ -18,7 +21,31 @@ import type { ActionResult } from "./finance-actions";
  */
 
 const KEY = "accessRequests";
-const MAX_PENDING = 20;
+/**
+ * How many pending requests the queue holds (issue B2).
+ *
+ * Raised from 20, and - more importantly - the overflow behaviour is inverted. It used to REFUSE
+ * the newest request once the queue was full, which handed an unauthenticated stranger a
+ * denial-of-onboarding: twenty junk rows and every genuine request after them was turned away
+ * with "contact your admin directly", to an admin who had no idea why. It now sheds the OLDEST,
+ * so a real person filing a request today always lands. See `submitAccessRequest`.
+ *
+ * The brake that actually bounds the flood is the rate limit, not this number.
+ */
+const MAX_PENDING = 40;
+
+/**
+ * A stable, non-reversible marker for "these requests came from the same place".
+ *
+ * Deliberately NOT the IP address. An admin triaging the queue needs to see that fourteen rows
+ * share a source; they do not need - and should not be handed - the home IP of every stranger
+ * who ever filled in the form. Twelve hex characters is plenty to group by and useless for
+ * anything else.
+ */
+function sourceFingerprint(ip: string | null): string | null {
+  if (!ip) return null;
+  return createHash("sha256").update(`accessRequest:${ip}`).digest("hex").slice(0, 12);
+}
 
 export type AccessRequest = {
   id: string;
@@ -36,6 +63,12 @@ export type AccessRequest = {
   role: "ADMIN" | "HEAD" | "USER" | "TUTOR" | "STUDENT" | "COACH";
   note: string;
   requestedAt: string; // ISO
+  /**
+   * Non-reversible marker for the source of the request - see `sourceFingerprint`. Optional
+   * because rows filed before it existed do not have one, and a missing marker must read as
+   * "unknown", never crash the approval screen.
+   */
+  source?: string | null;
 };
 
 async function readQueue(): Promise<AccessRequest[]> {
@@ -60,22 +93,49 @@ const submitSchema = z.object({
   name: rule("name"),
   email: rule("email"),
   /**
-   * ADMIN IS NOT REQUESTABLE. This enum is the real gate - the login screen's role picker is UX,
-   * and a crafted POST never renders it, so dropping "Founder / Admin" from that list without
-   * narrowing this would have left full finance-and-compliance access one HTTP request away for
-   * anyone who found the endpoint. An admin seat is created BY an admin in People → Users & access.
+   * THREE ROLES ARE NOT REQUESTABLE, AND THIS ENUM IS THE GATE. The login screen's role picker
+   * is UX; a crafted POST never renders it. So every narrowing happens HERE as well as there,
+   * or it has not happened.
    *
-   * TUTOR and STUDENT are accepted: both roles already exist, already have their own dashboards,
-   * and had no way to identify themselves here.
+   * ADMIN - the original exclusion. Full finance, compliance and all-teams access was one HTTP
+   * request away for anyone who found the endpoint, landing in the same approval queue as a
+   * telecaller's where one mis-click grants it.
+   *
+   * HEAD - removed for the same reason one rung down (issue B3). A head coach holds Students,
+   * Agreements, Onboarding, Attendance, Batches & Plans, Pipeline, Deals, Bookings, Reports and
+   * Bonus & Commission: the second-widest grant in the app. A head coach is hired, not
+   * self-served.
+   *
+   * STUDENT - removed because approving one is a guaranteed dead end (issue A3). A STUDENT user
+   * with no `Student` row can reach only `personal` sections, and all three of those resolve the
+   * signed-in user to a student record that does not exist. A student login is created FROM
+   * their student record; that is why `/portal` offers no request form at all.
+   *
+   * Widening this enum again means first answering what the approved account would be able to
+   * DO on the day it is created.
    */
-  role: z.enum(["HEAD", "USER", "TUTOR", "STUDENT", "COACH"]),
+  role: z.enum(["USER", "TUTOR", "COACH"]),
   note: z.string().trim().max(500).default(""),
 });
 
 /**
- * PUBLIC (called from the login screen, pre-auth). Always answers ok on valid
- * input - whether the email already has an account or a pending request is
- * not revealed to an unauthenticated caller.
+ * PUBLIC (called from the login screen, pre-auth). Always answers ok on valid input - whether
+ * the email already has an account or a pending request is not revealed to an unauthenticated
+ * caller.
+ *
+ * ── RATE LIMITED, AND IT HAD TO BE (issue B2) ───────────────────────────────────────────
+ * This is the only unauthenticated WRITE in the app, and what it writes is the queue accounts
+ * are approved from. With no brake, anyone who found the login page could file enough rows to
+ * fill the pending cap - which refused every genuine request after it - and every one of those
+ * rows is attacker-chosen text that the approval screen pre-fills a create-user form from.
+ *
+ * Two rules, all-or-nothing (see `takeTokens`): per-source, so one abuser is stopped, and
+ * global, because a hundred sources each politely taking their allowance is the same attack
+ * with more steps.
+ *
+ * The refusal message is deliberately the same shape as the old pending-cap one. It tells a
+ * real person who tried twice by accident what to do, and tells an abuser nothing about which
+ * of the two rules they hit.
  */
 export async function submitAccessRequest(input: {
   name: string;
@@ -83,6 +143,19 @@ export async function submitAccessRequest(input: {
   role: string;
   note: string;
 }): Promise<ActionResult> {
+  const h = await Promise.resolve(headers());
+  const ip = clientIpFrom(h);
+  const verdict = takeTokens([
+    { key: `accessRequest:ip:${ip}`, rule: RATE_RULES.accessRequestPerIp },
+    { key: "accessRequest:global", rule: RATE_RULES.accessRequestGlobal },
+  ]);
+  if (!verdict.ok) {
+    return {
+      ok: false,
+      error: "We've had a lot of requests just now - please try again later, or contact B2 Consultants directly.",
+    };
+  }
+
   const parsed = submitSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: "Enter your name and a valid email address." };
@@ -97,9 +170,6 @@ export async function submitAccessRequest(input: {
   const duplicate = queue.some((r) => r.email.toLowerCase() === email);
 
   if (!existingUser && !duplicate) {
-    if (queue.length >= MAX_PENDING) {
-      return { ok: false, error: "Too many pending requests - contact your admin directly." };
-    }
     queue.unshift({
       id: `rq_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       name: d.name,
@@ -107,8 +177,17 @@ export async function submitAccessRequest(input: {
       role: d.role,
       note: d.note,
       requestedAt: new Date().toISOString(),
+      source: sourceFingerprint(ip),
     });
-    await writeQueue(queue);
+    /**
+     * SHED THE OLDEST, never refuse the newest.
+     *
+     * `unshift` puts the newest first, so truncating the tail drops the stalest row. An
+     * unactioned request that has sat in this queue past forty others was not going to be
+     * approved; a request filed thirty seconds ago by somebody waiting on a reply might be.
+     * Getting this backwards is what made the cap a denial-of-onboarding.
+     */
+    await writeQueue(queue.slice(0, MAX_PENDING));
     revalidatePath("/people");
   }
   return { ok: true };

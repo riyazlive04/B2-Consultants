@@ -6,6 +6,7 @@ import { Prisma } from "@prisma/client";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "@/lib/prisma";
+import { MIN_PASSWORD_LENGTH, PASSWORD_TOO_SHORT } from "@/lib/credentials";
 import { sendStudentWelcome } from "./whatsapp";
 import { afterResponse } from "./after-response";
 import { requireAdmin, requireCapability, requireSection } from "@/lib/rbac";
@@ -466,7 +467,7 @@ const tutorAuth = betterAuth({
 const tutorLoginSchema = z.object({
   name: rule("name"),
   email: rule("email"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  password: z.string().min(MIN_PASSWORD_LENGTH, PASSWORD_TOO_SHORT),
 });
 
 export async function createTutorLogin(form: FormData): Promise<ActionResult> {

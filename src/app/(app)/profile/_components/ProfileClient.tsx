@@ -10,6 +10,7 @@ import { Field, FormError, TextInput } from "@/components/ui/form";
 import { toast } from "@/components/ui/feedback";
 import { TimeZoneCard } from "./TimeZoneCard";
 import { safeAction } from "@/lib/action-guard";
+import { MIN_PASSWORD_LENGTH, PASSWORD_HINT } from "@/lib/credentials";
 
 /** Resize an uploaded image to a square ~256px JPEG data URL - keeps the row small. */
 function resizeToDataUrl(file: File, size = 256): Promise<string> {
@@ -181,7 +182,7 @@ function PasswordCard() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (next.length < 8) return setError("New password must be at least 8 characters.");
+    if (next.length < MIN_PASSWORD_LENGTH) return setError(`New password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
     setBusy(true);
     const { error } = await authClient.changePassword({
       currentPassword: current,
@@ -210,7 +211,7 @@ function PasswordCard() {
             onChange={(e) => setCurrent(e.target.value)}
           />
         </Field>
-        <Field label="New password" hint="At least 8 characters.">
+        <Field label="New password" hint={PASSWORD_HINT}>
           <TextInput
             type="password"
             autoComplete="new-password"

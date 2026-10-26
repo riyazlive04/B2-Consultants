@@ -20,7 +20,7 @@
  * Whitespace that is invisible in a text field but is not `\s` to a naive trim.
  *
  * NBSP (U+00A0) is what a copy out of a formatted email or a Word document carries; the
- * zero-width family (U+200B–U+200D, U+FEFF) is what survives a copy out of a web page or a
+ * zero-width family (U+200B-U+200D, U+FEFF) is what survives a copy out of a web page or a
  * WhatsApp message. `String.prototype.trim` removes none of the zero-width ones.
  */
 const INVISIBLE = /[ ​‌‍﻿]/g;
@@ -62,3 +62,48 @@ export function normalizePassword(raw: string): string {
 export function passwordWasTrimmed(raw: string): boolean {
   return normalizePassword(raw) !== raw;
 }
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════════════════
+ *  HOW LONG A PASSWORD HAS TO BE  (issue B1)
+ * ════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * Twelve, raised from eight, and - the actual point of this block - stated ONCE.
+ *
+ * ── Why it moved here ───────────────────────────────────────────────────────────────────
+ * Before this constant, "8" was written out fourteen times: five server actions that are the
+ * real gates (`account-actions`, `invite-actions`, `users-actions`, `students-actions`,
+ * `german-note-actions`), six `minLength={8}` attributes, and five separate hints telling the
+ * person "At least 8 characters". Raising the bar meant finding all fourteen, and MISSING one
+ * would not fail a build or a test - it would produce a form whose hint and whose server
+ * disagree, which the person experiences as a password being refused for no stated reason.
+ * That is the same class of bug as the login destinations in `LoginForm` (issue A2): a rule
+ * copied is a rule that drifts.
+ *
+ * ── Why twelve ──────────────────────────────────────────────────────────────────────────
+ * There is no second factor behind any of these passwords, so length is the only dial that
+ * exists. Every one is either admin-set and temporary or chosen once from an invite link, on a
+ * screen nobody revisits - so the cost is four extra characters, once, and the benefit is
+ * putting a leaked hash out of reach of an offline attack that eight characters is inside.
+ *
+ * `better-auth`'s own `minPasswordLength` is set from this in `lib/auth.ts`, so the library's
+ * check and the app's checks cannot disagree either.
+ *
+ * ── What this deliberately is NOT ───────────────────────────────────────────────────────
+ * A composition rule. No "one capital, one digit, one symbol": those push people towards
+ * `Password1!`, which is shorter in real entropy than three ordinary words, and they would also
+ * break the admin-set temporary passwords this app generates. Length only.
+ *
+ * A breach check is the natural next step and is deliberately absent for now - better-auth ships
+ * a `haveibeenpwned` plugin that does it by k-anonymity, and adding it puts a third-party HTTP
+ * call on the password-change path. That is a decision about an availability trade-off (what
+ * happens to somebody setting a password while the API is down), not a line of config, so it is
+ * left to be taken on its own.
+ */
+export const MIN_PASSWORD_LENGTH = 12;
+
+/** The hint every password field shows. One string, so no form can promise a different rule. */
+export const PASSWORD_HINT = `At least ${MIN_PASSWORD_LENGTH} characters.`;
+
+/** The refusal every server-side password gate returns. Same reason: one wording, one rule. */
+export const PASSWORD_TOO_SHORT = `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;

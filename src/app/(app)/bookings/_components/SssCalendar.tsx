@@ -115,7 +115,7 @@ export function SssCalendar({
 
       {!config.ownerId && (
         <p className="rounded-field border border-dashed border-line bg-surface-2 px-4 py-3 text-sm text-ink-3">
-          Pick who runs the Success Strategy Session {canConfigure ? "above" : "(an admin sets this)"} to start laying out SSS slots.
+          Pick who runs the Solution Strategy Session {canConfigure ? "above" : "(an admin sets this)"} to start laying out SSS slots.
         </p>
       )}
 
@@ -296,7 +296,7 @@ function GenerateModal({
 }) {
   const [from, setFrom] = useState(startKey);
   const [to, setTo] = useState(endKey);
-  const [weekdays, setWeekdays] = useState<boolean[]>([false, true, true, true, true, true, false]); // Mon–Fri
+  const [weekdays, setWeekdays] = useState<boolean[]>([false, true, true, true, true, true, false]); // Mon-Fri
   const [times, setTimes] = useState<string[]>([]);
   const [timeDraft, setTimeDraft] = useState("11:00");
   const [duration, setDuration] = useState(defaultDuration);

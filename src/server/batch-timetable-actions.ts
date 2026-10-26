@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { capabilityCheck, requireSession } from "@/lib/rbac";
 import { canManageDelivery } from "./batch-access";
 import { expiryFor, MAX_RECORDING_ACCESS_DAYS } from "@/lib/recording-access";
+import { canCancelSession, sessionIsOn } from "@/lib/session-status";
 import { getAttendanceConfig } from "./founder-config";
 import { planTimetable, sortRows, type CurriculumRow } from "@/lib/curriculum";
 import { parseDateInput, istWallToUtc } from "@/lib/dates";
@@ -289,7 +290,12 @@ export async function deleteBatchSession(sessionId: string): Promise<ActionResul
   if (!row) return { ok: false, error: "Session not found" };
   if (!(await canManageBatch(session, row.batchId))) return { ok: false, error: "Not allowed" };
   if (row._count.attendance > 0) {
-    return { ok: false, error: "That class has a register against it - it can't be deleted." };
+    // Points at the alternative now that there IS one (issue C3). The old wording left somebody
+    // holding a class that could neither be deleted nor marked as called off.
+    return {
+      ok: false,
+      error: "That class has a register against it - cancel it instead of deleting it.",
+    };
   }
 
   await prisma.classSession.delete({ where: { id: sessionId } });
@@ -304,6 +310,158 @@ export async function deleteBatchSession(sessionId: string): Promise<ActionResul
   revalidatePath(`/batches/${row.batchId}`);
   revalidatePath("/coaching");
   revalidatePath("/classroom");
+  return { ok: true };
+}
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════════════════════
+ *  CALL A CLASS OFF  (issue C3)
+ * ════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * The missing verb. `upsertBatchSession` re-times a class and `deleteBatchSession` removes one,
+ * and neither is what happens when a class is cancelled:
+ *
+ *   · Delete loses the history. The class was scheduled, students were told, and then it was
+ *     called off - all three of those are facts, and a deleted row keeps none of them. It also
+ *     cascades the register away, which is why delete refuses once one exists.
+ *   · Re-timing is a lie when there is no new time yet.
+ *
+ * So cancelling is a state transition that keeps everything: the row, its register, its tasks,
+ * its resources and its place in the week. What changes is that `lib/session-status.ts`'s
+ * `SESSION_ON` filter stops matching it, so it leaves every attendance denominator, closes its
+ * register, drops its join link and sends no reminder - while staying visible, labelled, on both
+ * timetables.
+ *
+ * ── WHAT IT DELIBERATELY DOES NOT TOUCH ─────────────────────────────────────────────────────
+ * The REGISTER. Marks already taken stay exactly as they are, including self check-ins from the
+ * ten minutes before the tutor's internet died. Deleting them would be destroying a student's
+ * evidence that they turned up, and the attendance rate does not need it gone - the session has
+ * left the denominator, so the rows are simply no longer read. If the class is later restored,
+ * they are all still there.
+ *
+ * ── WHY THE STUDENTS ARE TOLD HERE AND NOT BY A CRON ────────────────────────────────────────
+ * `notifyCohortOfCancellation` is called inline, after the write, and its failure cannot fail
+ * this action. A cancellation is worth nothing if nobody hears it in time, and the one thing
+ * worse than a late notice is a cancellation that silently did not save because the notice
+ * failed.
+ */
+const cancelSchema = z.object({
+  /** CANCELLED or POSTPONED - see `SessionStatus`. Two different things to tell a student. */
+  status: z.enum(["CANCELLED", "POSTPONED"]),
+  /** Shown to the cohort verbatim, so it is prose rather than a code. Optional but asked for. */
+  reason: z.string().trim().max(500).optional(),
+});
+
+export async function cancelBatchSession(sessionId: string, form: FormData): Promise<ActionResult> {
+  const session = await requireSession();
+  const parsed = cancelSchema.safeParse(Object.fromEntries(form));
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const d = parsed.data;
+
+  const row = await prisma.classSession.findUnique({
+    where: { id: sessionId },
+    select: {
+      id: true, title: true, batchId: true, status: true, startsAt: true, durationMins: true,
+      delivery: true,
+    },
+  });
+  if (!row) return { ok: false, error: "Session not found" };
+  if (!(await canManageBatch(session, row.batchId))) return { ok: false, error: "Not allowed" };
+
+  /**
+   * A PRE_RECORDED module has no clock and no register, so "cancelled" is not a thing that can
+   * happen to it - it is either published to the cohort or it is not. Letting it be cancelled
+   * would put a struck-through video on a timetable with nothing to explain.
+   */
+  if (row.delivery === "PRE_RECORDED") {
+    return {
+      ok: false,
+      error: "That one is a recording, not a live class - remove it from the timetable instead.",
+    };
+  }
+
+  // The window rule lives in lib/session-status.ts so the button and the server agree about
+  // which classes offer it - the same reason `checkInState` was extracted.
+  const allowed = canCancelSession(row, new Date());
+  if (!allowed.ok) return { ok: false, error: allowed.reason };
+
+  await prisma.classSession.update({
+    where: { id: sessionId },
+    data: {
+      status: d.status,
+      cancelReason: d.reason?.trim() || null,
+      cancelledAt: new Date(),
+      cancelledById: session.user.id,
+      /**
+       * CLOSE THE REGISTER, if one is open.
+       *
+       * `closesAt = now` rather than nulling both, exactly as closing a window early does
+       * elsewhere: the record still says a window existed and when it ended. Without this a
+       * cancelled class would keep accepting check-ins for the rest of its window, and
+       * `isCheckInOpen` would be telling students to mark themselves present at a class that
+       * has been called off.
+       */
+      ...(row.status === "SCHEDULED" ? { attendanceClosesAt: new Date() } : {}),
+    },
+  });
+
+  await logActivity(session, {
+    action: d.status === "POSTPONED" ? "batch.session.postpone" : "batch.session.cancel",
+    section: "students",
+    entityType: "ClassSession",
+    entityId: sessionId,
+    summary: `${d.status === "POSTPONED" ? "Postponed" : "Cancelled"} the class "${row.title}"`,
+    meta: { batchId: row.batchId, reason: d.reason?.trim() || null, startsAt: row.startsAt.toISOString() },
+  });
+
+  revalidatePath(`/batches/${row.batchId}`);
+  revalidatePath("/coaching");
+  revalidatePath("/classroom");
+  revalidatePath("/attendance");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+/**
+ * Put a called-off class back on.
+ *
+ * Needed because cancelling is reversible in a way deleting was not - a class called off at 8am
+ * and reinstated at 9am should return with its register, its tasks and its resources intact,
+ * which is the whole argument for a state rather than a deletion.
+ *
+ * The attendance window is NOT reopened. Reinstating says the class is happening; whether the
+ * register opens is the tutor's separate decision, and silently re-opening a window that had
+ * already closed would let people check in to a class they are not at.
+ */
+export async function restoreBatchSession(sessionId: string): Promise<ActionResult> {
+  const session = await requireSession();
+  const row = await prisma.classSession.findUnique({
+    where: { id: sessionId },
+    select: { id: true, title: true, batchId: true, status: true },
+  });
+  if (!row) return { ok: false, error: "Session not found" };
+  if (!(await canManageBatch(session, row.batchId))) return { ok: false, error: "Not allowed" };
+  if (sessionIsOn(row.status)) return { ok: false, error: "That class is already on." };
+
+  await prisma.classSession.update({
+    where: { id: sessionId },
+    data: { status: "SCHEDULED", cancelReason: null, cancelledAt: null, cancelledById: null },
+  });
+
+  await logActivity(session, {
+    action: "batch.session.restore",
+    section: "students",
+    entityType: "ClassSession",
+    entityId: sessionId,
+    summary: `Put the class "${row.title}" back on`,
+    meta: { batchId: row.batchId, wasStatus: row.status },
+  });
+
+  revalidatePath(`/batches/${row.batchId}`);
+  revalidatePath("/coaching");
+  revalidatePath("/classroom");
+  revalidatePath("/attendance");
+  revalidatePath("/dashboard");
   return { ok: true };
 }
 

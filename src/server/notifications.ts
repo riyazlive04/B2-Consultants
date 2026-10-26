@@ -38,6 +38,7 @@ import { deliveryNotifications } from "./delivery-health";
 import { MILESTONE_LABELS } from "@/lib/labels";
 import { SEATED_STATUSES } from "@/lib/enrollment-lifecycle";
 import { activationBlockers, seatCount } from "@/lib/batch";
+import { SESSION_ON } from "@/lib/session-status";
 
 /**
  * IN-APP notification centre. Server-computed on load + light polling - the same
@@ -115,6 +116,9 @@ async function coachNotifications(userId: string, today: Date): Promise<Notifica
     // the reminder stops being useful.
     startsAt: { lt: new Date() },
     attendance: { none: {} },
+    // Don't nag a tutor to mark a register for a class they cancelled (issue C3). This counter
+    // is the single most likely place a cancelled class would have kept haunting somebody.
+    ...SESSION_ON,
   };
 
   const [unmarked, stale, checkIns] = await Promise.all([
@@ -1267,6 +1271,38 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
       severity: "info",
       title: `${agreements.awaitingSignature} agreement${agreements.awaitingSignature > 1 ? "s" : ""} awaiting signature`,
       body: "Issued and still unsigned - a reminder is one click away.",
+      href: "/agreements",
+    });
+  }
+  /**
+   * ── SIGNED, AND STILL NOT A STUDENT  (issue C5) ─────────────────────────────────────────
+   *
+   * The escalation the enrol prompt never had. Signing deliberately creates nothing (see
+   * `server/agreement-enrol.ts`), so the step from a signed contract to a student record is a
+   * card on the agreement page - and a card only works if somebody opens that page again. A
+   * signed, paying client could therefore sit for ever with no student record and no portal
+   * login, which is exactly how this was found: "after signing, account creation is not working".
+   *
+   * ── The AGE is the signal, not the count ────────────────────────────────────────────────
+   * One un-enrolled signature an hour old is the normal shape of the workflow. One nine days
+   * old is a dropped client. A bare count would fire on every single signature and teach the
+   * founder to ignore the row - so the severity escalates with the age, and the body says the
+   * number of days rather than making them go and work it out.
+   *
+   * The two-day floor is deliberate: inside that, enrolment is simply the next thing somebody
+   * is about to do.
+   */
+  const stale = agreements.signedNotEnrolledOldestDays;
+  if (agreements.signedNotEnrolled > 0 && stale !== null && stale >= 2) {
+    const n = agreements.signedNotEnrolled;
+    items.push({
+      id: "agreements-not-enrolled",
+      // A week is the line. Past it this is a client who signed, paid and has no account.
+      severity: stale >= 7 ? "risk" : "watch",
+      title: `${n} signed agreement${n > 1 ? "s" : ""} with no student record`,
+      body:
+        `The oldest has been waiting ${stale} day${stale === 1 ? "" : "s"}. ` +
+        "Until they are enrolled they are not on the Students board, cannot be seated in a cohort and cannot be given a portal login - open the agreement and press Enrol.",
       href: "/agreements",
     });
   }

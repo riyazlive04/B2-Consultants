@@ -5,7 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { hashInviteToken } from "@/lib/invite-token";
-import { normalizePassword } from "@/lib/credentials";
+import { MIN_PASSWORD_LENGTH, PASSWORD_TOO_SHORT, normalizePassword } from "@/lib/credentials";
 
 /**
  * Redeeming an invite. PUBLIC by necessity - the invitee has no session yet - so the
@@ -34,9 +34,9 @@ const acceptSchema = z
     password: z.string().max(200).transform(normalizePassword),
     confirm: z.string().max(200).transform(normalizePassword),
   })
-  .refine((d) => d.password.length >= 8, {
+  .refine((d) => d.password.length >= MIN_PASSWORD_LENGTH, {
     path: ["password"],
-    message: "Password must be at least 8 characters",
+    message: PASSWORD_TOO_SHORT,
   })
   .refine((d) => d.password === d.confirm, {
     path: ["confirm"],

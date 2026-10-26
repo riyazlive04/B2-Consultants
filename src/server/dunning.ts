@@ -57,6 +57,28 @@ function emptyRun(enabled: boolean, reason?: string): DunningRun {
   };
 }
 
+/**
+ * The rungs already climbed on THIS pass up the ladder (issue C1).
+ *
+ * A reversed - or archived, or edited - payment bumps `Instalment.dunningCycle`, which starts a
+ * new pass. The old pass's `DunningEvent` rows are kept (the trail is append-only and still
+ * answers "what did we send this student, and when"), so what `stageFor` must be shown is the
+ * events of the current cycle and nothing earlier. Hand it the lot and it concludes every rung
+ * has been sent and returns null for ever, which is the silence this whole mechanism exists to
+ * end.
+ *
+ * Rows written before `cycle` existed default to 0, which is also every instalment's starting
+ * cycle - so history reads back exactly as it did.
+ */
+function sentThisCycle(inst: {
+  dunningCycle: number;
+  dunningEvents: { stage: string; cycle: number }[];
+}): DunningStage[] {
+  return inst.dunningEvents
+    .filter((e) => e.cycle === inst.dunningCycle)
+    .map((e) => e.stage as DunningStage);
+}
+
 export async function runDunning(): Promise<DunningRun> {
   const config = await getDunningConfig();
   if (!config.enabled) return emptyRun(false, "The dunning ladder is switched off");
@@ -103,7 +125,21 @@ export async function runDunning(): Promise<DunningRun> {
           student: { select: { id: true, fullName: true, email: true, phone: true, code: true } },
         },
       },
-      dunningEvents: { select: { stage: true } },
+      /**
+       * THE CURRENT PASS UP THE LADDER ONLY (issue C1).
+       *
+       * `stageFor` fires each rung once, from these rows - so before `dunningCycle` existed, an
+       * instalment whose payment was later reversed came back DUE with every stage already
+       * recorded as sent and was never chased again, for the rest of time.
+       *
+       * The cycle is selected alongside the events and the pair is matched in JS by
+       * `sentThisCycle` below, rather than being filtered in the query: Prisma cannot compare a
+       * nested relation filter against a sibling column of the parent row. The cost is bounded
+       * and tiny - at most three rows per pass, and a plan reversed more than a couple of times
+       * is a conversation, not a data volume.
+       */
+      dunningCycle: true,
+      dunningEvents: { select: { stage: true, cycle: true } },
     },
     orderBy: { dueDate: "asc" }, // oldest first - the most overdue gets the scarce cap slots
     take: 500,
@@ -112,7 +148,7 @@ export async function runDunning(): Promise<DunningRun> {
   const run = emptyRun(true);
 
   for (const inst of candidates) {
-    const sentStages = inst.dunningEvents.map((e) => e.stage as DunningStage);
+    const sentStages = sentThisCycle(inst);
     const stage = stageFor({ dueDate: inst.dueDate, today, sent: sentStages }, config);
     if (!stage) continue;
 
@@ -263,7 +299,11 @@ export async function runDunning(): Promise<DunningRun> {
     // service came back, and a stage that half-went is not a reason to climb the same rung
     // twice. The `note` is what tells a human it needs looking at.
     await prisma.dunningEvent.create({
-      data: { instalmentId: inst.id, stage, channel, delivered, messageId, note },
+      // `cycle` stamped from the instalment as it was read at the top of this run (issue C1).
+      // The unique key is `(instalmentId, stage, cycle)`, so this is what keeps a rung
+      // send-once-per-pass rather than send-once-ever - and what lets a reversed instalment be
+      // chased again without the row colliding with the one from its last pass.
+      data: { instalmentId: inst.id, stage, cycle: inst.dunningCycle, channel, delivered, messageId, note },
     });
 
     if (delivered) {
@@ -328,7 +368,21 @@ export async function previewDunning(): Promise<
           student: { select: { fullName: true, email: true, phone: true } },
         },
       },
-      dunningEvents: { select: { stage: true } },
+      /**
+       * THE CURRENT PASS UP THE LADDER ONLY (issue C1).
+       *
+       * `stageFor` fires each rung once, from these rows - so before `dunningCycle` existed, an
+       * instalment whose payment was later reversed came back DUE with every stage already
+       * recorded as sent and was never chased again, for the rest of time.
+       *
+       * The cycle is selected alongside the events and the pair is matched in JS by
+       * `sentThisCycle` below, rather than being filtered in the query: Prisma cannot compare a
+       * nested relation filter against a sibling column of the parent row. The cost is bounded
+       * and tiny - at most three rows per pass, and a plan reversed more than a couple of times
+       * is a conversation, not a data volume.
+       */
+      dunningCycle: true,
+      dunningEvents: { select: { stage: true, cycle: true } },
     },
     orderBy: { dueDate: "asc" },
     take: 500,
@@ -337,7 +391,7 @@ export async function previewDunning(): Promise<
   const rows = [];
   for (const inst of candidates) {
     const stage = stageFor(
-      { dueDate: inst.dueDate, today, sent: inst.dunningEvents.map((e) => e.stage as DunningStage) },
+      { dueDate: inst.dueDate, today, sent: sentThisCycle(inst) },
       config,
     );
     if (!stage) continue;

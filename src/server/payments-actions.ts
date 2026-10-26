@@ -191,10 +191,98 @@ async function programmeTakenBy(levelCode: string, exceptId?: string): Promise<s
  * Entropy is doing the work here, which is exactly why it has to be real entropy.
  *
  * Invoices issued BEFORE this keep their cuid tokens - rewriting them would break links already
- * sent. New documents are not guessable; old ones can be re-issued if that matters.
+ * sent. New documents are not guessable; `rotateInvoiceLink` below is how an old one is replaced
+ * deliberately, on the rows that still matter.
+ *
+ * The schema's `@default(cuid())` is GONE as of the 26 Oct migration (issue B5), so this function
+ * is now the only source of an invoice token - the database can no longer quietly hand out a
+ * cuid if a write path forgets to pass one.
  */
 function mintPublicToken(): string {
   return randomBytes(32).toString("base64url");
+}
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════════════════
+ *  REVOKE OR REPLACE A PUBLIC INVOICE LINK  (issue B5)
+ * ════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * The link had no kill switch. Once an invoice URL was out - mistyped address, forwarded email,
+ * a customer who asks, a token minted back when the default was a guessable cuid - there was
+ * nothing to do about it short of voiding the invoice, which is a statement about the DOCUMENT
+ * and wrong: the invoice is perfectly valid, it is the URL that should stop working.
+ *
+ * Two modes, because they answer different questions:
+ *
+ *   "revoke"   kill it. The customer can no longer open the invoice at all. For a link that
+ *              reached the wrong person and should not be replaced.
+ *   "rotate"   kill it and mint a new one. For a link that reached the wrong person and the
+ *              RIGHT one still needs it - the old URL 404s, the new one is sent.
+ *
+ * `expiresInDays` is accepted on rotate so a replacement link can be short-lived. Null keeps the
+ * old behaviour (no expiry), which stays the default: an invoice a customer is paying in
+ * instalments is opened over months, and a link that dies mid-plan is a support call.
+ *
+ * ── Why this is capability-gated and logged ─────────────────────────────────────────────
+ * Rotating is destructive to something a customer holds, so it is `finance.write` like every
+ * other money write, and it lands in the activity log with the invoice number - "the customer
+ * says the link is dead" has to be answerable.
+ */
+export async function rotateInvoiceLink(
+  id: string,
+  mode: "revoke" | "rotate",
+  expiresInDays?: number | null,
+  // `ActionResult` in this file is the plain finance one (no payload), so the fresh URL rides
+  // back in its own field rather than widening a type sixty other actions share.
+): Promise<{ ok: true; url: string | null } | { ok: false; error: string }> {
+  const { allowed, denied, session } = await capabilityCheck("finance.write");
+  if (!allowed) return denied;
+
+  const inv = await prisma.invoice.findUnique({
+    where: { id },
+    select: { id: true, number: true, kind: true, publicTokenRevokedAt: true },
+  });
+  if (!inv) return { ok: false, error: "Not found" };
+
+  // Bounded, and bounded HERE rather than trusted from the form: a NaN or a negative would
+  // otherwise mint a link that expired in 1970, which reads to the customer as a broken invoice.
+  // Same guard shape as `mintAgreementToken`'s ttlDays.
+  const days =
+    typeof expiresInDays === "number" && Number.isFinite(expiresInDays) && expiresInDays >= 1
+      ? Math.min(365, Math.round(expiresInDays))
+      : null;
+
+  const token = mode === "rotate" ? mintPublicToken() : null;
+  await prisma.invoice.update({
+    where: { id },
+    data:
+      mode === "rotate"
+        ? {
+            publicToken: token!,
+            // Clearing the revocation is the point of rotating: the NEW token is live.
+            publicTokenRevokedAt: null,
+            publicTokenExpiresAt: days ? new Date(Date.now() + days * 86_400_000) : null,
+          }
+        : { publicTokenRevokedAt: new Date() },
+  });
+
+  await logActivity(session, {
+    action: mode === "rotate" ? "invoice.link.rotate" : "invoice.link.revoke",
+    section: "payments",
+    entityType: "Invoice",
+    entityId: id,
+    summary:
+      mode === "rotate"
+        ? `Replaced the public link for ${inv.number}${days ? ` (expires in ${days} days)` : ""}`
+        : `Revoked the public link for ${inv.number}`,
+    // Deliberately NOT the token itself. The activity log is readable by the founder and the
+    // whole value of the token is that it is not written down anywhere it does not need to be.
+    meta: { kind: inv.kind, expiresInDays: days },
+  });
+
+  revalidatePath("/payments");
+  revalidatePath(`/payments/${id}`);
+  return { ok: true, url: token ? publicInvoiceUrl(token) : null };
 }
 
 export async function createProduct(form: FormData): Promise<ActionResult> {

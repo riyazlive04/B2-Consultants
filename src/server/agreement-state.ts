@@ -178,6 +178,28 @@ export type AgreementTaskCounts = {
   expired: number;
   /** Signed but the countersigned copy never reached the student. Wired in Phase D. */
   signedNoCopy: number;
+  /**
+   * ════════════════════════════════════════════════════════════════════════════════════════
+   *  SIGNED, AND STILL NOT A STUDENT  (issue C5)
+   * ════════════════════════════════════════════════════════════════════════════════════════
+   *
+   * `signAgreement` deliberately creates nothing - it seals the PDF, writes the audit trail and
+   * sends the countersigned copy, and that is right: enrolment needs a programme level, a coach
+   * and a code series, and a write failure must never cost somebody a signature they already
+   * made. So `enrolFromAgreement` is a PROMPT on the agreement page.
+   *
+   * A prompt only works if somebody opens that agreement again. Nothing escalated, so a signed
+   * and paying client could sit indefinitely with no `Student` row and no portal login - which
+   * is literally how the gap was found: "after signing, account creation is not working".
+   *
+   * So the condition gets a number and an AGE. The age is the part that matters: one signed
+   * agreement awaiting enrolment for an hour is the normal shape of the workflow, and one
+   * awaiting it for nine days is a dropped client. A count alone could not tell the founder
+   * which they were looking at, and would have cried wolf on every single signature.
+   */
+  signedNotEnrolled: number;
+  /** Days since the OLDEST un-enrolled signature. Null when there are none. */
+  signedNotEnrolledOldestDays: number | null;
 };
 
 /**
@@ -189,7 +211,7 @@ export async function getAgreementTaskCounts(): Promise<AgreementTaskCounts> {
   const now = new Date();
   const eligible = [...eligibleStages(config.readiness)];
 
-  const [drafts, readyLeads, awaitingSignature, expired, signedNoCopy] = await Promise.all([
+  const [drafts, readyLeads, awaitingSignature, expired, signedNoCopy, signedNotEnrolled] = await Promise.all([
     prisma.agreement.count({ where: { status: "DRAFT" } }),
     // Eligible leads that have never had an agreement that still counts. A withdrawn (VOIDED /
     // DECLINED) one leaves the client back in "ready" - which is exactly what the founder wants
@@ -219,9 +241,41 @@ export async function getAgreementTaskCounts(): Promise<AgreementTaskCounts> {
         },
       },
     }),
+    /**
+     * Signed, and no student record yet (issue C5).
+     *
+     * `findMany` rather than `count`, uniquely in this function, because the AGE is the whole
+     * signal and a count cannot carry it - see `signedNotEnrolled` on the type. Bounded to 200
+     * and selecting one date column, so it stays the same shape of read as its neighbours.
+     *
+     * The test mirrors `enrolmentState`'s: `studentId` null AND no student under the lead. The
+     * second half is what stops this crying wolf over the common case where the agreement was
+     * raised against a lead who was converted separately - that client IS enrolled, the document
+     * just resolves them through the lead.
+     */
+    prisma.agreement.findMany({
+      where: {
+        status: "SIGNED",
+        studentId: null,
+        lead: { is: { students: { none: {} } } },
+      },
+      orderBy: { signedAt: "asc" },
+      take: 200,
+      select: { signedAt: true },
+    }),
   ]);
 
-  return { readyToSend: drafts + readyLeads, awaitingSignature, expired, signedNoCopy };
+  const oldestSigned = signedNotEnrolled[0]?.signedAt ?? null;
+  return {
+    readyToSend: drafts + readyLeads,
+    awaitingSignature,
+    expired,
+    signedNoCopy,
+    signedNotEnrolled: signedNotEnrolled.length,
+    signedNotEnrolledOldestDays: oldestSigned
+      ? Math.floor((now.getTime() - oldestSigned.getTime()) / 86_400_000)
+      : null,
+  };
 }
 
 // ───────────────────────────── The picker's candidate list ─────────────────────────────

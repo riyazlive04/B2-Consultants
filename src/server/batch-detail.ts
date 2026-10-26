@@ -20,6 +20,7 @@ import {
 } from "@/lib/batch";
 import { levelKinds } from "./levels";
 import type { SessionDeliveryValue } from "@/lib/curriculum";
+import type { SessionStatusValue } from "@/lib/session-status";
 import {
   BATCH_MEMBERSHIP_SELECT,
   mergeBatchSeats,
@@ -66,6 +67,15 @@ export type TimetableSessionView = {
   taskCount: number;
   /** How many students have been marked. 0 = the register has never been opened. */
   markedCount: number;
+  /**
+   * SCHEDULED / CANCELLED / POSTPONED (issue C3).
+   *
+   * The cohort timetable is one of only TWO screens that does not filter these out - the
+   * student's own is the other. A coach has to be able to see the week they actually ran,
+   * including the Saturday that did not happen and why, and has to be able to put it back on.
+   */
+  status: SessionStatusValue;
+  cancelReason: string | null;
 };
 
 export type BatchDetailView = {
@@ -186,6 +196,9 @@ export const getBatchDetail = cache(
             id: true, weekNumber: true, orderIndex: true, title: true, framework: true,
             type: true, delivery: true, startsAt: true, durationMins: true, joinUrl: true,
             notes: true, curriculumItemId: true, recordingId: true,
+            // Issue C3. NOT filtered to SCHEDULED in the query: this is one of the two screens
+            // that must show a called-off class, so a coach can see the week they really ran.
+            status: true, cancelReason: true,
             recording: { select: { videoUrl: true } },
             _count: { select: { tasks: true, attendance: true } },
           },
@@ -224,6 +237,8 @@ export const getBatchDetail = cache(
         recordingUrl: e.recording?.videoUrl ?? null,
         taskCount: e._count.tasks,
         markedCount: e._count.attendance,
+        status: e.status as SessionStatusValue,
+        cancelReason: e.cancelReason,
       };
     });
 

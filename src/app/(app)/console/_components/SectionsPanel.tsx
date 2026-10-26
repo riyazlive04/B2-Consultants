@@ -94,9 +94,45 @@ export function SectionsPanel({ sections }: { sections: ResolvedSection[] }) {
     setDirty(true);
   };
 
-  const toggleRole = (key: string, role: AppRole) => {
+  /**
+   * ── WIDENING A MONEY SCREEN IS NOT A CHECKBOX  (issue B7) ──────────────────────────────
+   *
+   * `sectionAllowed`'s step 5 reads this very role list, so ticking USER on `finance` grants
+   * every telecaller the P&L, the runway and the receivables ledger. That was one unconfirmed
+   * click, which is a strange place for the app to be strict about `finance.write` - a bad write
+   * is visible and reversible, and a disclosure is neither.
+   *
+   * So a `sensitive` section asks, by name, before it is WIDENED. Three deliberate properties:
+   *
+   *  · Only on widening. Removing a role is still one click, because taking access away should
+   *    never be the thing the app argues with you about.
+   *  · Only for a non-ADMIN role. ADMIN passes `sectionAllowed` by bypass whatever this list
+   *    says, so confirming it would be theatre.
+   *  · The dialog names the role and the section in its body, so "yes" is being said to a
+   *    specific sentence rather than to a generic "are you sure".
+   *
+   * It is still only a confirmation - the real audit is `saveSectionsConfig`, which activity-logs
+   * the diff. This exists to stop the mis-click, not to stop a determined founder.
+   */
+  const toggleRole = async (key: string, role: AppRole) => {
     const row = rows.find((r) => r.key === key)!;
-    const roles = row.roles.includes(role) ? row.roles.filter((r) => r !== role) : [...row.roles, role];
+    const removing = row.roles.includes(role);
+
+    if (!removing && role !== "ADMIN" && row.sensitive) {
+      const ok = await askConfirm({
+        title: `Give ${ROLE_LABELS[role]} access to ${row.label}?`,
+        body:
+          `Everyone with the ${ROLE_LABELS[role]} role will be able to OPEN ${row.label} and read everything on it. ` +
+          `This is a company-money screen, so that is a disclosure rather than a convenience - and it applies to every ` +
+          `current and future ${ROLE_LABELS[role]} account, not just one person. ` +
+          `To give it to ONE person instead, leave this box clear and use their Access dialog in Users.`,
+        confirmLabel: `Yes, grant ${row.label}`,
+        danger: true,
+      });
+      if (!ok) return;
+    }
+
+    const roles = removing ? row.roles.filter((r) => r !== role) : [...row.roles, role];
     update(key, { roles });
   };
 
@@ -165,7 +201,15 @@ export function SectionsPanel({ sections }: { sections: ResolvedSection[] }) {
                 </button>
               </div>
 
-              <Icon size={17} className="text-ink-2" />
+              {/* A company-money screen, tinted so the expensive checkboxes on this grid are
+                  visible before they are clicked rather than only at the confirmation. See
+                  `sensitive` in lib/sections.ts and `toggleRole` above. */}
+              <span
+                title={s.sensitive ? `${s.label} shows company money - granting it is a disclosure` : undefined}
+                className="inline-flex"
+              >
+                <Icon size={17} className={s.sensitive ? "text-watch" : "text-ink-2"} />
+              </span>
 
               <TextIn
                 ariaLabel={`Label for ${s.key}`}

@@ -162,6 +162,10 @@ describe("a switched-off section", () => {
     phase: 1,
     locked: false,
     personal: false,
+    // `finance` IS sensitive in the catalogue (issue B7). Mirrored here so the fixture matches
+    // what `resolveSections` would hand over; nothing in these tests reads it, because the flag
+    // deliberately changes no access decision - it only makes the Console ask first.
+    sensitive: true,
     offRail: false,
     label: "Finance",
     icon: "wallet",

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "@/lib/prisma";
+import { MIN_PASSWORD_LENGTH, PASSWORD_TOO_SHORT } from "@/lib/credentials";
 import { requireAdmin, requireSession, type AppSession } from "@/lib/rbac";
 import { parseDateInput } from "@/lib/dates";
 import { intInRange, optionalRule, rule } from "@/lib/field-rules";
@@ -937,7 +938,7 @@ const portalAuth = betterAuth({
 
 const studentLoginSchema = z.object({
   email: rule("email"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  password: z.string().min(MIN_PASSWORD_LENGTH, PASSWORD_TOO_SHORT),
 });
 
 /** Create a portal login for a student and link it. The account sees ONLY /my-journey + CV check. */

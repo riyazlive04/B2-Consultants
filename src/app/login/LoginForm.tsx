@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import { BookUser, Check, Eye, EyeOff, GraduationCap, Loader2, Lock, Phone, ShieldCheck, Users } from "lucide-react";
+import { Check, Eye, EyeOff, GraduationCap, Loader2, Lock, Phone, ShieldCheck, Users } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { normalizeEmail, normalizePassword, passwordWasTrimmed } from "@/lib/credentials";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
@@ -19,30 +19,42 @@ import { safeAction } from "@/lib/action-guard";
  */
 
 type Mode = "login" | "signup";
-type ReqRole = "HEAD" | "USER" | "TUTOR" | "STUDENT" | "COACH";
+type ReqRole = "USER" | "TUTOR" | "COACH";
 
 /**
  * The access a stranger may ASK for.
  *
- * "Founder / Admin" is deliberately absent. It used to be the first option on this list, which
- * meant anyone who found the login page could request full finance, compliance and all-teams
- * access - and the request landed in the same approval queue as a telecaller's, where one
- * mis-click grants it. An admin seat is created BY an admin, from People → Users & access; there
- * is no legitimate case for requesting one from a public form.
+ * THIS LIST IS UX ONLY. `submitAccessRequest`'s own zod enum is the real gate, since a crafted
+ * POST never runs this file, so any narrowing here is done in BOTH places or it is not done.
  *
- * Removing it here is only half the fix - `submitAccessRequest`'s own enum is the real gate,
- * since a crafted POST never runs this file. Both were narrowed together.
+ * ── Three roles are deliberately absent ─────────────────────────────────────────────────
  *
- * Tutor and Student are new. Both roles already existed, already had working dashboards
- * (`/german-note`, `/my-journey`) and were already redirected there on sign-in - they simply had
- * no way to say who they were on the one screen that asks.
+ * ADMIN, first and longest-standing. Anyone who found the login page could request full
+ * finance, compliance and all-teams access, and the request landed in the same approval queue
+ * as a telecaller's, where one mis-click grants it. An admin seat is created BY an admin.
+ *
+ * HEAD, removed for exactly the same reason one rung down (issue B3). A head coach holds
+ * Students, Agreements, Onboarding, Attendance, Batches & Plans, Pipeline, Deals, Bookings,
+ * Reports and Bonus & Commission - the second-widest grant in the app - and this list was
+ * advertising it to strangers as "Delivery, students, pipeline & team". A head coach is hired,
+ * not self-served; the seat is created in People → Users & access like an admin's.
+ *
+ * STUDENT, removed because approving one produced a GUARANTEED dead end (issue A3). A student
+ * login is created FROM a `Student` record - that is why `/portal` hides this form entirely
+ * ("a request form here would collect requests nobody can action"). Approving a bare STUDENT
+ * request yields a `User` with role STUDENT and no `Student` row, and every page that role can
+ * reach is `personal`: Dashboard, My Journey and My Classroom all resolve the signed-in user to
+ * their own student record and answer "Your login isn't linked to a student record yet". The
+ * `personal` flag in `lib/sections.ts` exists to stop precisely those three dead ends appearing
+ * in the founder's rail; this closes the other door into them.
+ *
+ * What a real student is told instead is the `allowSignup: false` footnote on the student
+ * variant below: their coach creates the login from their student record.
  */
 const REQUEST_ROLES: { id: ReqRole; label: string; desc: string; icon: typeof ShieldCheck }[] = [
-  { id: "HEAD", label: "Head coach", desc: "Delivery, students, pipeline & team", icon: Users },
   { id: "USER", label: "Telecaller", desc: "Telecaller board & daily log", icon: Phone },
   { id: "COACH", label: "Coach", desc: "Your coaching batches & students", icon: Users },
   { id: "TUTOR", label: "German Note tutor", desc: "Your batches, sessions & community", icon: GraduationCap },
-  { id: "STUDENT", label: "Student", desc: "Your own journey, classroom & agreement", icon: BookUser },
 ];
 
 const fieldCls =
@@ -76,12 +88,38 @@ const fieldCls =
  */
 export type LoginVariant = "team" | "student" | "tutor" | "coach";
 
+/**
+ * ── WHY NO VARIANT CARRIES ITS OWN DESTINATION ANY MORE (issue A2) ──────────────────────
+ *
+ * Each door used to name the page it landed on, and two of the four had drifted away from the
+ * role redirect in `(app)/page.tsx` - which is the file that actually decides where a role
+ * belongs, and which argues its choices at length:
+ *
+ *   STUDENT   this said /my-journey        · the redirect says /dashboard
+ *             ("My Journey is the scoreboard rather than a landing page")
+ *   TUTOR     this said /german-note       · the redirect says /coaching
+ *             ("it gave a tutor two homes for one job")
+ *   COACH     this said /coaching          · agreed, by luck rather than design
+ *
+ * The visible consequence was that the SAME PERSON got a different home depending on which URL
+ * they signed in from: a student arriving via `/portal` landed on the scoreboard, and the same
+ * student arriving via `/login` (where middleware bounces everyone, and where the credentials
+ * email used to point) landed on the dashboard.
+ *
+ * So the field is GONE rather than corrected. Every door now pushes "/" and lets the role
+ * redirect answer - one source of truth, and no second place for it to drift to. The role
+ * redirect already carries `?denied=` and `?onboarding=` through, and already has the loop
+ * guard for a role whose home section has been switched off. A per-door destination could
+ * honour none of that.
+ *
+ * `?next=` is still honoured ahead of this - see `submit` - so a link followed while signed out
+ * still returns the person to the page they asked for.
+ */
 const VARIANTS: Record<LoginVariant, {
   heading: string;
   blurb: string;
   /** Students are provisioned from a Student record - they cannot request a seat here. */
   allowSignup: boolean;
-  next: string;
   /** Optional closing line. Omitted where the heading or the sign-up line already says it. */
   footnote?: string;
 }> = {
@@ -89,7 +127,6 @@ const VARIANTS: Record<LoginVariant, {
     heading: "Welcome back",
     blurb: "Sign in and you land on your own dashboard.",
     allowSignup: true,
-    next: "/",
     // The one place the shared door still has to say who it is for: its heading cannot,
     // because it greets everybody.
     footnote: "One sign-in for students, tutors, coaches & team",
@@ -100,21 +137,26 @@ const VARIANTS: Record<LoginVariant, {
     // A student login is created FROM their student record by an admin (see portal-actions);
     // offering a request form here would collect requests nobody can action.
     allowSignup: false,
-    next: "/my-journey",
   },
   coach: {
     heading: "Coach sign-in",
     blurb: "Sign in to the batches and students you coach.",
     allowSignup: true,
-    next: "/coaching",
   },
   tutor: {
     heading: "Tutor sign-in",
     blurb: "Sign in to your German Note batches and community.",
     allowSignup: true,
-    next: "/german-note",
   },
 };
+
+/**
+ * Where a sign-in lands when no `?next=` asked for somewhere specific.
+ *
+ * Always the root, for every door. `(app)/page.tsx` owns the role → home mapping; see the note
+ * above for why that is not duplicated here.
+ */
+const ROLE_HOME = "/";
 
 export default function LoginForm({ variant = "team" }: { variant?: LoginVariant } = {}) {
   const v = VARIANTS[variant];
@@ -199,12 +241,14 @@ export default function LoginForm({ variant = "team" }: { variant?: LoginVariant
       return;
     }
     /**
-     * Honour `?next=` so the student and tutor entry points can land people on their own
-     * dashboard. Same-origin PATHS only - an absolute URL here would turn the login screen into
-     * an open redirect, which is a phishing primitive, not a convenience.
+     * Honour `?next=` so a link followed while signed out returns the person to the page they
+     * actually asked for. Same-origin PATHS only - an absolute URL here would turn the login
+     * screen into an open redirect, which is a phishing primitive, not a convenience.
+     *
+     * Everything else goes to the root, which redirects by role. See ROLE_HOME.
      */
     const next = searchParams.get("next");
-    router.push(next && next.startsWith("/") && !next.startsWith("//") ? next : v.next);
+    router.push(next && next.startsWith("/") && !next.startsWith("//") ? next : ROLE_HOME);
     router.refresh();
   };
 
@@ -339,9 +383,15 @@ export default function LoginForm({ variant = "team" }: { variant?: LoginVariant
                     autoComplete="current-password"
                     className={`${fieldCls} pr-11`}
                   />
-                  {/* Show/hide toggle - reveal what you're typing before signing in. */}
+                  {/* Show/hide toggle - reveal what you're typing before signing in.
+                      onMouseDown preventDefault keeps focus (and the caret position) on the
+                      password input when the eye is tapped; without it, clicking the button
+                      inside this <label> steals focus from the input and the on-screen
+                      keyboard flickers on mobile. The browser's own ::-ms-reveal / autofill
+                      eye is hidden in globals.css so there isn't a second icon beside ours. */}
                   <button
                     type="button"
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => setShowPassword((v) => !v)}
                     aria-label={showPassword ? "Hide password" : "Show password"}
                     aria-pressed={showPassword}

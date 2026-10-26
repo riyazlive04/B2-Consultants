@@ -10,11 +10,18 @@ import { istWallToUtc, parseDateInput, toDateInputValue } from "@/lib/dates";
 import { clientIpFrom, takeTokens, RATE_RULES } from "@/lib/rate-limit";
 import { INTAKE_OPTIONS } from "@/lib/booking-intake";
 import { qualifiedFromBant } from "@/lib/outreach-sop";
-import { ALREADY_BOOKED_MESSAGE, findLiveBookingForPerson } from "@/lib/booking-identity";
+import { alreadyBookedMessage, findLiveBookingForPerson } from "@/lib/booking-identity";
+import { AGREEMENT_PROVIDER } from "@/lib/agreement";
+import { getWatiRuntime } from "@/lib/wati";
 import { normalizeWhatsappNumber } from "@/lib/phone";
 import { markDiscoveryConfirmed } from "./lead-stage-auto";
 import { journeyForBooking, markSopDiscoConfirmed } from "./outreach";
-import { CONSENT_LABEL, CONSENT_POLICY_VERSION, CONSENT_VALUE } from "@/lib/consent";
+import {
+  CONSENT_LABEL,
+  CONSENT_LABEL_NO_SLOTS,
+  CONSENT_POLICY_VERSION,
+  CONSENT_VALUE,
+} from "@/lib/consent";
 import { bookingRulesConfigSchema } from "@/lib/config-schema";
 import { coerceDurationMinutes } from "@/lib/duration";
 import { releasedSlotStatus } from "@/lib/booking-hold";
@@ -211,11 +218,172 @@ async function liveBookingFor(
 }
 
 /**
+ * "You already have a call booked", worded for whether a WhatsApp confirmation was actually sent
+ * (issue A5). Reads the SAME runtime flag that gates the confirmation itself, so the sentence
+ * cannot point somebody at a message that never left.
+ *
+ * Resolved here rather than at module scope because `getWatiRuntime` reads AppSetting - the
+ * founder can pause WhatsApp without a deploy, and this answer has to follow that.
+ */
+async function alreadyBookedError(): Promise<{ ok: false; error: string }> {
+  const wati = await getWatiRuntime().catch(() => null);
+  return {
+    ok: false,
+    error: alreadyBookedMessage({
+      whatsappArmed: wati?.enabled === true,
+      contactNumber: AGREEMENT_PROVIDER.mobile,
+      contactEmail: AGREEMENT_PROVIDER.email,
+    }),
+  };
+}
+
+/**
  * `declined` marks the auto-disqualify path: the intake was stored, but NO slot was claimed.
  * The prospect-facing page needs to know, because "we saved your answers" and "you have a call
  * on Wednesday" are different sentences and only one of them is true here.
  */
 export type BookingSubmitResult = { ok: true; declined?: boolean } | { ok: false; error: string };
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════════════════
+ *  NO SLOTS OPEN - CAPTURE THE PERSON ANYWAY  (issue A6)
+ * ════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * `/book` renders an empty calendar whenever the availability engine is unarmed or the diary has
+ * simply run dry: "No call times are open right now - please check back shortly." Honest, and
+ * far better than the four zeroes this screen used to show. But it was still the ONE dead end in
+ * the app whose victim cannot be told to ask an admin - a stranger who clicked a paid ad, is
+ * ready to talk to us, and leaves with no `Lead` row created at all.
+ *
+ * `server/not-armed.ts` records that exact failure on production: "no availability pattern → 0
+ * slots, 0 bookings, an empty public /book calendar". Arming availability is the real fix; this
+ * is the safety net for every future lapse, and it costs the prospect four fields.
+ *
+ * ── Why DISCO_NOT_BOOKED and not NEW_LEAD ───────────────────────────────────────────────
+ * That stage exists for precisely this person: known to us, wanted a discovery call, hasn't got
+ * one. It puts them on the specialist desks' chase lists instead of the bottom of the new-lead
+ * pile, and it is what the Outreach SOP's ladder reads to keep working on them. Filing them as
+ * NEW_LEAD would discard the single most valuable thing we know - that they tried to book.
+ *
+ * ── Why this cannot claim a slot, ever ──────────────────────────────────────────────────
+ * It does not touch `AppointmentSlot` and shares none of `submitBooking`'s claiming path. A
+ * slot released a second after this submission must be offered by the team (or by
+ * `promoteIntoFreedSlot`), not silently taken by whoever happened to be on the page - the
+ * prospect agreed to be contacted, not to a time they never saw.
+ */
+const noSlotsSchema = z.object({
+  name: rule("name"),
+  /**
+   * REQUIRED, unlike on some other intake paths. `upsertIntakeLead` accepts a null phone for
+   * workshop sign-ups, but every lead webhook 422s a phone-less lead and the whole point of this
+   * capture is that somebody can be chased - a row nobody can call is not a saved lead, it is a
+   * record that we lost one.
+   */
+  phone: rule("phone"),
+  email: optionalRule("email"),
+  /** Prose. Optional, because a required "why" on a four-field apology form is a fifth reason to leave. */
+  note: optionalRule("text"),
+  /**
+   * Same shape as `bookingSchema`'s: optional in the SCHEMA, mandatory in the ACTION below.
+   *
+   * An unticked checkbox posts nothing at all, so a `z.literal` here would reject it as a
+   * malformed submission ("please check the details you entered") rather than as the refusal it
+   * actually is. The explicit test after parsing gets to say the true sentence.
+   */
+  consent: z.string().optional(),
+});
+
+export async function submitNoSlotsInterest(form: FormData): Promise<ActionResult> {
+  /**
+   * Rated as a FORM, not as a booking. It consumes no calendar slot, so the tight `bookPerIp`
+   * rule would be punishing the wrong thing - but it is still an unauthenticated write that can
+   * fire an intro message, so it is not unrated either.
+   */
+  const hdrs = await Promise.resolve(headers());
+  const ip = clientIpFrom(hdrs);
+  const gate = takeTokens([
+    { key: `noslots:ip:${ip}`, rule: RATE_RULES.formPerIp },
+    { key: "noslots:global", rule: RATE_RULES.formGlobal },
+  ]);
+  if (!gate.ok) {
+    return { ok: false, error: "Too many attempts - please try again in a few minutes." };
+  }
+
+  const parsed = noSlotsSchema.safeParse(Object.fromEntries(form));
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Please check the details you entered." };
+  }
+  const d = parsed.data;
+
+  /**
+   * "No lead data is stored without explicit consent" - the same rule `submitBooking` enforces,
+   * enforced here too rather than inherited. This is a SECOND public path into
+   * `upsertIntakeLead`, and the moment one of them skips this test the rule stops being a
+   * property of the app and becomes a property of one action.
+   */
+  if (d.consent !== CONSENT_VALUE) {
+    return { ok: false, error: "Please tick the box so we may store your details and contact you." };
+  }
+
+  /**
+   * Already holds a live call? Say so and write nothing.
+   *
+   * Reusing the booking collision check keeps one answer to "this person is already in the
+   * diary", and stops a prospect whose confirmation has not arrived yet from filing themselves
+   * as un-booked and landing on a chase list they do not belong on.
+   */
+  if (await liveBookingFor(prisma, { phone: d.phone, email: d.email ?? "" })) {
+    return alreadyBookedError();
+  }
+
+  const res = await upsertIntakeLead(
+    {
+      name: d.name,
+      phone: d.phone,
+      email: d.email ?? null,
+      // No "how did you hear about us" on a four-field form, and guessing it would write a
+      // marketing attribution nobody stated. LANDING_PAGE is what `submitBooking` falls back to
+      // for the same reason.
+      leadSource: LeadSource.LANDING_PAGE,
+      source: "BOOKING_FORM" as const,
+      notes: d.note ?? null,
+      originDomain: await observedOriginDomain(),
+      consent: {
+        // Stored VERBATIM as shown - see lib/consent.ts. A different form means a different
+        // sentence, not the booking one.
+        purpose: CONSENT_LABEL_NO_SLOTS,
+        policyVersion: CONSENT_POLICY_VERSION,
+        source: "BOOKING_FORM" as const,
+        ipAddress: ip === "unknown" ? null : ip,
+        userAgent: hdrs.get("user-agent"),
+      },
+    },
+    // It IS an opt-in form rather than a booking, so a returning prospect gets the New Lead
+    // stage message - the behaviour `announceReturningOptIn` exists for.
+    { announceReturning: true },
+  );
+
+  /**
+   * Stage, set only FORWARD and only from the early funnel.
+   *
+   * Somebody who is already at SSS_BOOKED or WON must not be dragged back to "wanted a call" by
+   * filling in this form - that would rewrite a real pipeline position on the strength of a
+   * stranger re-typing a phone number. `NEW_LEAD` and `WHATSAPP_SENT` are the only stages this
+   * is an advance on; `DISCO_NOT_BOOKED` itself is excluded so a second submission is a no-op.
+   */
+  const ADVANCE_FROM: LeadStage[] = ["NEW_LEAD", "WHATSAPP_SENT"];
+  await prisma.lead
+    .updateMany({
+      where: { id: res.lead.id, stage: { in: ADVANCE_FROM } },
+      data: { stage: "DISCO_NOT_BOOKED" },
+    })
+    .catch((e) => {
+      // Never fail the capture over the stage - the lead row is the thing worth keeping.
+      console.error(`[book] no-slots stage update failed for lead ${res.lead.id}`, e);
+    });
+
+  return { ok: true };
+}
 
 export async function submitBooking(form: FormData): Promise<BookingSubmitResult> {
   // Public endpoint, and the most expensive one here: a submission consumes a finite calendar
@@ -274,7 +442,7 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
    * form. Re-checked inside the claiming transaction for the race between two open tabs.
    */
   if (await liveBookingFor(prisma, d)) {
-    return { ok: false, error: ALREADY_BOOKED_MESSAGE };
+    return alreadyBookedError();
   }
 
   const rules = await getBookingRulesConfig();
@@ -509,7 +677,7 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
         await syncDefaultOpportunity(tx, lead.id, "STRATEGY_CALL_BOOKED");
       }
 
-      // SOP Steps 10–11, synchronously. A prospect who books directly on the public form would
+      // SOP Steps 10-11, synchronously. A prospect who books directly on the public form would
       // otherwise stay unlinked from their booking - the ONLY thing that links the two is the
       // async engine's Step 10 cross-check, and that engine is off by default. So without this,
       // a booked prospect's BANT score never reaches the Qualified verdict (Step 11) or Key
@@ -541,7 +709,7 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
       return { ok: false, error: "That time was just taken - please pick another slot." };
     }
     if (e instanceof Error && e.message === "ALREADY_BOOKED") {
-      return { ok: false, error: ALREADY_BOOKED_MESSAGE };
+      return alreadyBookedError();
     }
     throw e;
   }
@@ -827,7 +995,7 @@ export async function setBookingStatus(id: string, status: string): Promise<Acti
    * window the slot is BLOCKED instead: still not sold, but honestly marked as unusable.
    *
    * The cancellation itself is never refused. Spec §M2 frames this as "require cancellation
-   * 12–24 hours before", but blocking a late cancel would force a call that is not happening to
+   * 12-24 hours before", but blocking a late cancel would force a call that is not happening to
    * stay marked BOOKED - which corrupts the show-rate the L2 desk reports on. Recording reality
    * beats enforcing a policy the calendar cannot undo.
    */
@@ -1083,7 +1251,7 @@ async function afterBookingMoved(
  * A booking that is no longer live (cancelled, or written off as a no-show) is re-bookable here
  * too - it is revived to BOOKED. The team has to be able to put a call back on the calendar for
  * someone who rings to say they can make Thursday after all: the public form refuses that person a
- * second booking by design (`ALREADY_BOOKED_MESSAGE` tells them to ask us to move it), so if this
+ * second booking by design (`alreadyBookedMessage` tells them to ask us to move it), so if this
  * screen cannot do it, nothing can.
  */
 export async function rescheduleBooking(bookingId: string, newSlotId: string): Promise<ActionResult> {

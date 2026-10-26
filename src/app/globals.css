@@ -723,7 +723,7 @@ tbody tr:hover {
    makes these entrances work without a React `key`: an animation does not run on a
    `display:none` element, so it starts fresh each time a step is revealed.
 
-   Direction-aware on purpose — travelling back should not look identical to travelling
+   Direction-aware on purpose - travelling back should not look identical to travelling
    forward, or the wizard gives no sense of where you are in it. */
 @keyframes step-in-fwd {
   from { opacity: 0; transform: translateX(14px); }
@@ -1001,4 +1001,27 @@ tbody tr:hover {
   content: "";
   flex: 1;
   border-top: 1.5px dashed var(--line-strong, var(--line));
+}
+
+/*
+ * Hide the browser's own password-reveal and field-clear buttons on password
+ * inputs. Microsoft Edge paints a native eye at ::-ms-reveal and an X at
+ * ::-ms-clear inside every password field, and Chromium password managers add
+ * their own autofill button at the same corner. All of those overlap our
+ * custom Eye/EyeOff button on the login screen, so users either saw two eye
+ * icons side by side or tapped the native one and got no visible response.
+ * We own the toggle, so we tell the browser not to render its copy.
+ */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+  width: 0;
+  height: 0;
+}
+input[type="password"]::-webkit-credentials-auto-fill-button,
+input[type="password"]::-webkit-contacts-auto-fill-button {
+  visibility: hidden;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
 }

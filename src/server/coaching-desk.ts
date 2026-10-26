@@ -10,6 +10,7 @@ import { mayManageAnyBatch } from "./batch-access";
 import type { AppRole } from "@/lib/sections";
 import { istToday, toDateInputValue } from "@/lib/dates";
 import type { SessionDeliveryValue } from "@/lib/curriculum";
+import { sessionIsOn, type SessionStatusValue } from "@/lib/session-status";
 
 /**
  * THE TEACHING DESK - one screen for everyone who stands in front of a batch.
@@ -49,6 +50,10 @@ export type DeskSessionView = {
   markedCount: number;
   taskCount: number;
   hasRecording: boolean;
+  /** SCHEDULED / CANCELLED / POSTPONED (issue C3). A called-off class owes the coach nothing. */
+  status: SessionStatusValue;
+  /** Why it was called off, in the coach's own words. */
+  cancelReason: string | null;
   /**
    * May THIS viewer mark this register / post this recording?
    *
@@ -248,6 +253,10 @@ export const getCoachingDesk = cache(
           select: {
             id: true, title: true, framework: true, delivery: true, startsAt: true,
             durationMins: true, joinUrl: true, recordingId: true,
+            // Issue C3: a called-off class generates no work for the coach. Selected rather
+            // than filtered in the query, because the desk still LISTS it - the week should
+            // read honestly - it just owes nothing.
+            status: true, cancelReason: true,
             _count: { select: { attendance: true, tasks: true } },
           },
         },
@@ -270,18 +279,29 @@ export const getCoachingDesk = cache(
         const pre = e.delivery === "PRE_RECORDED";
         const past = !pre && start + (e.durationMins ?? 90) * 60_000 < now;
         const { dateYmd, timeHm } = istParts(e.startsAt);
+        /**
+         * A CALLED-OFF CLASS OWES THE COACH NOTHING (issue C3).
+         *
+         * It is not the next class, it has no register to mark and no recording to post - and
+         * before the status existed, all three of those counters chased a tutor about a class
+         * they had themselves cancelled, for ever. The row still appears in the list below so
+         * the desk shows the week honestly; it just generates no work.
+         */
+        const on = sessionIsOn(e.status);
 
-        if (!pre && start >= now && (nextSessionAt === null || e.startsAt.toISOString() < nextSessionAt)) {
+        if (on && !pre && start >= now && (nextSessionAt === null || e.startsAt.toISOString() < nextSessionAt)) {
           nextSessionAt = e.startsAt.toISOString();
         }
-        if (past && e._count.attendance === 0) registersOutstanding += 1;
-        if (past && !e.recordingId) recordingsOutstanding += 1;
+        if (on && past && e._count.attendance === 0) registersOutstanding += 1;
+        if (on && past && !e.recordingId) recordingsOutstanding += 1;
 
         const view: DeskSessionView = {
           id: e.id,
           batchId: b.id,
           batchName: b.name,
           batchLine: b.line,
+          status: e.status as SessionStatusValue,
+          cancelReason: e.cancelReason,
           title: e.title,
           framework: e.framework,
           delivery: pre ? "PRE_RECORDED" : "LIVE",

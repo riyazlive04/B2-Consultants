@@ -14,7 +14,18 @@
 export type EnrolmentState =
   | { kind: "enrolled"; studentId: string; code: string | null }
   | { kind: "ready"; leadName: string }
-  | { kind: "ambiguous"; count: number }
+  /**
+   * More than one student under this contact (issue C6).
+   *
+   * Carries the CANDIDATES now, not just how many there are. The count alone was all the card
+   * could say, so the one state that genuinely needs a human decision was the one state with
+   * nothing to decide WITH: "open the right student and link it by hand" named no students and
+   * linked to none of them.
+   *
+   * The server still refuses to guess - `enrolFromAgreement` takes an explicit
+   * `adoptStudentId` and re-checks it belongs to this lead. Offering a list is not guessing.
+   */
+  | { kind: "ambiguous"; count: number; candidates: { id: string; code: string | null }[] }
   | { kind: "no-client" };
 
 /** Takes what `getAgreementDetail` already selects, so the page costs no extra query. */
@@ -30,6 +41,8 @@ export function enrolmentState(row: {
   if (existing.length === 1) {
     return { kind: "enrolled", studentId: existing[0].id, code: existing[0].code };
   }
-  if (existing.length > 1) return { kind: "ambiguous", count: existing.length };
+  if (existing.length > 1) {
+    return { kind: "ambiguous", count: existing.length, candidates: existing };
+  }
   return { kind: "ready", leadName: row.lead.name };
 }

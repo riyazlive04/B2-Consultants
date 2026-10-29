@@ -559,7 +559,20 @@ export const SECTION_CATALOGUE = [
    * Not `locked`: unlike the activity log, nothing here reports on the people who can open it, so
    * there is no reason the founder should be unable to hand it to someone or switch it off.
    */
-  { key: "improvements", label: "Improvements", href: "/improvements", phase: 1, icon: "inbox", group: "Admin", roles: ["ADMIN"] },
+  /*
+   * `improvements` is ADMIN **and HEAD**. The head coach was given the queue on 29/10/2026 so
+   * they can escalate what their coaches and students report - see `improvements.escalate`.
+   * Reading it is all they get: every triage action stays behind `improvements.triage` (ADMIN).
+   *
+   * ⚠ KNOWN AND ACCEPTED AT THE FOUNDER'S DECISION: this routes around the head coach's Finance
+   * lock. A report about a money screen quotes the figures in it ("shows 0, should be 99,500"),
+   * and a screen recording shows the page outright - so HEAD can see, through a report, numbers
+   * that `finance`, `cash` and `pipeline` deliberately withhold from them. It was raised before
+   * the change was made and chosen anyway, in exchange for the head coach being able to push on
+   * problems at all. Do not "fix" it by narrowing the section without asking: the narrower
+   * alternative (own team's reports only) was the option NOT taken.
+   */
+  { key: "improvements", label: "Improvements", href: "/improvements", phase: 1, icon: "inbox", group: "Admin", roles: ["ADMIN", "HEAD"] },
   /*
    * REMOVED 23/10/2026: `automation` - the trigger → action workflow builder.
    *

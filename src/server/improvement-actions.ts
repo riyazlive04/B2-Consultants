@@ -60,7 +60,9 @@ import type { ActionResult } from "./finance-actions";
  */
 const SUBMIT_RULE = { capacity: 12, refillPerSec: 12 / 1800 } as const;
 
-export async function submitImprovement(input: unknown): Promise<ActionResult & { ref?: string }> {
+export async function submitImprovement(
+  input: unknown,
+): Promise<ActionResult & { ref?: string; id?: string }> {
   const session = await requireSession();
 
   const gate = takeToken(`improvement:${session.user.id}`, SUBMIT_RULE);
@@ -79,7 +81,9 @@ export async function submitImprovement(input: unknown): Promise<ActionResult & 
 
   // The answers are validated against the kind's OWN question list, so a payload carrying another
   // kind's fields (or extra keys) is narrowed to what this kind actually asks.
-  const answers = answersSchema(d.kind).safeParse(d.answers);
+  // `recorded` relaxes the required questions: somebody who walked through the problem on camera
+  // has already answered them. See `answersSchema` for why the declared flag is good enough here.
+  const answers = answersSchema(d.kind, { recorded: !!d.recordingKind }).safeParse(d.answers);
   if (!answers.success) {
     return { ok: false, error: answers.error.issues[0]?.message ?? "Please fill in the questions" };
   }
@@ -98,7 +102,16 @@ export async function submitImprovement(input: unknown): Promise<ActionResult & 
     userAgent: hdrs.get("user-agent"),
   });
 
-  const title = (d.title?.trim() || suggestTitle(d.kind, answers.data)).slice(0, TITLE_MAX);
+  /**
+   * A recorded report may carry no words at all, so the title falls back to naming the recording
+   * and the screen. "Broken" twenty times over is not a queue anybody can read.
+   */
+  const recordingFallback = d.recordingKind
+    ? `${d.recordingKind === "SCREEN" ? "screen recording" : "voice note"} on ${context.sectionLabel ?? d.route}`
+    : undefined;
+  const title = (
+    d.title?.trim() || suggestTitle(d.kind, answers.data, recordingFallback)
+  ).slice(0, TITLE_MAX);
 
   // One transaction, because the ref is drawn inside it: Postgres row-locks the counter until the
   // report is written, so two reporters pressing Send together queue rather than colliding, and a
@@ -151,6 +164,8 @@ export async function submitImprovement(input: unknown): Promise<ActionResult & 
       reporterRole: session.role,
       answers: answers.data,
       note: d.note?.trim() || null,
+      recordingSeconds: d.recordingSeconds ?? null,
+      recordingKind: d.recordingKind ?? null,
       context,
     });
     if (outcome.sent) {
@@ -181,7 +196,13 @@ export async function submitImprovement(input: unknown): Promise<ActionResult & 
   });
 
   revalidatePath("/improvements");
-  return { ok: true, ref: report.ref };
+  /**
+   * The `id` rides back alongside the ref so the form can attach a voice note to the row it just
+   * created. The clip cannot travel in this action at all - Next caps an action body at 1 MB and
+   * a two-minute recording can beat that - so it is posted to `/api/improvements/[id]/voice`
+   * afterwards. The ref is for the person; the id is for that one follow-up request.
+   */
+  return { ok: true, ref: report.ref, id: report.id };
 }
 
 /**
@@ -209,6 +230,58 @@ const statusSchema = z.object({
   resolution: z.string().trim().max(ANSWER_MAX).optional(),
   duplicateOfRef: z.string().trim().max(40).optional(),
 });
+
+/**
+ * ESCALATE, OR STAND DOWN - the head coach's one lever on this queue.
+ *
+ * Behind `improvements.escalate` (ADMIN + HEAD), NOT `improvements.triage`. The head coach is
+ * not deciding whether something is a duplicate or writing developer notes; they are saying
+ * "this one matters now" about a problem their coaches and students keep hitting, and that is
+ * the only thing this action does.
+ *
+ * ── WHY IT DOES NOT TOUCH `severity` ───────────────────────────────────────────────────────
+ * Severity is the REPORTER's own answer to "how much is this holding you up", and it is the only
+ * honest signal of impact this module collects. A manager overwriting it to mark something
+ * urgent would destroy that answer permanently and make the question worth asking exactly once.
+ * So escalation is its own flag, and the queue sorts on it ahead of both status and severity.
+ *
+ * Who escalated and when is recorded by `logActivity`, which is where every other
+ * who-did-what-when in this app already lives - no new event kind, no second audit trail.
+ */
+const urgentSchema = z.object({ id: z.string().min(1), urgent: z.boolean() });
+
+export async function setImprovementUrgent(input: unknown): Promise<ActionResult> {
+  const { allowed, denied, session } = await capabilityCheck("improvements.escalate");
+  if (!allowed) return denied;
+
+  const parsed = urgentSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const { id, urgent } = parsed.data;
+
+  const report = await prisma.improvement.findFirst({
+    where: { id, ...ACTIVE },
+    select: { id: true, ref: true, title: true, urgent: true },
+  });
+  if (!report) return { ok: false, error: "That report is not here any more." };
+  // Idempotent: two people pressing Escalate is not an error, and neither is a stale screen.
+  if (report.urgent === urgent) return { ok: true };
+
+  await prisma.improvement.update({ where: { id }, data: { urgent } });
+
+  await logActivity(session, {
+    action: urgent ? "improvement.escalate" : "improvement.deescalate",
+    section: "improvements",
+    entityType: "Improvement",
+    entityId: id,
+    // The TITLE is safe here - it is already the queue's own label - but never the answers, which
+    // can describe a student's money. Same rule `submitImprovement` follows.
+    summary: `${urgent ? "Escalated" : "Stood down"} ${report.ref} - ${report.title}`,
+    meta: { ref: report.ref, urgent },
+  });
+
+  revalidatePath("/improvements");
+  return { ok: true };
+}
 
 export async function setImprovementStatus(input: unknown): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("improvements.triage");

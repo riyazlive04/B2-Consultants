@@ -89,9 +89,52 @@ describe("improvement actions - who may do what", () => {
     assert.match(submit.body, /takeToken/, "submitImprovement has no brake at all");
   });
 
-  test("every action other than filing is behind improvements.triage", () => {
+  /**
+   * THREE TIERS, AND THE MIDDLE ONE IS THE EASIEST TO LOSE.
+   *
+   *   submitImprovement        ungated - any session
+   *   setImprovementUrgent     `improvements.escalate` - ADMIN + HEAD
+   *   everything else          `improvements.triage`   - ADMIN
+   *
+   * The head coach was given the queue so they can escalate what their coaches and students
+   * report. They must NOT acquire the status machine with it: a new triage action written by
+   * copying `setImprovementUrgent` - its nearest neighbour in this file - would inherit the
+   * weaker check and hand the head coach the power to declare things fixed. This test names the
+   * escalate action explicitly so that copy fails here instead of in production.
+   */
+  const ESCALATE_ONLY = ["setImprovementUrgent"];
+
+  test("escalation is behind improvements.escalate, and nothing else is", () => {
+    for (const name of ESCALATE_ONLY) {
+      const fn = exportedFunctions(read(ACTIONS)).find((f) => f.name === name);
+      assert.ok(fn, `${name} is gone`);
+      assert.match(
+        fn.body,
+        /capabilityCheck\("improvements\.escalate"\)/,
+        `${name} is the head coach's one lever and must check improvements.escalate`,
+      );
+      assert.doesNotMatch(
+        fn.body,
+        /status\s*:|devNote|resolution|duplicateOfId/,
+        `${name} has started touching triage state - escalation is one flag and an ordering`,
+      );
+    }
+
+    const borrowing = exportedFunctions(read(ACTIONS))
+      .filter((f) => !ESCALATE_ONLY.includes(f.name))
+      .filter((f) => /capabilityCheck\("improvements\.escalate"\)/.test(f.body))
+      .map((f) => f.name);
+    assert.deepEqual(
+      borrowing,
+      [],
+      `these use the head coach's weaker permission for work that is triage: ${borrowing.join(", ")}`,
+    );
+  });
+
+  test("every action other than filing and escalating is behind improvements.triage", () => {
     const ungated = exportedFunctions(read(ACTIONS))
       .filter((f) => f.name !== "submitImprovement")
+      .filter((f) => !ESCALATE_ONLY.includes(f.name))
       .filter((f) => !/capabilityCheck\("improvements\.triage"\)/.test(f.body))
       .map((f) => f.name);
     assert.deepEqual(

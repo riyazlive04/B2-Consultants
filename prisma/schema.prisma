@@ -174,6 +174,7 @@ model User {
   improvementsAssigned     Improvement[]              @relation("ImprovementAssignee")
   improvementsArchived     Improvement[]              @relation("ImprovementArchivedBy")
   improvementEvents        ImprovementEvent[]         @relation("ImprovementEventActor")
+  improvementRecordings    ImprovementRecording[]     @relation("ImprovementRecorder")
 
   @@map("user")
 }
@@ -5787,6 +5788,14 @@ enum ImprovementStatus {
   DUPLICATE
 }
 
+/// AUDIO is the reporter talking; SCREEN is their screen captured with their voice over it.
+/// SCREEN does not replace AUDIO - `getDisplayMedia` does not exist on iOS at all, and most
+/// students are on a phone.
+enum ImprovementRecordingKind {
+  AUDIO
+  SCREEN
+}
+
 enum ImprovementEventKind {
   STATUS
   COMMENT
@@ -5848,6 +5857,15 @@ model Improvement {
   duplicateOf   Improvement?  @relation("ImprovementDuplicate", fields: [duplicateOfId], references: [id])
   duplicates    Improvement[] @relation("ImprovementDuplicate")
 
+  /// ESCALATION. Set by the head coach or the founder to say "this one matters now", and read
+  /// by the queue, which sorts urgent reports to the top regardless of status or severity.
+  ///
+  /// Deliberately NOT the same thing as `severity`: severity is the REPORTER's own answer to
+  /// "how much is this holding you up", and overwriting it to mark something urgent would
+  /// destroy the one honest signal this module collects about impact. Who pressed it and when
+  /// is in the activity log (`logActivity`), not here.
+  urgent         Boolean @default(false)
+
   devNote        String?
   /// Shown to the reporter on FIXED / DECLINED. The internal reasoning stays in `devNote`.
   resolution     String?
@@ -5868,9 +5886,12 @@ model Improvement {
   deletedById String?
   deletedBy   User?     @relation("ImprovementArchivedBy", fields: [deletedById], references: [id])
 
-  events ImprovementEvent[]
+  events    ImprovementEvent[]
+  recording ImprovementRecording?
 
   @@index([status, createdAt])
+  /// The queue's default order is urgent-first, so this is the index behind every page of it.
+  @@index([urgent, createdAt])
   @@index([sectionKey, status])
   @@index([reporterId, createdAt])
   @@index([deletedAt])
@@ -5897,4 +5918,49 @@ model ImprovementEvent {
 
   @@index([reportId, createdAt])
   @@map("improvement_event")
+}
+
+/// The optional recording a reporter attaches instead of typing the whole story out: either their
+/// voice, or their SCREEN with their voice over it - the clicks, the form, the error appearing.
+///
+/// ── WHY ITS OWN TABLE AND NOT COLUMNS ON `improvement` ───────────────────────────────────
+/// `bytes` is up to 25 MB, and Prisma selects EVERY scalar column when a query names no
+/// `select`. A `Bytes` column on `improvement` would therefore be dragged across the wire by any
+/// future `findMany` written without one - the queue listing, a count, the digest - and whoever
+/// wrote that query would have no way of knowing. A separate table cannot be loaded by accident.
+///
+/// One per report (`reportId` is unique): re-recording REPLACES, so there is never a set of
+/// clips for a reader to choose between. `onDelete: Cascade` is the only deletion path -
+/// `Improvement` is soft-deleted, so archiving a report keeps its recording, which is correct
+/// for a declined report somebody re-opens six months later. Caps, containers and the magic-byte
+/// sniff all live in src/lib/recording.ts.
+model ImprovementRecording {
+  id       String      @id @default(cuid())
+  reportId String      @unique
+  report   Improvement @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  /// AUDIO or SCREEN. Not derivable from the bytes: `audio/webm` and `video/webm` share the same
+  /// Matroska header, so this is what decides which player the triage screen renders.
+  kind  ImprovementRecordingKind
+  bytes Bytes
+  /// The container as SNIFFED from the bytes on upload, never as the request claimed, combined
+  /// with `kind`. This value becomes the `Content-Type` of a response, so a client-supplied one
+  /// would be a scripting hole.
+  mimeType String
+  size     Int
+  /// Measured by the recorder's own timer, clamped server-side. Cosmetic: it labels the player
+  /// and the queue chip, and nothing is authorised or allocated from it.
+  seconds  Int
+  /// False when a SCREEN recording was made without the microphone - the person declined it, or
+  /// the device has none. Worth storing so triage knows to watch rather than wait for a voice.
+  hasAudio Boolean @default(true)
+
+  /// Who recorded it, kept for the same reason `Improvement.reporterRole` is: "whose voice is
+  /// this?" must stay answerable after the report is reassigned or the person has left.
+  recordedById String
+  recordedBy   User   @relation("ImprovementRecorder", fields: [recordedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@map("improvement_recording")
 }

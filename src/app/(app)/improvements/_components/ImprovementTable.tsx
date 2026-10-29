@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { PowerOff } from "lucide-react";
+import { ChevronsUp, Mic, MonitorPlay, PowerOff } from "lucide-react";
 import { Pill, TableShell, Td, Th, Tr } from "@/components/ui/kit";
 import { DateText } from "@/components/ui/DateText";
 import { IMPROVEMENT_KIND_SHORT, IMPROVEMENT_SEVERITY_SHORT, IMPROVEMENT_STATUS_LABELS } from "@/lib/improvement";
+import { formatClipLength } from "@/lib/recording";
 import type { ImprovementRow } from "@/server/improvements";
 import { severityTone, statusTone } from "./tone";
 
@@ -47,12 +48,34 @@ export function ImprovementTable({ rows, openId }: { rows: ImprovementRow[]; ope
               <span className="block truncate text-sm text-ink hover:underline">{r.title}</span>
               <span className="mt-1 flex flex-wrap items-center gap-1.5">
                 <Pill tone="neutral">{IMPROVEMENT_KIND_SHORT[r.kind]}</Pill>
+                {/* First chip after the kind, because it is why this row is at the top. */}
+                {r.urgent && (
+                  <Pill tone="bad" title="Escalated - someone has said this one matters now">
+                    <ChevronsUp size={11} /> Urgent
+                  </Pill>
+                )}
                 {r.enginesOff.length > 0 && (
                   <Pill
                     tone="warn"
                     title={`Switched off when this was reported: ${r.enginesOff.join(", ")}`}
                   >
                     <PowerOff size={11} /> engine off
+                  </Pill>
+                )}
+                {/* A recording is invisible in a queue unless the queue says so, and it is the
+                    one part of a report that cannot be skimmed. The length is on the chip because
+                    that is what decides whether it gets played now or later. */}
+                {r.recording && (
+                  <Pill
+                    tone={r.recording.kind === "SCREEN" ? "info" : "neutral"}
+                    title={
+                      r.recording.kind === "SCREEN"
+                        ? "This report has a screen recording showing what happened"
+                        : "This report has a voice note to listen to"
+                    }
+                  >
+                    {r.recording.kind === "SCREEN" ? <MonitorPlay size={11} /> : <Mic size={11} />}{" "}
+                    {formatClipLength(r.recording.seconds)}
                   </Pill>
                 )}
                 {r.events > 0 && (

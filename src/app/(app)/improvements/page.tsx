@@ -24,9 +24,15 @@ type SP = Record<string, string | string[] | undefined>;
 /**
  * IMPROVEMENT REPORTS - what people hit while using the app.
  *
- * Gated on the `improvements` section (ADMIN by default). Reading and WORKING the queue are separate:
- * the status buttons need `improvements.triage`, which exists so a developer can hold a seat that works
- * this screen and nothing else.
+ * Gated on the `improvements` section (ADMIN and HEAD). Reading, ESCALATING and WORKING the queue
+ * are three different things:
+ *   - reading            the section itself
+ *   - `improvements.escalate`  ADMIN + HEAD - one flag that sorts a report to the top
+ *   - `improvements.triage`    ADMIN - the status machine, re-kinding, dev notes, archive
+ *
+ * That is why the head coach can push on a problem their coaches keep hitting without being able
+ * to declare it fixed. The triage capability also exists so a developer can hold a seat that
+ * works this screen and nothing else.
  *
  * Everyone can FILE one - the Report button is in the shell for all six roles. That asymmetry is
  * the design, not an oversight: the people most likely to hit a dead end are the ones least
@@ -38,6 +44,12 @@ type SP = Record<string, string | string[] | undefined>;
 export default async function ImprovementsPage({ searchParams }: { searchParams: SP }) {
   const session = await requireSection("improvements");
   const canTriage = hasCapability(session.role, session.capabilities, "improvements.triage");
+  /**
+   * The head coach holds this and NOT `improvements.triage`, so for them the whole screen is
+   * read-only except one button. Two separate checks, never one: collapsing them would hand the
+   * head coach the status machine the moment somebody reordered a boolean.
+   */
+  const canEscalate = hasCapability(session.role, session.capabilities, "improvements.escalate");
 
   const filters = parseImprovementFilters(searchParams);
   const active = hasActiveImprovementFilters(filters);
@@ -114,7 +126,9 @@ export default async function ImprovementsPage({ searchParams }: { searchParams:
         </Panel>
       </Grid>
 
-      {detail && <ImprovementDetail detail={detail} canTriage={canTriage} />}
+      {detail && (
+        <ImprovementDetail detail={detail} canTriage={canTriage} canEscalate={canEscalate} />
+      )}
 
       <Card
         title={<CardTitle icon={<Inbox size={17} />}>Queue</CardTitle>}

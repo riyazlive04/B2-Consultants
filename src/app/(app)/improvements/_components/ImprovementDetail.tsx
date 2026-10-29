@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, PowerOff, X } from "lucide-react";
+import { AlertTriangle, ChevronsUp, PowerOff, X } from "lucide-react";
 import { Card, CardTitle, Panel, Pill } from "@/components/ui/kit";
 import { DateText } from "@/components/ui/DateText";
 import {
@@ -9,7 +9,9 @@ import {
   answerDisplay,
   questionLabel,
 } from "@/lib/improvement";
+import { RECORDING_LABEL, formatClipLength } from "@/lib/recording";
 import type { ImprovementDetail as Detail } from "@/server/improvements";
+import { EscalateButton } from "./EscalateButton";
 import { ImprovementTriage } from "./ImprovementTriage";
 import { severityTone, statusTone } from "./tone";
 
@@ -23,7 +25,16 @@ import { severityTone, statusTone } from "./tone";
  * investigations before they start; burying it under three paragraphs of description wastes the
  * one thing here that is automatic.
  */
-export function ImprovementDetail({ detail, canTriage }: { detail: Detail; canTriage: boolean }) {
+export function ImprovementDetail({
+  detail,
+  canTriage,
+  canEscalate,
+}: {
+  detail: Detail;
+  canTriage: boolean;
+  /** ADMIN + HEAD. The head coach holds this and nothing else on this screen. */
+  canEscalate: boolean;
+}) {
   const ctx = detail.context;
 
   return (
@@ -41,8 +52,18 @@ export function ImprovementDetail({ detail, canTriage }: { detail: Detail; canTr
       }
       actions={
         <>
+          {/* The chip states the fact; the button changes it. Both are shown to a head coach,
+              who has no other control on this screen at all. */}
+          {detail.urgent && (
+            <Pill tone="bad" title="Escalated - someone has said this one matters now">
+              <ChevronsUp size={11} /> Urgent
+            </Pill>
+          )}
           <Pill tone={severityTone(detail.severity)}>{IMPROVEMENT_SEVERITY_SHORT[detail.severity]}</Pill>
           <Pill tone={statusTone(detail.status)}>{IMPROVEMENT_STATUS_LABELS[detail.status]}</Pill>
+          {canEscalate && (
+            <EscalateButton improvementId={detail.id} urgent={detail.urgent} />
+          )}
           <Link
             href="/improvements"
             title="Close"
@@ -90,6 +111,46 @@ export function ImprovementDetail({ detail, canTriage }: { detail: Detail; canTr
               <div>
                 <p className="text-label font-semibold uppercase text-ink-3">Anything else</p>
                 <p className="mt-0.5 whitespace-pre-wrap text-sm text-ink">{detail.reporterNote}</p>
+              </div>
+            )}
+
+            {/*
+              THE RECORDING, with the typed answers rather than filed under attachments.
+              It is part of what the reporter said, so it belongs where the rest of their words
+              are. The length is on the label deliberately: a developer deciding whether to press
+              play on the fourth report of the morning wants to know if it costs them 12 seconds
+              or three minutes.
+
+              Plain <video>/<audio controls> - no custom player. It streams from an authenticated
+              route that answers 404 for a report the viewer may not see, and the browser's own
+              controls do seek, speed and volume better than anything worth writing here.
+
+              `preload="none"`, which matters far more now than it did for audio: a screen
+              recording is ~20 MB, and a queue where opening any report pulls 20 MB before anyone
+              presses play would be slower than the bug being reported.
+            */}
+            {detail.recording && (
+              <div>
+                <p className="text-label font-semibold uppercase text-ink-3">
+                  {RECORDING_LABEL[detail.recording.kind]} ·{" "}
+                  {formatClipLength(detail.recording.seconds)}
+                  {!detail.recording.hasAudio && " · no sound"}
+                </p>
+                {detail.recording.kind === "SCREEN" ? (
+                  <video
+                    controls
+                    preload="none"
+                    src={`/api/improvements/${detail.id}/recording`}
+                    className="mt-1.5 max-h-96 w-full rounded-field border border-line bg-black"
+                  />
+                ) : (
+                  <audio
+                    controls
+                    preload="none"
+                    src={`/api/improvements/${detail.id}/recording`}
+                    className="mt-1.5 h-9 w-full"
+                  />
+                )}
               </div>
             )}
           </div>

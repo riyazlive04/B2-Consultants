@@ -110,10 +110,41 @@ const nextConfig = {
      * top of it. Same technique the `f|p` funnel rule already uses for `X-Frame-Options`, and
      * for the same reason: never let a browser see a conflict it has to resolve.
      */
-    const baseline = (referrer = "strict-origin-when-cross-origin") => [
+    /**
+     * ── THE MICROPHONE AND SCREEN CAPTURE ARE GRANTED TO THE SIGNED-IN APP AND NOWHERE ELSE ──
+     *
+     * `microphone=()` and `display-capture=()` deny those APIs to EVERY origin including this
+     * one, so that is what every path here gets by default. The catch-all rule at the bottom -
+     * the signed-in app, and only it - passes `mic: true` to get `microphone=(self)` and
+     * `display-capture=(self)`, because a reporter can attach a voice note or a recording of
+     * this tab to an improvement report (src/lib/recording.ts).
+     *
+     * The three narrower rules keep the denial, and that is the part worth being deliberate
+     * about rather than relaxing globally:
+     *  · `/f/*` and `/p/*` are DESIGNED to be iframed on third-party sites. `(self)` is scoped
+     *    to this origin as the document's own origin, so an embedded form would carry a
+     *    microphone grant into somebody else's page. Nothing there records anything.
+     *  · `/i/*` and `/agreement/*` are token-addressed documents opened by customers. The URL is
+     *    the credential and the reader is not staff.
+     *  · `/.../pdf` is a file.
+     *
+     * `camera` and `geolocation` stay denied everywhere. Nothing in this app uses either, and the
+     * moment something does it should have to come back to this comment and say why.
+     *
+     * Note that `display-capture=(self)` does NOT let the app capture anything on its own: the
+     * browser still insists a human picks a surface in its own picker, every single time. The
+     * header only decides whether the app is allowed to ask. What limits the capture to this tab
+     * is `SCREEN_CAPTURE_OPTIONS` in src/lib/recording.ts.
+     */
+    const baseline = (referrer = "strict-origin-when-cross-origin", { mic = false } = {}) => [
       { key: "X-Content-Type-Options", value: "nosniff" },
       { key: "Referrer-Policy", value: referrer },
-      { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+      {
+        key: "Permissions-Policy",
+        value: `camera=(), microphone=(${mic ? "self" : ""}), display-capture=(${
+          mic ? "self" : ""
+        }), geolocation=()`,
+      },
     ];
     return [
       {
@@ -190,7 +221,10 @@ const nextConfig = {
         headers: [
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
-          ...baseline(),
+          // `mic: true` - the one rule that grants it. Safe to pair with microphone access
+          // precisely BECAUSE of the two lines above: nothing can frame these pages, so no
+          // third-party document can inherit the grant.
+          ...baseline("strict-origin-when-cross-origin", { mic: true }),
         ],
       },
     ];

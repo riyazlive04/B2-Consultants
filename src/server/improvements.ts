@@ -102,6 +102,10 @@ export type ImprovementRow = {
   assigneeName: string | null;
   /** Non-empty means the screen's engine was off when this was filed - shown as a chip in the row. */
   enginesOff: string[];
+  /** The attached recording, or null. Drives the chip telling triage there is something to watch. */
+  recording: { kind: "AUDIO" | "SCREEN"; seconds: number } | null;
+  /** Escalated by the head coach or the founder. Sorts to the top of the queue. */
+  urgent: boolean;
   createdAt: Date;
   events: number;
 };
@@ -116,7 +120,15 @@ export async function getImprovementPage(f: ImprovementFilters): Promise<{
     prisma.improvement.count({ where: w }),
     prisma.improvement.findMany({
       where: w,
-      orderBy: [{ createdAt: "desc" }],
+      /**
+        * URGENT FIRST, then newest.
+        *
+        * This is the only thing escalation does, and it is deliberately an ORDERING and not a
+        * status change: an escalated report is still New or Accepted or In progress, and its
+        * severity is still whatever the reporter honestly said. The head coach moves it up the
+        * page; they do not reach into the triage state.
+        */
+      orderBy: [{ urgent: "desc" }, { createdAt: "desc" }],
       skip: (f.page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
       select: {
@@ -130,9 +142,11 @@ export async function getImprovementPage(f: ImprovementFilters): Promise<{
         sectionKey: true,
         createdAt: true,
         context: true,
+        urgent: true,
         reporterRole: true,
         reporter: { select: { name: true } },
         assignee: { select: { name: true } },
+        recording: { select: { kind: true, seconds: true } },
         _count: { select: { events: true } },
       },
     }),
@@ -152,6 +166,8 @@ export async function getImprovementPage(f: ImprovementFilters): Promise<{
       reporterRole: r.reporterRole,
       assigneeName: r.assignee?.name ?? null,
       enginesOff: enginesOffFrom(r.context),
+      recording: r.recording ? { kind: r.recording.kind, seconds: r.recording.seconds } : null,
+      urgent: r.urgent,
       createdAt: r.createdAt,
       events: r._count.events,
     })),
@@ -198,6 +214,10 @@ export type ImprovementDetail = {
   title: string;
   answers: Record<string, string>;
   reporterNote: string | null;
+  /** The attached recording, or null. The BYTES are never loaded here - only its shape. */
+  recording: { kind: "AUDIO" | "SCREEN"; seconds: number; hasAudio: boolean } | null;
+  /** Escalated by the head coach or the founder. */
+  urgent: boolean;
   route: string;
   routeParams: Record<string, string> | null;
   sectionKey: string | null;
@@ -232,6 +252,9 @@ export async function getImprovementDetail(id: string): Promise<ImprovementDetai
       title: true,
       answers: true,
       reporterNote: true,
+      // SHAPE ONLY, never `bytes`. Selecting them here would pull up to 25 MB of video into the
+      // page render for a player that fetches it from its own route anyway.
+      recording: { select: { kind: true, seconds: true, hasAudio: true } },
       route: true,
       routeParams: true,
       sectionKey: true,
@@ -242,6 +265,7 @@ export async function getImprovementDetail(id: string): Promise<ImprovementDetai
       appVersion: true,
       screenWidth: true,
       screenHeight: true,
+      urgent: true,
       reporterRole: true,
       devNote: true,
       resolution: true,
@@ -277,6 +301,10 @@ export async function getImprovementDetail(id: string): Promise<ImprovementDetai
     title: r.title,
     answers: asStringRecord(r.answers),
     reporterNote: r.reporterNote,
+    recording: r.recording
+      ? { kind: r.recording.kind, seconds: r.recording.seconds, hasAudio: r.recording.hasAudio }
+      : null,
+    urgent: r.urgent,
     route: r.route,
     routeParams: r.routeParams ? asStringRecord(r.routeParams) : null,
     sectionKey: r.sectionKey,

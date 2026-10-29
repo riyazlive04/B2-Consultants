@@ -174,6 +174,24 @@ export const CAPABILITIES = [
     actions: "improvement-actions (status, re-kind, comment, dev note, archive) - filing a report is ungated",
     roles: ["ADMIN"],
   },
+  /**
+   * ESCALATION IS SEPARATE FROM TRIAGE, which is the whole point of it existing.
+   *
+   * The head coach is not going to decide whether a report is a duplicate, re-kind it or write a
+   * developer note - that is `improvements.triage`, and it stays ADMIN. What they CAN do, and
+   * nobody else was able to, is say "this one matters now" about a problem their coaches and
+   * students keep hitting. One flag, no ladder: it sorts the report to the top of the queue.
+   *
+   * It does not change `severity`. Severity is the reporter's own answer about impact and is the
+   * only honest signal this module collects; a manager overwriting it would destroy that.
+   */
+  {
+    key: "improvements.escalate",
+    name: "Escalate improvements",
+    description: "Mark a reported problem as urgent so it rises to the top of the queue",
+    actions: "improvement-actions (setImprovementUrgent) - does not grant triage",
+    roles: ["ADMIN", "HEAD"],
+  },
   {
     key: "qualification.manage",
     name: "Edit qualification questions",

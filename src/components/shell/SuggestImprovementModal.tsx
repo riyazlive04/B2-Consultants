@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Crosshair, Send, X } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Field, FormError, Select, TextArea, TextInput } from "@/components/ui/form";
@@ -19,7 +19,10 @@ import {
   type ImprovementKind,
   type ImprovementSeverity,
 } from "@/lib/improvement";
+import { formatClipLength } from "@/lib/recording";
 import { submitImprovement } from "@/server/improvement-actions";
+import { ReportRecorderBar, ReportRecorderPanel } from "./ReportRecorder";
+import { useReportRecorder } from "./useReportRecorder";
 
 /**
  * THE REPORT FORM.
@@ -42,12 +45,28 @@ import { submitImprovement } from "@/server/improvement-actions";
  */
 export function SuggestImprovementModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [kind, setKind] = useState<ImprovementKind | null>(null);
   const [severity, setSeverity] = useState<ImprovementSeverity>("ANNOYING");
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [note, setNote] = useState("");
   const [title, setTitle] = useState("");
   const [tag, setTag] = useState<ElementTag | null>(null);
+  /**
+   * The recording lives in a hook, not in this component, because the FORM HAS TO HIDE while it
+   * runs - see `useReportRecorder`. A self-contained recorder component could not ask its parent
+   * to step out of the way.
+   */
+  const recorder = useReportRecorder();
+  const clip = recorder.clip;
+  /**
+   * The screen they pressed Report ON, pinned when the form opens.
+   *
+   * `usePathname` follows them, and while a screen recording is running they are expected to
+   * navigate - that is the entire point. Reading the route at Send would file the report against
+   * wherever they happened to finish, which is usually not the screen they are reporting on.
+   */
+  const [startedOn, setStartedOn] = useState<string | null>(null);
   /** While true the modal is hidden and the next click on the page is captured, not actioned. */
   const [tagging, setTagging] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -55,8 +74,9 @@ export function SuggestImprovementModal({ open, onClose }: { open: boolean; onCl
   const [showDetail, setShowDetail] = useState(false);
 
   const questions = kind ? questionsFor(kind) : [];
-  const complete = kind ? answersComplete(kind, answers) : false;
-  const suggested = kind ? suggestTitle(kind, answers) : "";
+  // A recording stands in for the required questions - see `answersComplete`. Somebody who has
+  // just talked through the problem should not be held at the form by three empty boxes.
+  const complete = kind ? answersComplete(kind, answers, !!clip) : false;
 
   const reset = useCallback(() => {
     setKind(null);
@@ -65,10 +85,12 @@ export function SuggestImprovementModal({ open, onClose }: { open: boolean; onCl
     setNote("");
     setTitle("");
     setTag(null);
+    setStartedOn(null);
+    recorder.discard();
     setTagging(false);
     setError(null);
     setShowDetail(false);
-  }, []);
+  }, [recorder]);
 
   const close = useCallback(() => {
     reset();
@@ -146,7 +168,29 @@ export function SuggestImprovementModal({ open, onClose }: { open: boolean; onCl
     };
   }, [tagging]);
 
-  const { route, params } = useMemo(() => routePattern(pathname || "/"), [pathname]);
+  useEffect(() => {
+    if (open && startedOn === null) setStartedOn(pathname || "/");
+  }, [open, pathname, startedOn]);
+
+  const { route, params } = useMemo(
+    () => routePattern(startedOn ?? pathname ?? "/"),
+    [startedOn, pathname],
+  );
+
+  /**
+   * The suggested title. Computed here rather than with the other derived values because it needs
+   * `route` - and specifically the route PATTERN, never the raw path: a recorded report can carry
+   * no words at all, so the fallback becomes the title, and a raw path would put a record id in it.
+   */
+  const suggested = kind
+    ? suggestTitle(
+        kind,
+        answers,
+        clip
+          ? `${clip.kind === "SCREEN" ? "screen recording" : "voice note"} on ${route}`
+          : undefined,
+      )
+    : "";
 
   async function send() {
     if (!kind) return;
@@ -164,28 +208,107 @@ export function SuggestImprovementModal({ open, onClose }: { open: boolean; onCl
         elementTag: tag,
         screenWidth: window.innerWidth,
         screenHeight: window.innerHeight,
+        // Declared, so the "blocking" email can say there is a recording waiting. The media
+        // itself goes up on its own request a moment from now - see below.
+        recordingSeconds: clip?.seconds,
+        recordingKind: clip?.kind,
       }),
     );
-    setBusy(false);
-    if (!res.ok) return setError(res.error ?? "That could not be sent");
+    if (!res.ok) {
+      setBusy(false);
+      return setError(res.error ?? "That could not be sent");
+    }
     const ref = "ref" in res && typeof res.ref === "string" ? res.ref : null;
+    const id = "id" in res && typeof res.id === "string" ? res.id : null;
+
+    /**
+     * THE CLIP GOES UP SECOND, AND ITS FAILURE IS NOT THE REPORT'S FAILURE.
+     *
+     * It cannot ride along in the action: Next caps an action body at 1 MB and a two-minute
+     * recording can beat that, so it is posted to a route handler against the id that just came
+     * back. By this point the report is saved and the developer has already been notified, so a
+     * failed upload must not read as "that could not be sent" - the words are the report and they
+     * are safe. The person is told plainly that the audio did not make it and the text did.
+     */
+    let voiceFailed = false;
+    if (clip && id) {
+      try {
+        const qs = new URLSearchParams({
+          kind: clip.kind,
+          seconds: String(clip.seconds),
+          ...(clip.hasAudio ? {} : { mute: "1" }),
+        });
+        const up = await fetch(`/api/improvements/${id}/recording?${qs}`, {
+          method: "POST",
+          headers: { "Content-Type": clip.blob.type || "application/octet-stream" },
+          body: clip.blob,
+        });
+        voiceFailed = !up.ok;
+      } catch {
+        // Offline, or the tab was closed mid-upload. Same outcome, same message.
+        voiceFailed = true;
+      }
+
+      /**
+       * REFRESH, OR THE CLIP IS INVISIBLE ON THE PAGE BEHIND THIS MODAL.
+       *
+       * `submitImprovement` revalidates `/improvements` as it writes the row - necessarily BEFORE
+       * this upload, which needs the id that action returns. So the queue behind this modal has
+       * already been re-rendered for a report that had no audio yet, and it will keep that answer
+       * until something asks again. Somebody filing a note from the improvements screen would
+       * watch their own recording not appear.
+       *
+       * The route revalidates server-side for everyone else; this is the one the person who just
+       * pressed Send actually sees.
+       */
+      if (!voiceFailed) router.refresh();
+    }
+
+    setBusy(false);
     // The ref, by name. A reference somebody can quote is the difference between "I reported it"
     // and a conversation that can actually be looked up.
-    toast(ref ? `Logged as ${ref}. Thank you - we can see exactly where you were.` : "Sent. Thank you.");
+    toast(
+      voiceFailed
+        ? `${ref ?? "Your report"} was sent, but the recording did not upload. Everything you typed is saved.`
+        : ref
+          ? `Logged as ${ref}. Thank you - we can see exactly where you were.`
+          : "Sent. Thank you.",
+    );
     close();
   }
 
   return (
     <>
-      {/* Hidden, not unmounted, while the person is pointing at something: unmounting would lose
-          every answer they have typed. */}
+      {/*
+        HIDDEN, NEVER UNMOUNTED, in two situations - unmounting would lose every answer typed.
+
+        `tagging` is the old one: they are pointing at an element.
+        `recorder.roaming` is the new one, and it is the whole free-roam feature: while a
+        recording runs the form steps aside and the app underneath stays fully interactive, so
+        they can navigate, open the broken thing and talk over it. `AppShell` sits in the `(app)`
+        layout, so this component survives those navigations and their words are still here when
+        they come back.
+      */}
+      {open && recorder.roaming && (
+        <ReportRecorderBar
+          kind={recorder.kind}
+          elapsed={recorder.elapsed}
+          hasAudio={recorder.clip?.hasAudio ?? true}
+          starting={recorder.status === "starting"}
+          onStop={recorder.stop}
+          onCancel={recorder.cancel}
+        />
+      )}
+
       <Modal
-        open={open && !tagging}
+        open={open && !tagging && !recorder.roaming}
         onClose={close}
         title={kind ? "Suggest an improvement" : "What would make this better?"}
         subtitle={
           kind
-            ? "Only the first questions are needed - anything else you can tell us helps."
+            ? clip
+              ? "Your recording says it - everything below is optional now."
+              : "Only the first questions are needed - or record what happened and skip them."
             : "Pick the closest one. We can re-file it if it turns out to be something else."
         }
         size="md"
@@ -218,12 +341,15 @@ export function SuggestImprovementModal({ open, onClose }: { open: boolean; onCl
               ← A different kind of problem
             </button>
 
+            {/* Once a recording is attached NOTHING here is required, and the stars come off to
+                say so. A form that still looks mandatory while the Send button is enabled makes
+                people fill in boxes they have just been told they can skip. */}
             {questions.map((q) => (
               <Field
                 key={q.id}
                 label={q.label}
-                required={q.required}
-                hint={q.required ? undefined : "Optional"}
+                required={q.required && !clip}
+                hint={q.required && !clip ? undefined : "Optional"}
               >
                 {q.options ? (
                   <Select
@@ -321,6 +447,20 @@ export function SuggestImprovementModal({ open, onClose }: { open: boolean; onCl
               />
             </Field>
 
+            {/* Below the typed questions, not above them: the words are the report, and a
+                recorder offered first would invite a three-minute video in place of the three
+                answers that make a report actionable. It renders nothing at all on a browser
+                that can do neither. */}
+            <ReportRecorderPanel
+              supportsAudio={recorder.supportsAudio}
+              supportsScreen={recorder.supportsScreen}
+              status={recorder.status}
+              clip={recorder.clip}
+              error={recorder.error}
+              start={recorder.start}
+              discard={recorder.discard}
+            />
+
             <Field label="Title" hint="We have written one for you - change it if you like">
               <TextInput
                 value={title || suggested}
@@ -348,11 +488,30 @@ export function SuggestImprovementModal({ open, onClose }: { open: boolean; onCl
                   <Line k="Screen" v={route} />
                   <Line k="Window" v={`${typeof window === "undefined" ? "?" : window.innerWidth}px wide`} />
                   {tag?.text && <Line k="Tagged text" v={`"${tag.text}"`} />}
+                  {clip && (
+                    <Line
+                      k={clip.kind === "SCREEN" ? "Screen recording" : "Voice note"}
+                      v={
+                        clip.kind === "SCREEN"
+                          ? `${formatClipLength(clip.seconds)} of this browser tab${clip.hasAudio ? " with your voice over it" : " (no sound)"}, which whoever picks this up will watch - everything visible in the tab is in it`
+                          : `a ${formatClipLength(clip.seconds)} recording of your voice, which whoever picks this up will listen to`
+                      }
+                    />
+                  )}
                   <Line
                     k="Also attached"
                     v="your name and role, the running version, and whether the engine behind this screen is switched on"
                   />
-                  <Line k="Not attached" v="anything you have not typed or pointed at" />
+                  {/* This line used to read "anything you have not typed or pointed at", which a
+                      recording makes untrue. The whole value of this panel is that it is accurate. */}
+                  <Line
+                    k="Not attached"
+                    v={
+                      clip
+                        ? "anything you have not typed, pointed at or recorded"
+                        : "anything you have not typed or pointed at"
+                    }
+                  />
                 </dl>
               )}
             </div>
@@ -371,7 +530,7 @@ export function SuggestImprovementModal({ open, onClose }: { open: boolean; onCl
                 type="button"
                 onClick={send}
                 disabled={busy || !complete}
-                title={complete ? undefined : "Fill in the questions marked with a star"}
+                title={complete ? undefined : "Fill in the questions marked with a star, or record what happened"}
                 className="inline-flex h-10 flex-none items-center gap-2 rounded-btn bg-primary px-4 text-sm font-semibold text-on-accent transition-colors hover:bg-primary-strong disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-ink-disabled"
               >
                 <Send size={15} />

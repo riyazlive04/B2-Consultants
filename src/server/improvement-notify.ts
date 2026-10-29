@@ -48,6 +48,13 @@ export type ImprovementNotifyInput = {
   reporterRole: string;
   answers: Record<string, string>;
   note: string | null;
+  /**
+   * The recording the reporter made, or null. DECLARED by the form, because the media uploads on
+   * a separate request that this email races - see `submitImprovementSchema`. It buys one line
+   * telling the reader there is something to watch; the report page is the truth.
+   */
+  recordingSeconds: number | null;
+  recordingKind: "AUDIO" | "SCREEN" | null;
   context: ImprovementContext;
 };
 
@@ -151,6 +158,19 @@ function reportEmailHtml(input: ImprovementNotifyInput): string {
     ${
       input.note
         ? `<p style="margin:0 0 18px;padding:12px 14px;border-radius:10px;background:#F4F6F9;font-size:13px;color:#1A2230">${esc(input.note)}</p>`
+        : ""
+    }
+    ${
+      input.recordingSeconds !== null
+        ? `<p style="margin:0 0 18px;padding:12px 14px;border-radius:10px;background:#FFF6E5;font-size:13px;color:#1A2230"><strong>${
+            input.recordingKind === "SCREEN"
+              ? "There is a SCREEN RECORDING on this one"
+              : "There is a voice note on this one"
+          }</strong> - about ${Math.max(1, input.recordingSeconds)} seconds. ${
+            input.recordingKind === "SCREEN"
+              ? "It shows what they were doing when it went wrong."
+              : ""
+          } Media cannot travel in an email, so open the report to watch it.</p>`
         : ""
     }
     <p style="margin:0 0 20px;font-size:12px;color:#5A6472">

@@ -33,6 +33,8 @@
 
 import { z } from "zod";
 
+import { RECORDING_KINDS, RECORDING_MAX_SECONDS } from "./recording";
+
 // ─────────────────────────────── kinds ───────────────────────────────
 
 export const IMPROVEMENT_KINDS = [
@@ -300,13 +302,27 @@ export const TITLE_MAX = 160;
  * anything not in the table is dropped rather than stored. Dropping is deliberate - a crafted
  * POST should not be able to write arbitrary keys into a JSON column that a triage screen renders.
  */
-export function answersSchema(kind: ImprovementKind) {
+export function answersSchema(kind: ImprovementKind, { recorded = false } = {}) {
   return z.record(z.string(), z.unknown()).transform((raw, ctx) => {
     const out: Record<string, string> = {};
     for (const q of QUESTIONS[kind]) {
       const value = typeof raw[q.id] === "string" ? (raw[q.id] as string).trim() : "";
       if (!value) {
-        if (q.required) {
+        /**
+         * A RECORDING EXCUSES THE REQUIRED QUESTIONS.
+         *
+         * Somebody who has just talked through the problem on camera has already answered "what
+         * were you doing" and "what happened" better than the boxes would have. Making them type
+         * it again is the fastest way to turn a filed report into an abandoned one, which is the
+         * opposite of what this module is for.
+         *
+         * `recorded` is the form's DECLARED intent, because the media uploads on a separate
+         * request that this action runs before - see `submitImprovementSchema`. A crafted POST
+         * could therefore claim a recording and send nothing. That buys an attacker an empty
+         * report in a queue they are already allowed to file in, which is no worse than typing
+         * "x" into each box, so it is not worth a round trip to defend.
+         */
+        if (q.required && !recorded) {
           ctx.addIssue({ code: "custom", message: `${q.label} - please fill this in` });
         }
         continue;
@@ -321,8 +337,19 @@ export function answersSchema(kind: ImprovementKind) {
   });
 }
 
-/** True when every required question of `kind` has an answer - what the modal's Send button reads. */
-export function answersComplete(kind: ImprovementKind, answers: Record<string, string>): boolean {
+/**
+ * True when the report can be sent - what the modal's Send button reads.
+ *
+ * Either every required question is answered, OR there is a recording. See `answersSchema` for
+ * why a recording stands in for the words: the person has already said it out loud, and this
+ * form's job is to collect reports, not to collect paperwork.
+ */
+export function answersComplete(
+  kind: ImprovementKind,
+  answers: Record<string, string>,
+  recorded = false,
+): boolean {
+  if (recorded) return true;
   return QUESTIONS[kind].every((q) => !q.required || (answers[q.id]?.trim().length ?? 0) >= 2);
 }
 
@@ -332,9 +359,18 @@ export function answersComplete(kind: ImprovementKind, answers: Record<string, s
  * Prefixed with the kind's short label because a queue of twenty rows all titled with a fragment
  * of a sentence is unreadable. Editable in the form - this is a suggestion, not a rule.
  */
-export function suggestTitle(kind: ImprovementKind, answers: Record<string, string>): string {
+export function suggestTitle(
+  kind: ImprovementKind,
+  answers: Record<string, string>,
+  /**
+   * What to say when there are no words at all - which is now possible, because a recording
+   * excuses the questions. Without this a queue of recorded reports would be twenty rows titled
+   * "Broken", which is exactly the unreadable queue the prefix exists to prevent.
+   */
+  fallback?: string,
+): string {
   const first = QUESTIONS[kind].find((q) => q.required && answers[q.id]?.trim());
-  const body = first ? answers[first.id].trim().replace(/\s+/g, " ") : "";
+  const body = first ? answers[first.id].trim().replace(/\s+/g, " ") : fallback?.trim() ?? "";
   const prefix = IMPROVEMENT_KIND_SHORT[kind];
   if (!body) return prefix;
   const room = TITLE_MAX - prefix.length - 2;
@@ -516,6 +552,20 @@ export const submitImprovementSchema = z.object({
   screenHeight: z.number().int().min(0).max(100000).optional(),
   /** Next's own error digest, when the report comes from the crash screen. */
   clientDigest: z.string().max(120).nullable().optional(),
+  /**
+   * DECLARED shape of a recording the form is about to upload.
+   *
+   * The media itself cannot travel in a server action (Next caps the body at 1 MB and a screen
+   * recording is ~20 MB), so it is posted to `/api/improvements/[id]/recording` AFTER this action
+   * returns the new id. Which means the developer notification - which fires in `afterResponse`,
+   * racing that upload - has no way of knowing a recording is coming unless the form says so.
+   *
+   * These are therefore an INTENT, not a fact, and nothing is derived from them but one line of
+   * email copy pointing at the report. The authoritative values are the columns on
+   * `improvement_recording`, written by the route that actually received the bytes.
+   */
+  recordingSeconds: z.number().int().min(0).max(RECORDING_MAX_SECONDS).optional(),
+  recordingKind: z.enum(RECORDING_KINDS).optional(),
 });
 export type SubmitImprovementInput = z.infer<typeof submitImprovementSchema>;
 

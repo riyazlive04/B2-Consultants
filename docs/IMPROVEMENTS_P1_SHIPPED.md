@@ -388,3 +388,284 @@ panel renders (status transitions, re-file, reporter note, working notes, archiv
 The datasource is read from the environment and printed, and a non-local host is refused unless
 `--remote` is passed - checked by running it with `.env` inherited, which correctly refused
 `aws-0-ap-southeast-1.pooler.supabase.com` without opening a connection.
+
+---
+
+## 12. Voice notes, 29 October 2026
+
+> **Superseded the same day by section 13.** Voice notes became one of *two* recording kinds. The
+> table is now `improvement_recording`, the library is `src/lib/recording.ts` and the route is
+> `/api/improvements/[id]/recording`. The reasoning below still holds; the names have moved.
+
+A reporter can attach one spoken clip to a report. It is optional, capped at **two minutes and
+2 MB**, and **nothing is transcribed** - triage listens to it.
+
+### What was deliberately not built
+
+Dictation was the first design and was dropped on the user's instruction, which turned out to be
+the right call for two independent reasons:
+
+- Chrome's `SpeechRecognition` **streams the audio to Google** to transcribe it. That is a
+  third-party processor for a recording that may name a student and their money, on an app with a
+  German entity behind it.
+- Running `SpeechRecognition` and `MediaRecorder` off one microphone at the same time is flaky
+  across browsers, so "dictate *and* keep the clip" would have had a failure mode that only
+  appears on somebody else's machine.
+
+The cost is real and is stated in `src/lib/voice-note.ts`: a clip cannot be searched, titled,
+emailed or put in the digest, and cannot be skimmed. That is why it is optional, short, and never
+required for a report to be filed.
+
+### The three decisions worth keeping
+
+**1. The bytes are in Postgres, not in a bucket.** `improvement_voice_note.bytes` is a `bytea`,
+served by an authenticated route - the pattern `AgreementAttachment` already set. The P1 notes
+assumed attachments were blocked on provisioning a private bucket. They were not:
+`lib/supabase-storage.ts` is public-read **by design** (it is the marketing site's media origin)
+and `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` are not configured in any env file here, so
+`storageConfig()` returns null and both existing upload routes answer 503. The bucket was never
+the way in. **The same reasoning unblocks P2 screenshots.**
+
+**2. Its own table, not four columns on `improvement`.** Prisma selects every scalar when a query
+names no `select`, so a `Bytes` column on `improvement` would be dragged across the wire by any
+future `findMany` written without one - the queue, a count, the digest - and whoever wrote that
+query would never know. A separate table cannot be loaded by accident. Both reading call sites
+select `voiceNote: { select: { seconds: true } }` and never the bytes.
+
+**3. The clip does not travel in the server action.** Next 14 caps an action body at 1 MB and
+nothing raises it, so a two-minute clip can beat it. `submitImprovement` now also returns the new
+`id`, and the form posts the audio to `POST /api/improvements/[id]/voice` afterwards. **If that
+upload fails the report is already filed**, and the toast says so rather than reading as a failed
+send. Do not "simplify" this back into the action: it works for short clips in testing and fails
+for real ones in the field.
+
+### The security header that had to change
+
+`next.config.mjs` denied the microphone to every origin including this one
+(`Permissions-Policy: camera=(), microphone=(), geolocation=()`, commented "no powerful browser
+APIs"). `baseline()` now takes `{ mic }` and **only the signed-in catch-all rule passes it**:
+
+| route group | microphone |
+| --- | --- |
+| the app (catch-all, `frame-ancestors 'none'`) | `(self)` |
+| `/f/*`, `/p/*` - embeddable on third-party sites | `()` |
+| `/i/*`, `/agreement/*` - token-addressed, customer-facing | `()` |
+| `/.../pdf` | `()` |
+
+Granting it to the app is safe precisely because that rule also sets `X-Frame-Options: DENY` and
+`frame-ancestors 'none'`: no third-party document can inherit the grant. `camera` and
+`geolocation` stay denied everywhere.
+
+### Traps found while building it
+
+- **A `MediaRecorder` WebM blob carries no duration.** `audio.duration` reads `Infinity` until the
+  stream is seeked to the end, so the length is measured from the clock (`Date.now()` at start)
+  and stored. It is why the player's label carries the length rather than relying on the control -
+  visible in the browser run, where the control read `0:00 / 0:00` and the label read `0:03`.
+- **Stopping the recorder does not release the microphone.** The `MediaStreamTrack`s do. Without
+  `getTracks().forEach(t => t.stop())` on every exit path - including unmount - the browser's
+  recording indicator stays lit on the tab for the rest of the session, and a person would be
+  right to conclude the app is listening. `releaseMic()` is called from `onstop` and from the
+  unmount cleanup.
+- **The disclosure panel would have started lying.** "What gets sent with this?" ended with *"Not
+  attached: anything you have not typed or pointed at"*, which a recording makes false. It now
+  reads "typed, pointed at or recorded" and lists the clip and its length. The whole value of that
+  panel is that it is accurate.
+- **The "blocking" email races the upload.** The notification fires in `afterResponse`, before the
+  clip has been posted. So `submitImprovementSchema` carries a `voiceSeconds` the form *declares*;
+  it buys one line of email copy pointing at the report and nothing else is derived from it. The
+  authoritative length is the `seconds` column.
+
+### ⚠ The bug the first browser run missed: the clip uploads, and the page never looks again
+
+Found by the founder recording a note and not seeing it. **The audio was stored correctly the
+whole time** - `IMP-0005`, 14s, 214 KB, in the database. It simply did not appear.
+
+`submitImprovement` calls `revalidatePath("/improvements")` as it writes the row, which is
+*necessarily* before the clip exists: the upload needs the `id` that action returns. So the queue
+and the detail page were both re-rendered at a moment when the report genuinely had no audio, and
+nothing ever asked again. The person who filed it watched their own recording not appear.
+
+**My first verification hid this**, because every check navigated with `page.goto(...)` - a fresh
+request that re-rendered anyway. The flow a human actually performs (file from the queue, modal
+closes, look at the row) was never exercised. **A verification that navigates is not a
+verification of a mutation.**
+
+Fixed in both places, because they cover different viewers:
+- `revalidatePath("/improvements")` in the **upload route**, after the row is written - for
+  everyone else looking at the queue.
+- `router.refresh()` in the **modal**, after a successful upload - for the person standing on the
+  page right now, who otherwise waits on a cache window.
+
+Re-verified without any reload: filed from `/improvements`, the new row appeared with its `0:03`
+chip and the detail panel showed the player, on the same page instance.
+
+### Verified in a browser, 29 October 2026
+
+Against the local stack, signed in as the developer seat, with `getUserMedia` replaced by a
+synthetic `AudioContext` oscillator stream - no microphone, no fake-device flag, and the **real**
+`MediaRecorder` producing a real 52 KB WebM/Opus blob:
+
+- recorded, counter read `Recording 0:03 of 2:00`, preview player appeared, panel read
+  `Attached - 0:03`
+- filed as `IMP-0003`; `POST .../voice?seconds=3` → **200**
+- queue row shows a mic chip reading `0:03`; detail shows `VOICE NOTE · 0:03` and the player
+- `GET .../voice` → 200, `audio/webm`, 52,460 bytes, magic `1a 45 df a3`,
+  `private, no-store`, `nosniff`, `inline; filename="IMP-0003-voice.webm"`
+- headers: app routes `microphone=(self)`; `/f/`, `/p/`, `/i/` all still `microphone=()`
+
+Guards, all exercised against the live route:
+
+| attempt | result |
+| --- | --- |
+| replace an existing clip | `409 This report already has a voice note` |
+| attach to someone else's report | `404 Report not found` |
+| HTML labelled `Content-Type: audio/webm` | `415` - the sniff refuses it |
+| 2,000,001 bytes | `413` |
+| empty body | `400` |
+| `GET` on a report with no clip | `404` |
+| a valid clip sent as `application/octet-stream` | `200` - the **bytes** decide, not the header |
+
+2,081 tests pass (8 new, in `src/lib/__tests__/voice-note.test.ts`), `tsc --noEmit` clean,
+`next lint --max-warnings=0` clean.
+
+### Still open
+
+- **Retention.** A clip is personal data and nothing expires it. `Improvement` is soft-deleted, so
+  archiving a report deliberately *keeps* its audio, and `onDelete: Cascade` only fires on a hard
+  delete that nothing performs. If a retention rule is wanted, `/api/cron/retention` is where it
+  belongs - as a decision, not a default invented here.
+- **Not tested on a phone**, which is where most spoken reports will come from. Safari records MP4
+  and the sniff handles it, but no iOS device has run this.
+- The reporter cannot attach a clip *after* filing; there is no UI for it and the route refuses a
+  second one by design.
+
+---
+
+## 13. Screen recordings, free roam and escalation, 29 October 2026
+
+Three asks, in one pass, all at the founder's direction.
+
+### 13.1 Record the screen, not just the voice
+
+> *"while doing a function, we'll get an error. That error must be captured with the screen. What
+> they were doing and not just the section that they found the issue."*
+
+A reporter can now record **this browser tab with their voice over it** - the clicks, the
+navigation, the error appearing. `AUDIO` stays, because `getDisplayMedia` **does not exist on iOS
+at all** and most students file from a phone.
+
+Caps are per-kind: AUDIO 2 min / 2 MB, SCREEN 3 min / 25 MB at 800 kbit/s video and 12 fps. A UI
+is mostly static pixels, so a low frame rate costs nothing in legibility - a measured 24-second
+capture came out at **672 KB**, so three minutes lands near 5 MB and the 25 MB cap is headroom.
+
+**The capture is pinned to the current tab** (`preferCurrentTab`, `monitorTypeSurfaces: "exclude"`,
+`surfaceSwitching: "exclude"`). These files land in a table every triager can play back, and
+somebody concentrating on reproducing a bug is not also auditing what else is on their screen. A
+test asserts those three flags, so removing one has to be deliberate.
+
+`Permissions-Policy` gained `display-capture=(self)` alongside `microphone=(self)`, **on the
+signed-in catch-all rule only**. `/f/`, `/p/`, `/i/`, `/agreement/` and `/.../pdf` keep both
+denied - the first two are designed to be iframed on third-party sites.
+
+### 13.2 Free roam: the form gets out of the way
+
+> *"they should be able to freely move around the screen instead of being blocked by the pop-up"*
+
+While recording, the form **hides without unmounting** and a floating bar takes its place. The app
+underneath stays fully interactive - no overlay, nothing swallowing clicks. The same
+hide-don't-unmount trick "point at it" already used, for the same reason: unmounting loses every
+typed answer.
+
+It works **across navigation** because `AppShell` lives in `src/app/(app)/layout.tsx`, a Next
+layout, which React preserves between routes. Verified by recording across `/improvements` ->
+`/my-desk` -> `/guide` and returning to a form still holding its state.
+
+**The route is pinned when the form opens**, not read at Send. Roaming is now expected and
+`usePathname` follows them, so a report filed after walking to `/guide` would otherwise be filed
+against `/guide`. The auto-title proved it: *"Broken: screen recording on Improvements"*.
+
+### 13.3 A recording makes the questions optional
+
+> *"while we record audio it should be optional for filling out the other fields"*
+
+With a recording attached, every required question becomes optional: Send enables, the stars come
+off the labels, and the subtitle changes to *"Your recording says it - everything below is
+optional now."* Somebody who has just talked through the problem has already answered "what were
+you doing" better than the boxes would have.
+
+Two consequences handled:
+
+- **The title.** `suggestTitle` takes a fallback, so a wordless report becomes *"Broken: screen
+  recording on Improvements"* rather than twenty queue rows all titled "Broken".
+- **The server.** `answersSchema(kind, { recorded })` relaxes the same rule the form relaxes - one
+  definition, as this module insists. `recorded` is the form's *declared* intent, because the
+  media uploads on a later request. A crafted POST could claim a recording and send nothing; that
+  buys an empty report in a queue the caller may already file in, which is no worse than typing
+  "x" in each box. Written down rather than defended with a round trip.
+
+### 13.4 Escalation
+
+> *"The head coach and then the admin should be able to escalate a problem."*
+
+**One flag, chosen over a ladder.** `Improvement.urgent` sorts a report to the top of the queue
+and shows an Urgent chip. A full escalation ladder (levels, reasons, notify-the-next-person-up)
+was offered and the simple flag was chosen.
+
+It deliberately **does not touch `severity`**. Severity is the reporter's own answer to "how much
+is this holding you up" and is the only honest signal of impact this module collects; a manager
+overwriting it would destroy that answer permanently. Who escalated and when goes to
+`logActivity` - no second audit trail.
+
+**Three tiers now, not two**, and the middle one is the easy one to lose:
+
+| tier | who | what |
+| --- | --- | --- |
+| file | any session | ungated |
+| `improvements.escalate` | ADMIN + HEAD | one flag, one ordering |
+| `improvements.triage` | ADMIN | status machine, re-kind, dev notes, archive |
+
+`improvement-actions-guards.test.ts` pins all three and **was proven to fail when sabotaged**:
+pointing `setImprovementStatus` at the weaker capability produced *"these use the head coach's
+weaker permission for work that is triage: setImprovementStatus"*.
+
+> **The leak, raised before the change and accepted.** `improvements` went from ADMIN to
+> ADMIN + HEAD, and the Head Coach sees the **whole** queue. A report about a money screen quotes
+> its figures ("shows 0, should be 99,500") and a screen recording shows the page outright - so
+> HEAD can see, through a report, numbers that `finance`, `cash` and `pipeline` deliberately
+> withhold from them. The narrower option (own team's reports only) was offered and not taken.
+> Do not "fix" this by quietly narrowing the section.
+
+### Verified in a browser, 29 October 2026
+
+Synthetic devices only - an animated canvas as the screen and an oscillator as the microphone - so
+the real `MediaRecorder`, track merge, bitrates, blob, sniff and upload all ran unmodified. Only
+the permission grant was stubbed.
+
+- recorded across **two navigations**, bar visible throughout, form returned with state intact
+- filed with **no typed answers at all**; Send was correctly disabled until the recording existed
+- `POST .../recording?kind=SCREEN&seconds=24` -> **200**; queue chip `0:24`
+- `GET` -> 200, `video/webm`, **672 KB**, magic `1a 45 df a3`,
+  `inline; filename="IMP-0007-screen.webm"`, `private, no-store`, `nosniff`, `preload="none"`
+- headers: app `microphone=(self), display-capture=(self)`; `/f/` both `()`
+
+Guards: no `kind` **400** - bogus kind **400** - replace **409** - someone else's report **404** -
+HTML labelled `video/webm` **415** - 2.5 MB as `AUDIO` **413** (the cap is per-kind) - empty
+**400**.
+
+Escalation, as the real HEAD demo login: Escalate button present, **every** triage control absent
+(status buttons, working notes and reporter message all 0), escalated -> sorted to the top ahead
+of four newer reports. The developer seat is the exact inverse: triage yes, Escalate absent.
+
+2,086 tests pass, `tsc --noEmit` clean, `next lint --max-warnings=0` clean.
+
+### Still open
+
+- **Retention.** Unchanged and now bigger: a 25 MB screen recording of somebody's workday is
+  personal data and nothing expires it. `/api/cron/retention` is where a rule belongs.
+- **Range requests.** `Accept-Ranges: none`, so a viewer cannot seek until the file has
+  downloaded. Fine at 5 MB, worth revisiting if the cap ever rises.
+- **Not tested on a phone.** Safari records MP4 and the sniff handles it, but no iOS device has
+  run this - and iOS gets no screen option at all.
+- **The bell.** `computeNotifications` keys improvement counts on the ADMIN *role*, so the Head
+  Coach gets the queue but no badge.

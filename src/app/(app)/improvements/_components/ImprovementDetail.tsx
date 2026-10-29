@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, ChevronsUp, PowerOff, X } from "lucide-react";
+import { AlertTriangle, ChevronsUp, Paperclip, PowerOff, X } from "lucide-react";
 import { Card, CardTitle, Panel, Pill } from "@/components/ui/kit";
 import { DateText } from "@/components/ui/DateText";
 import {
@@ -9,6 +9,8 @@ import {
   answerDisplay,
   questionLabel,
 } from "@/lib/improvement";
+import { capabilityByKey } from "@/lib/capabilities";
+import { attachmentTypeLabel, formatFileSize } from "@/lib/attachment";
 import { RECORDING_LABEL, formatClipLength } from "@/lib/recording";
 import type { ImprovementDetail as Detail } from "@/server/improvements";
 import { EscalateButton } from "./EscalateButton";
@@ -153,6 +155,51 @@ export function ImprovementDetail({
                 )}
               </div>
             )}
+
+            {/*
+              THE ATTACHED FILES, with the reporter's words for the same reason the recording is:
+              they are part of what the reporter said, not a separate filing cabinet.
+
+              DOWNLOAD LINKS, not previews - not even for an image. The route serves every
+              attachment as `Content-Disposition: attachment` and the note there explains why:
+              the set includes PDF, a browser renders that with a full document viewer, and the
+              accounts opening these are the founder's and the developer's. The cost is real and
+              accepted - a screenshot has to be downloaded to be looked at.
+
+              The type is printed from what the SERVER sniffed, never from the filename, so a
+              file named `.pdf` that is really a PNG reads as "Image" here. That mismatch is
+              worth seeing rather than hiding.
+            */}
+            {!!detail.attachments.length && (
+              <div>
+                <p className="text-label font-semibold uppercase text-ink-3">
+                  {detail.attachments.length === 1
+                    ? "Attached file"
+                    : `Attached files · ${detail.attachments.length}`}
+                </p>
+                <ul className="mt-1.5 space-y-1.5">
+                  {detail.attachments.map((file) => (
+                    <li key={file.id}>
+                      <a
+                        href={`/api/improvements/${detail.id}/attachments/${file.id}`}
+                        // No `target="_blank"`: it is a download, so the current tab is never
+                        // navigated away from the report being read.
+                        download
+                        className="press flex items-center gap-2 rounded-field border border-line bg-surface px-2.5 py-2 transition-colors hover:border-primary"
+                      >
+                        <Paperclip size={14} className="flex-none text-ink-3" aria-hidden />
+                        <span className="min-w-0 flex-1 truncate text-sm text-ink" title={file.filename}>
+                          {file.filename}
+                        </span>
+                        <span className="flex-none text-caption text-muted">
+                          {attachmentTypeLabel(file.mimeType)} · {formatFileSize(file.size)}
+                        </span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
 
           <Panel>
@@ -244,8 +291,11 @@ export function ImprovementDetail({
             // rather than an impossible one - and saying so beats rendering nothing.
             <Panel>
               <p className="text-sm text-ink-2">
-                You can read this report. Working it through its states needs the
-                &ldquo;Triage improvement reports&rdquo; permission.
+                You can read this report. Working it through its states needs the{" "}
+                {/* Named from the catalogue, not retyped: the hand-written version said "Triage
+                    improvement reports", which is not what the Access dialog calls it, so an
+                    admin went looking for a tickbox under the wrong name. */}
+                &ldquo;{capabilityByKey("improvements.triage").name}&rdquo; permission.
               </p>
             </Panel>
           )}

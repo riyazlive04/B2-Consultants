@@ -33,6 +33,7 @@
 
 import { z } from "zod";
 
+import { ATTACHMENT_MAX_COUNT } from "./attachment";
 import { RECORDING_KINDS, RECORDING_MAX_SECONDS } from "./recording";
 
 // ─────────────────────────────── kinds ───────────────────────────────
@@ -566,6 +567,16 @@ export const submitImprovementSchema = z.object({
    */
   recordingSeconds: z.number().int().min(0).max(RECORDING_MAX_SECONDS).optional(),
   recordingKind: z.enum(RECORDING_KINDS).optional(),
+  /**
+   * DECLARED number of files the form is about to upload, for exactly the same reason and with
+   * exactly the same standing as the two recording fields above: an INTENT, not a fact.
+   *
+   * It buys one line of email copy. Nothing is derived from it, nothing is authorised by it, and
+   * unlike `recordingKind` it does not even relax the questions - an attachment never excuses
+   * the words (see `lib/attachment.ts`). The authoritative count is the number of rows on
+   * `improvement_attachment`, written by the route that actually received the bytes.
+   */
+  attachmentCount: z.number().int().min(0).max(ATTACHMENT_MAX_COUNT).optional(),
 });
 export type SubmitImprovementInput = z.infer<typeof submitImprovementSchema>;
 

@@ -19,8 +19,10 @@ import {
   type ImprovementKind,
   type ImprovementSeverity,
 } from "@/lib/improvement";
+import { formatFileSize } from "@/lib/attachment";
 import { formatClipLength } from "@/lib/recording";
 import { submitImprovement } from "@/server/improvement-actions";
+import { ReportAttachments } from "./ReportAttachments";
 import { ReportRecorderBar, ReportRecorderPanel } from "./ReportRecorder";
 import { useReportRecorder } from "./useReportRecorder";
 
@@ -53,6 +55,12 @@ export function SuggestImprovementModal({ open, onClose }: { open: boolean; onCl
   const [title, setTitle] = useState("");
   const [tag, setTag] = useState<ElementTag | null>(null);
   /**
+   * Files CHOSEN but not yet uploaded. They are plain `File` handles until Send, for the same
+   * reason the clip is: there is no report to attach them to until the action returns an id, and
+   * uploading to a placeholder would leave orphaned bytes behind every abandoned form.
+   */
+  const [files, setFiles] = useState<File[]>([]);
+  /**
    * The recording lives in a hook, not in this component, because the FORM HAS TO HIDE while it
    * runs - see `useReportRecorder`. A self-contained recorder component could not ask its parent
    * to step out of the way.
@@ -78,6 +86,19 @@ export function SuggestImprovementModal({ open, onClose }: { open: boolean; onCl
   // just talked through the problem should not be held at the form by three empty boxes.
   const complete = kind ? answersComplete(kind, answers, !!clip) : false;
 
+  /**
+   * "Not attached: anything you have not typed, pointed at or recorded."
+   *
+   * BUILT from what is actually on the form rather than written out, because this line is the one
+   * thing in the disclosure panel that makes a promise. It once read "typed or pointed at", which
+   * recordings made untrue, and attachments would have made it untrue a second time. The whole
+   * value of the panel is that it is accurate.
+   */
+  const given = ["typed", "pointed at"];
+  if (clip) given.push("recorded");
+  if (files.length) given.push("attached");
+  const notAttached = `anything you have not ${given.slice(0, -1).join(", ")} or ${given[given.length - 1]}`;
+
   const reset = useCallback(() => {
     setKind(null);
     setSeverity("ANNOYING");
@@ -85,6 +106,7 @@ export function SuggestImprovementModal({ open, onClose }: { open: boolean; onCl
     setNote("");
     setTitle("");
     setTag(null);
+    setFiles([]);
     setStartedOn(null);
     recorder.discard();
     setTagging(false);
@@ -212,6 +234,9 @@ export function SuggestImprovementModal({ open, onClose }: { open: boolean; onCl
         // itself goes up on its own request a moment from now - see below.
         recordingSeconds: clip?.seconds,
         recordingKind: clip?.kind,
+        // Declared for the same one line of email copy, and nothing else. Unlike a recording it
+        // does NOT relax the questions - see `lib/attachment.ts`.
+        attachmentCount: files.length || undefined,
       }),
     );
     if (!res.ok) {
@@ -230,7 +255,13 @@ export function SuggestImprovementModal({ open, onClose }: { open: boolean; onCl
      * failed upload must not read as "that could not be sent" - the words are the report and they
      * are safe. The person is told plainly that the audio did not make it and the text did.
      */
-    let voiceFailed = false;
+    /**
+     * What did not make it, in words, so the toast can name it. Each channel is independent: a
+     * failed recording must not be reported as a failed attachment, and neither is the report.
+     */
+    const failed: string[] = [];
+    let uploaded = false;
+
     if (clip && id) {
       try {
         const qs = new URLSearchParams({
@@ -243,11 +274,45 @@ export function SuggestImprovementModal({ open, onClose }: { open: boolean; onCl
           headers: { "Content-Type": clip.blob.type || "application/octet-stream" },
           body: clip.blob,
         });
-        voiceFailed = !up.ok;
+        if (up.ok) uploaded = true;
+        else failed.push("the recording");
       } catch {
         // Offline, or the tab was closed mid-upload. Same outcome, same message.
-        voiceFailed = true;
+        failed.push("the recording");
       }
+    }
+
+    /**
+     * THE FILES GO UP ONE AT A TIME, AND EACH ONE FAILS ON ITS OWN.
+     *
+     * Sequential rather than parallel. Five 10 MB uploads racing each other on the connection of
+     * somebody reporting that the app is slow is the wrong thing to do to them, and one request
+     * per file means four can land when the fifth does not - which is why the count of failures
+     * is kept rather than a flag. The route checks the running total on every request, so sending
+     * them in series is also what keeps the budget honest.
+     *
+     * Same contract as the recording: THE REPORT IS ALREADY FILED by this point. A file that does
+     * not upload must never read as "that could not be sent".
+     */
+    let filesFailed = 0;
+    if (files.length && id) {
+      for (const file of files) {
+        try {
+          const body = new FormData();
+          body.append("file", file);
+          const up = await fetch(`/api/improvements/${id}/attachments`, { method: "POST", body });
+          if (up.ok) uploaded = true;
+          else filesFailed += 1;
+        } catch {
+          filesFailed += 1;
+        }
+      }
+      if (filesFailed) {
+        failed.push(filesFailed === 1 ? "one of the files" : `${filesFailed} of the files`);
+      }
+    }
+
+    if (clip || files.length) {
 
       /**
        * REFRESH, OR THE CLIP IS INVISIBLE ON THE PAGE BEHIND THIS MODAL.
@@ -259,17 +324,18 @@ export function SuggestImprovementModal({ open, onClose }: { open: boolean; onCl
        * watch their own recording not appear.
        *
        * The route revalidates server-side for everyone else; this is the one the person who just
-       * pressed Send actually sees.
+       * pressed Send actually sees. Keyed on "anything landed at all", because four files
+       * arriving and one failing still changes what the page behind this modal should show.
        */
-      if (!voiceFailed) router.refresh();
+      if (uploaded) router.refresh();
     }
 
     setBusy(false);
     // The ref, by name. A reference somebody can quote is the difference between "I reported it"
     // and a conversation that can actually be looked up.
     toast(
-      voiceFailed
-        ? `${ref ?? "Your report"} was sent, but the recording did not upload. Everything you typed is saved.`
+      failed.length
+        ? `${ref ?? "Your report"} was sent, but ${failed.join(" and ")} did not upload. Everything you typed is saved.`
         : ref
           ? `Logged as ${ref}. Thank you - we can see exactly where you were.`
           : "Sent. Thank you.",
@@ -461,6 +527,12 @@ export function SuggestImprovementModal({ open, onClose }: { open: boolean; onCl
               discard={recorder.discard}
             />
 
+            {/* Below the recorder, which is below the questions. The order is a ranking: the
+                words make a report actionable, a recording shows what the app did, and an
+                attachment is the evidence from outside it. Offering the paperclip first would
+                invite a PDF in place of the three answers triage actually reads. */}
+            <ReportAttachments files={files} onChange={setFiles} disabled={busy} />
+
             <Field label="Title" hint="We have written one for you - change it if you like">
               <TextInput
                 value={title || suggested}
@@ -498,20 +570,23 @@ export function SuggestImprovementModal({ open, onClose }: { open: boolean; onCl
                       }
                     />
                   )}
+                  {!!files.length && (
+                    <Line
+                      k={files.length === 1 ? "Attached file" : `Attached files (${files.length})`}
+                      v={files.map((f) => `${f.name} (${formatFileSize(f.size)})`).join(", ")}
+                    />
+                  )}
                   <Line
                     k="Also attached"
                     v="your name and role, the running version, and whether the engine behind this screen is switched on"
                   />
                   {/* This line used to read "anything you have not typed or pointed at", which a
                       recording makes untrue. The whole value of this panel is that it is accurate. */}
-                  <Line
-                    k="Not attached"
-                    v={
-                      clip
-                        ? "anything you have not typed, pointed at or recorded"
-                        : "anything you have not typed or pointed at"
-                    }
-                  />
+                  {/* This line once read "anything you have not typed or pointed at", which a
+                      recording made untrue; attachments would make it untrue a second time. The
+                      whole value of this panel is that it is accurate, so it is built from what
+                      is actually on the form rather than written out. */}
+                  <Line k="Not attached" v={notAttached} />
                 </dl>
               )}
             </div>

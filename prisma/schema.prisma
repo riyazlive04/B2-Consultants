@@ -175,6 +175,7 @@ model User {
   improvementsArchived     Improvement[]              @relation("ImprovementArchivedBy")
   improvementEvents        ImprovementEvent[]         @relation("ImprovementEventActor")
   improvementRecordings    ImprovementRecording[]     @relation("ImprovementRecorder")
+  improvementAttachments   ImprovementAttachment[]    @relation("ImprovementAttacher")
 
   @@map("user")
 }
@@ -5886,8 +5887,9 @@ model Improvement {
   deletedById String?
   deletedBy   User?     @relation("ImprovementArchivedBy", fields: [deletedById], references: [id])
 
-  events    ImprovementEvent[]
-  recording ImprovementRecording?
+  events      ImprovementEvent[]
+  recording   ImprovementRecording?
+  attachments ImprovementAttachment[]
 
   @@index([status, createdAt])
   /// The queue's default order is urgent-first, so this is the index behind every page of it.
@@ -5963,4 +5965,47 @@ model ImprovementRecording {
   createdAt DateTime @default(now())
 
   @@map("improvement_recording")
+}
+
+/// FILES ATTACHED TO A REPORT - the evidence from outside the app.
+///
+/// A sibling of `ImprovementRecording` and separated from `Improvement` for the same reason:
+/// `bytes` is a column Prisma would select on any `findMany` that names no `select`, and a queue
+/// page accidentally dragging 20 MB of PDFs over the wire is a performance bug nobody would
+/// think to look for. A separate table cannot be loaded by accident.
+///
+/// MANY per report, unlike a recording - a figure that disagrees with a statement needs both the
+/// screenshot and the statement. Capped in src/lib/attachment.ts by count AND by total bytes.
+/// `onDelete: Cascade` is the only deletion path, and `Improvement` is soft-deleted, so
+/// archiving a report keeps its files - which is correct for a declined report somebody re-opens
+/// six months later. The magic-byte sniff and the allow-list live in that same module.
+model ImprovementAttachment {
+  id       String      @id @default(cuid())
+  reportId String
+  report   Improvement @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  bytes Bytes
+  /// REBUILT from the uploader's name, never stored as given: the base is reduced to a safe
+  /// character set and the extension comes from the sniff. It is interpolated into a
+  /// `Content-Disposition` header and rendered on the triage screen, so a crafted name is the
+  /// one way a stored file could misrepresent itself. See `safeAttachmentName`.
+  filename String
+  /// SNIFFED from the bytes on upload, never as the request claimed. This value becomes the
+  /// `Content-Type` of a download response, so a client-supplied one would be a scripting hole.
+  mimeType String
+  size     Int
+  /// So "is this the same file the reporter sent?" stays answerable, and two identical uploads
+  /// are recognisable as such. Same reason `AgreementAttachment` carries one.
+  sha256   String
+
+  /// Who attached it, kept for the reason `ImprovementRecording.recordedById` is: "where did
+  /// this document come from?" must stay answerable after the report is reassigned.
+  uploadedById String
+  uploadedBy   User   @relation("ImprovementAttacher", fields: [uploadedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  /// The triage screen lists one report's files in upload order; nothing queries them globally.
+  @@index([reportId, createdAt])
+  @@map("improvement_attachment")
 }

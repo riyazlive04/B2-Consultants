@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronsUp, Mic, MonitorPlay, PowerOff } from "lucide-react";
+import { ChevronsUp, Mic, MonitorPlay, Paperclip, PowerOff } from "lucide-react";
 import { Pill, TableShell, Td, Th, Tr } from "@/components/ui/kit";
 import { DateText } from "@/components/ui/DateText";
 import { IMPROVEMENT_KIND_SHORT, IMPROVEMENT_SEVERITY_SHORT, IMPROVEMENT_STATUS_LABELS } from "@/lib/improvement";
@@ -76,6 +76,21 @@ export function ImprovementTable({ rows, openId }: { rows: ImprovementRow[]; ope
                   >
                     {r.recording.kind === "SCREEN" ? <MonitorPlay size={11} /> : <Mic size={11} />}{" "}
                     {formatClipLength(r.recording.seconds)}
+                  </Pill>
+                )}
+                {/* A COUNT, not the filenames. Five names on each of 25 rows is not a queue, and
+                    the only thing this chip has to answer from here is "is there something to
+                    download before I can judge this one". */}
+                {r.attachments > 0 && (
+                  <Pill
+                    tone="neutral"
+                    title={
+                      r.attachments === 1
+                        ? "This report has a file attached"
+                        : `This report has ${r.attachments} files attached`
+                    }
+                  >
+                    <Paperclip size={11} /> {r.attachments}
                   </Pill>
                 )}
                 {r.events > 0 && (

@@ -104,6 +104,12 @@ export type ImprovementRow = {
   enginesOff: string[];
   /** The attached recording, or null. Drives the chip telling triage there is something to watch. */
   recording: { kind: "AUDIO" | "SCREEN"; seconds: number } | null;
+  /**
+   * HOW MANY files are attached - a count, not the list. The row only needs to say "there is
+   * something here"; names and sizes belong on the detail screen, and a queue of 25 rows has no
+   * room to print five filenames each.
+   */
+  attachments: number;
   /** Escalated by the head coach or the founder. Sorts to the top of the queue. */
   urgent: boolean;
   createdAt: Date;
@@ -147,7 +153,10 @@ export async function getImprovementPage(f: ImprovementFilters): Promise<{
         reporter: { select: { name: true } },
         assignee: { select: { name: true } },
         recording: { select: { kind: true, seconds: true } },
-        _count: { select: { events: true } },
+        // Counted, never listed: `_count` is one aggregate and cannot pull a byte of file data,
+        // where selecting the rows would put `filename` and `size` on 25 rows for a chip that
+        // only ever renders a number.
+        _count: { select: { events: true, attachments: true } },
       },
     }),
   ]);
@@ -167,6 +176,7 @@ export async function getImprovementPage(f: ImprovementFilters): Promise<{
       assigneeName: r.assignee?.name ?? null,
       enginesOff: enginesOffFrom(r.context),
       recording: r.recording ? { kind: r.recording.kind, seconds: r.recording.seconds } : null,
+      attachments: r._count.attachments,
       urgent: r.urgent,
       createdAt: r.createdAt,
       events: r._count.events,
@@ -216,6 +226,18 @@ export type ImprovementDetail = {
   reporterNote: string | null;
   /** The attached recording, or null. The BYTES are never loaded here - only its shape. */
   recording: { kind: "AUDIO" | "SCREEN"; seconds: number; hasAudio: boolean } | null;
+  /**
+   * The attached files, oldest first. Shape only - the BYTES are never loaded here, for the same
+   * reason the recording's are not: each one may be 10 MB, and they are fetched by the download
+   * route when somebody actually asks for one.
+   */
+  attachments: {
+    id: string;
+    filename: string;
+    mimeType: string;
+    size: number;
+    uploaderName: string;
+  }[];
   /** Escalated by the head coach or the founder. */
   urgent: boolean;
   route: string;
@@ -255,6 +277,18 @@ export async function getImprovementDetail(id: string): Promise<ImprovementDetai
       // SHAPE ONLY, never `bytes`. Selecting them here would pull up to 25 MB of video into the
       // page render for a player that fetches it from its own route anyway.
       recording: { select: { kind: true, seconds: true, hasAudio: true } },
+      // SHAPE ONLY here too, and for the same reason: `bytes` is a scalar, so naming the relation
+      // without a `select` would load every attached file into this page render.
+      attachments: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          filename: true,
+          mimeType: true,
+          size: true,
+          uploadedBy: { select: { name: true } },
+        },
+      },
       route: true,
       routeParams: true,
       sectionKey: true,
@@ -304,6 +338,13 @@ export async function getImprovementDetail(id: string): Promise<ImprovementDetai
     recording: r.recording
       ? { kind: r.recording.kind, seconds: r.recording.seconds, hasAudio: r.recording.hasAudio }
       : null,
+    attachments: r.attachments.map((a) => ({
+      id: a.id,
+      filename: a.filename,
+      mimeType: a.mimeType,
+      size: a.size,
+      uploaderName: a.uploadedBy.name,
+    })),
     urgent: r.urgent,
     route: r.route,
     routeParams: r.routeParams ? asStringRecord(r.routeParams) : null,

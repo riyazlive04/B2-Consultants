@@ -55,6 +55,11 @@ export type ImprovementNotifyInput = {
    */
   recordingSeconds: number | null;
   recordingKind: "AUDIO" | "SCREEN" | null;
+  /**
+   * How many files the reporter attached, DECLARED by the form for the same reason the recording
+   * fields are: the uploads race this email. One line, pointing at the report.
+   */
+  attachmentCount: number;
   context: ImprovementContext;
 };
 
@@ -171,6 +176,15 @@ function reportEmailHtml(input: ImprovementNotifyInput): string {
               ? "It shows what they were doing when it went wrong."
               : ""
           } Media cannot travel in an email, so open the report to watch it.</p>`
+        : ""
+    }
+    ${
+      input.attachmentCount > 0
+        ? `<p style="margin:0 0 18px;padding:12px 14px;border-radius:10px;background:#F4F6F9;font-size:13px;color:#1A2230"><strong>${
+            input.attachmentCount === 1
+              ? "There is a file attached"
+              : `There are ${input.attachmentCount} files attached`
+          }</strong> - open the report to download ${input.attachmentCount === 1 ? "it" : "them"}. Attachments are never emailed: one of them may be a statement or an invoice, and an inbox is the wrong place for it to end up.</p>`
         : ""
     }
     <p style="margin:0 0 20px;font-size:12px;color:#5A6472">

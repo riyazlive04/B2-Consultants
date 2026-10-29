@@ -166,6 +166,7 @@ export async function submitImprovement(
       note: d.note?.trim() || null,
       recordingSeconds: d.recordingSeconds ?? null,
       recordingKind: d.recordingKind ?? null,
+      attachmentCount: d.attachmentCount ?? 0,
       context,
     });
     if (outcome.sent) {
@@ -197,10 +198,11 @@ export async function submitImprovement(
 
   revalidatePath("/improvements");
   /**
-   * The `id` rides back alongside the ref so the form can attach a voice note to the row it just
-   * created. The clip cannot travel in this action at all - Next caps an action body at 1 MB and
-   * a two-minute recording can beat that - so it is posted to `/api/improvements/[id]/voice`
-   * afterwards. The ref is for the person; the id is for that one follow-up request.
+   * The `id` rides back alongside the ref so the form can attach a recording and any files to the
+   * row it just created. Neither can travel in this action at all - Next caps an action body at
+   * 1 MB, a two-minute recording can beat that and one attachment may be 10 MB - so they are
+   * posted to `/api/improvements/[id]/recording` and `/api/improvements/[id]/attachments`
+   * afterwards. The ref is for the person; the id is for those follow-up requests.
    */
   return { ok: true, ref: report.ref, id: report.id };
 }

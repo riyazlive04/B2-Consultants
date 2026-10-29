@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { ACTIVE } from "@/lib/soft-delete";
-import { hasCapability, requireSession } from "@/lib/rbac";
+import { requireSession } from "@/lib/rbac";
+import { canReadImprovementMedia } from "@/lib/improvement-access";
 import { takeToken } from "@/lib/rate-limit";
 import {
   RECORDING_LIMITS,
@@ -181,9 +182,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 /**
  * Stream the recording to an `<audio>` or `<video>` element.
  *
- * Readable by whoever can triage, and by the person who recorded it. The reporter is included on
- * purpose: they can already see their own report, and one whose own author cannot replay what
- * they said is a confusing thing to own.
+ * Who may read it is decided by `canReadImprovementMedia` and nowhere else: the founder, the
+ * developer, the head coach, and the reporter themselves. The reporter is included on purpose -
+ * they can already see their own report, and one whose own author cannot replay what they said is
+ * a confusing thing to own.
  *
  * `inline`, where the agreement attachment route uses `attachment` - and the difference is worth
  * stating, because that route's comment argues the opposite case. It serves identity documents
@@ -213,11 +215,19 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   });
   if (!row) return new NextResponse("Not found", { status: 404 });
 
-  const allowed =
-    hasCapability(session.role, session.capabilities, "improvements.triage") ||
-    row.report.reporterId === session.user.id ||
-    row.recordedById === session.user.id;
-  if (!allowed) return new NextResponse("Forbidden", { status: 403 });
+  /**
+   * ONE rule, shared with the attachment route and the triage screen.
+   *
+   * This used to be three conditions written out here, and they left out the HEAD COACH - who
+   * can read every word of every report but got a 403 from the player embedded in it. Fixed by
+   * moving the rule rather than adding a fourth condition to a copy.
+   */
+  if (!canReadImprovementMedia(session, {
+    reporterId: row.report.reporterId,
+    uploadedById: row.recordedById,
+  })) {
+    return new NextResponse("Forbidden", { status: 403 });
+  }
 
   const bytes = Buffer.from(row.bytes);
   const filename = recordingFilename(row.report.ref, row.mimeType, row.kind);

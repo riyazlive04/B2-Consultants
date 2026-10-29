@@ -164,7 +164,18 @@ export const WHATSAPP_KIND_HINTS: Record<WhatsAppKind, string> = {
  * not pass from the lead's own record (server/lead-template-vars.ts). Merged into each lead-facing
  * touchpoint below, so any approved SOP/booking template can be bound to any of them.
  */
-export const LEAD_TEMPLATE_VARS = ["name", "sender", "booking_url", "date", "time", "slot_time", "zoom_link", "sss_url"] as const;
+export const LEAD_TEMPLATE_VARS = [
+  "name", "sender", "booking_url", "date", "time", "slot_time", "zoom_link",
+  // ── The public pages, filled from ONE founder-editable config ──────────────────────────────
+  // `apply_url` (opt-in/booking page), `sss_url` (SSS booking) and `workshop_url` (workshop
+  // self-registration) all resolve through `getPublicLinksConfig()`. They are GUARANTEED
+  // non-empty, which is the only reason a template body may safely declare one - an unresolved
+  // variable skips the send. See `publicLinksConfigSchema` for why they are variables at all.
+  //
+  // `booking_url` is NOT one of them: it is this app's own /book page for rebooking a specific
+  // call, a different destination from the public opt-in page. Two names, deliberately.
+  "apply_url", "sss_url", "workshop_url",
+] as const;
 
 /** Touchpoints addressed to a prospect rather than a student, an agreement or a vendor. */
 const LEAD_FACING_KINDS = new Set<string>([
@@ -245,9 +256,17 @@ const BASE_AVAILABLE_VARS: Record<WhatsAppKind, readonly string[]> = {
   // with an explanatory message rather than delivering "Hi ,". See docs/WHATSAPP_TEMPLATES.md,
   // which is the submission pack these were written against.
   //
-  // The SOP's links (optin.b2consultants.de/apply, /lang, casestudies…, /sss) are LITERAL text in
-  // the template body, not variables - they never change per prospect, and Meta reviews a static
-  // URL once instead of on every send.
+  // ── LINKS ARE VARIABLES NOW, NOT LITERAL TEXT (26/10/2026) ────────────────────────────────
+  // These bodies used to carry their URLs as literal text - "they never change per prospect, and
+  // Meta reviews a static URL once instead of on every send". True, and it still cost more than
+  // it saved: Meta holds ONE body per (name, language), so changing a link in an approved body
+  // takes that touchpoint OFFLINE until the replacement clears review, and meanwhile nothing
+  // kept the copies in step (the SSS link had drifted to three different values).
+  //
+  // So `{{apply_url}}`, `{{sss_url}}` and `{{workshop_url}}` are filled from one founder-editable
+  // config - see `publicLinksConfigSchema`. A few older SOP links (/lang, casestudies…) are still
+  // literal in `lib/outreach-sop.ts`; they can move the same way whenever those bodies are next
+  // re-submitted, and there is nothing to do until then.
   SOP_INTRO: ["name", "sender"],
   SOP_FOLLOWUP: ["name", "sender"],
   SOP_SSS_CONFIRM_3: ["name", "date", "time", "zoom_link"],
@@ -350,6 +369,27 @@ const POSITIONAL_ALT_ORDERS: Partial<Record<WhatsAppKind, readonly (readonly str
     ["name", "class_title", "class_date", "watch_deadline"],
     ["name", "class_title", "class_date"],
   ],
+
+  /**
+   * ── THE STAGE AND SOP MESSAGES THAT NOW CARRY A LINK VARIABLE ──────────────────────────────
+   * `STAGE_KIND_VARS` offers every stage kind exactly ["name"], so the canonical layout has
+   * arity 1. The 26/10/2026 review moved the URLs out of these bodies and into variables, which
+   * makes the approved templates two-placeholder - and a positional template whose arity matches
+   * NO layout is refused by `positionalVarMap`, so every send would be skipped. That is not a
+   * hypothetical: it is precisely how `b2_booking_confirm_request` came to send nothing.
+   *
+   * ⚠ EACH KIND NAMES ITS OWN LINK, and they are listed separately for that reason rather than
+   * sharing one two-variable layout. `.find` matches on COUNT alone, so a shared
+   * [["name", "apply_url"]] would hand the workshop template's {{2}} the opt-in URL - a working
+   * send, to the wrong page, which is worse than no send at all.
+   */
+  STAGE_NEW_LEAD: [["name", "apply_url"]],
+  STAGE_WHATSAPP_SENT: [["name", "apply_url"]],
+  STAGE_DISCO_NOT_BOOKED: [["name", "apply_url"]],
+  STAGE_LOST: [["name", "apply_url"]],
+  STAGE_NO_SHOW: [["name", "apply_url"]],
+  STAGE_SENT_TO_WORKSHOP: [["name", "workshop_url"]],
+  SOP_SSS_CANCEL: [["name", "sss_url"]],
 };
 
 /**

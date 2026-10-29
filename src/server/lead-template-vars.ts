@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { formatDateTimeInZone } from "@/lib/format";
 import { coerceOutreachConfig } from "@/lib/outreach-sop";
+import { getPublicLinksConfig } from "./founder-config";
 
 /**
  * The lead-facing WhatsApp template variables, resolved from the lead's own record.
@@ -20,7 +21,19 @@ export function bookingUrl(): string {
   return `${(process.env.BETTER_AUTH_URL ?? "").replace(/\/+$/, "")}/book`;
 }
 
-export const SSS_URL = "https://optin.b2consultants.de/sss";
+/**
+ * ⚠ `SSS_URL` USED TO BE A CONSTANT HERE, AND THAT IS WHAT WENT WRONG.
+ *
+ * There were three answers to "where do we send someone to rebook their SSS?" - this constant,
+ * a literal inside `sendSssRescheduled`, and `${base}/sss` in the test-variable pool - which is
+ * what the 26/10/2026 template review caught ("we have to check with the Link as we have 3 links
+ * currently"). All three now resolve through `getPublicLinksConfig()`, so there is one.
+ *
+ * Note `booking_url` is NOT one of these and is deliberately left alone: it is this app's own
+ * `/book` page, used by the booking engine for rebooking a specific call. `apply_url` is the
+ * public opt-in page a brand-new prospect is sent to. They are two different destinations, and
+ * collapsing them would send a half-booked prospect to the wrong one.
+ */
 
 export async function leadTemplateVars(
   leadId: string,
@@ -44,7 +57,15 @@ export async function leadTemplateVars(
   if (!lead) return {};
   const journey = lead.outreachJourney;
 
-  const vars: Record<string, string> = { booking_url: bookingUrl(), sss_url: SSS_URL };
+  const links = await getPublicLinksConfig();
+  // Every one of these is guaranteed non-empty by `coercePublicLinksConfig`, which is what makes
+  // them safe to DECLARE in a template body: an unresolved variable skips the send entirely.
+  const vars: Record<string, string> = {
+    booking_url: bookingUrl(),
+    apply_url: links.applyUrl,
+    sss_url: links.sssUrl,
+    workshop_url: links.workshopUrl,
+  };
   const first = (lead.name ?? "").trim().split(/\s+/)[0];
   if (first) vars.name = first;
   vars.sender = await senderName(opts.sentById ?? null, journey?.respTouchpoint?.name ?? lead.assignedTo?.name ?? null);

@@ -13,6 +13,7 @@ import {
   leaderboardConfigSchema,
   coerceLeaderboardConfig,
   studentLifecycleConfigSchema,
+  improvementsSchema,
 } from "@/lib/config-schema";
 import {
   writeMaintenanceConfig,
@@ -31,6 +32,8 @@ import {
   writeLeaderboardConfig,
   STUDENT_LIFECYCLE_KEY,
   writeStudentLifecycleConfig,
+  IMPROVEMENTS_KEY,
+  writeImprovementsConfig,
 } from "./founder-config";
 import { previewDunning } from "./dunning";
 import { logActivity } from "./activity-log";
@@ -257,5 +260,37 @@ export async function saveStudentLifecycleConfig(input: unknown): Promise<Action
   });
   revalidatePath("/console");
   revalidatePath("/coaching");
+  return { ok: true };
+}
+
+/**
+ * Who hears about a reported problem.
+ *
+ * The Report button needs no switch and has none - it writes a row and sends nothing outside the
+ * org. This is the notification, which does leave the building, so it is configurable and the
+ * address is config rather than an env var: an env var means a redeploy to change who gets the
+ * mail, which is how a channel ends up pointing at somebody who has left.
+ */
+export async function saveImprovementsConfig(input: unknown): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const parsed = improvementsSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  await writeImprovementsConfig(parsed.data);
+  await logActivity(session, {
+    action: "console.improvements.update",
+    section: "console",
+    entityType: "AppSetting",
+    entityId: IMPROVEMENTS_KEY,
+    summary: parsed.data.developerEmail
+      ? `Improvements go to ${parsed.data.developerEmail}`
+      : "Improvements notify in-app only",
+    meta: {
+      hasAddress: Boolean(parsed.data.developerEmail),
+      emailOnBlocking: parsed.data.emailOnBlocking,
+      dailyDigest: parsed.data.dailyDigest,
+    },
+  });
+  revalidatePath("/console");
+  revalidatePath("/improvements");
   return { ok: true };
 }

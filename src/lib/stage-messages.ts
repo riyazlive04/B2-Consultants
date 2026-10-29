@@ -14,6 +14,9 @@
 import { z } from "zod";
 import type { LeadStage, WhatsAppKind } from "@prisma/client";
 import { LEAD_STAGE_LABELS } from "./labels";
+// Acyclic: config-schema does not import this module. Safe here because this file already
+// depends on zod, so it is not one of the zod-free modules client components rely on.
+import { DEFAULT_PUBLIC_LINKS_CONFIG } from "./config-schema";
 
 /** Every LeadStage, in funnel order. Mirrors the Prisma enum. */
 export const STAGE_MESSAGE_STAGES = [
@@ -84,7 +87,19 @@ export type StageMessagesConfig = {
 export const STAGE_MESSAGES_KEY = "stageMessages";
 
 const SIGN_OFF = `\n\nB2 Consultants`;
-const BOOK = `https://optin.b2consultants.de/apply`;
+
+/**
+ * The links in the DEFAULT copy, taken from the one place that owns them rather than retyped.
+ *
+ * These are defaults only: once the founder saves stage messages the stored text wins and this
+ * copy is never consulted again - so editing a link in Public links does NOT rewrite an email
+ * somebody has already customised. Keeping the two in step is still worth it, because the two
+ * halves of a touchpoint must not send people to two different places, and this is the half that
+ * cannot read the config at run time (this module is isomorphic - a client component imports it -
+ * so it has no database).
+ */
+const BOOK = DEFAULT_PUBLIC_LINKS_CONFIG.applyUrl;
+const WORKSHOP = DEFAULT_PUBLIC_LINKS_CONFIG.workshopUrl;
 
 /**
  * Default copy. Tokens: {{first_name}}, {{name}}, {{email}}, {{phone}} (see renderTokens).
@@ -129,7 +144,12 @@ const DEFAULT_COPY: Record<LeadStage, { subject: string; body: string }> = {
   },
   SENT_TO_WORKSHOP: {
     subject: `{{first_name}}, you are invited to our workshop`,
-    body: `Hi {{first_name}},\n\nWe think our workshop is the best next step for you. It covers what it really takes to get a job in Germany. Our team will share the details with you shortly.`,
+    // "Our team will share the details with you shortly" became the registration page on
+    // 26/10/2026, on the reviewer's instruction ("instead of team sending, lets redirect them to
+    // the workshop page always"). Changed here as well as in the WhatsApp template so the two
+    // halves of this touchpoint agree - and because the old line promised a follow-up that
+    // nothing in the app actually performs.
+    body: `Hi {{first_name}},\n\nWe think our workshop is the best next step for you. It covers what it really takes to get a job in Germany.\n\nYou can register for the next session here:\n${WORKSHOP}`,
   },
   WORKSHOP_FOLLOWUP: {
     subject: `{{first_name}}, how did you find the workshop?`,

@@ -16,10 +16,20 @@
  * ── Variants ────────────────────────────────────────────────────────────────────
  *  - "mark" (default): the bracketed B² alone (1844×1331 of ink). Used wherever a
  *    small badge sits next to an HTML "B2 Consultants" wordmark - repeating the
- *    name underneath the badge would say it twice.
- *  - "full": the complete lockup with CONSULTANTS beneath (1844×1544). For standalone
- *    use where no wordmark follows. The strapline is ~10% of the height, so below
- *    about 40px tall it stops being legible - use "mark" there.
+ *    name underneath the badge would say it twice. The one place this is still the
+ *    right call is the mobile top bar, where there is no room for the lockup.
+ *  - "full": the complete lockup with CONSULTANTS beneath (1844×1544). The default
+ *    choice for the brand itself - the auth screens and the sidebar rail both use
+ *    it, because the logo should carry the company's name rather than lean on HTML
+ *    text beside it.
+ *
+ * ⚠ THE STRAPLINE IS ONLY ~10% OF THE LOCKUP'S HEIGHT, so CONSULTANTS renders at
+ * about a tenth of whatever height the caller sets: ~7px at the auth screens'
+ * h-[72px], ~6px in the expanded rail's h-16, and ~4px in the collapsed rail's
+ * h-10, where WIDTH caps the height at 76px of rail minus its padding. Below
+ * roughly 40px tall the word is present but no longer readable as a word. That is
+ * a deliberate, documented trade in the collapsed rail (see AppShell); anywhere
+ * else, if the lockup has to go under 40px, use "mark" with HTML text instead.
  *
  * ── Sizing ──────────────────────────────────────────────────────────────────────
  * The mark is LANDSCAPE (1.385:1), not the square the old redraw was. The caller

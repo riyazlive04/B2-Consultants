@@ -169,6 +169,11 @@ model User {
   pendingPaymentsArchived  PendingPayment[]           @relation("PendingPaymentArchivedBy")
   productsArchived         Product[]                  @relation("ProductArchivedBy")
   resourcesCreated         Resource[]                 @relation("ResourceCreatedBy")
+  // In-app improvements (src/lib/improvement.ts)
+  improvementsReported     Improvement[]              @relation("ImprovementReporter")
+  improvementsAssigned     Improvement[]              @relation("ImprovementAssignee")
+  improvementsArchived     Improvement[]              @relation("ImprovementArchivedBy")
+  improvementEvents        ImprovementEvent[]         @relation("ImprovementEventActor")
 
   @@map("user")
 }
@@ -481,22 +486,22 @@ model Income {
   /// NOT a soft delete, and deliberately a separate field from `deletedAt`. Archiving says "this
   /// row should not have been entered"; reversing says "it was entered correctly and the money
   /// went away again". Only the second one is a fact about the bank.
-  reversedAt              DateTime?
+  reversedAt     DateTime?
   /// Why it reversed, in the founder's words. Free text: the vocabulary is the bank's, not ours.
-  reversedReason          String?
-  reversedById            String?
-  reversedBy              User?               @relation("IncomeReversedBy", fields: [reversedById], references: [id], onDelete: SetNull)
+  reversedReason String?
+  reversedById   String?
+  reversedBy     User?     @relation("IncomeReversedBy", fields: [reversedById], references: [id], onDelete: SetNull)
 
-  source                  Source              @default(MANUAL)
-  manualOverride          Boolean             @default(false)
-  externalRef             String? // e.g. Razorpay payment id - de-dupe key for ingest
-  enteredById             String?
-  enteredBy               User?               @relation("IncomeEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
-  createdAt               DateTime            @default(now())
-  updatedAt               DateTime            @updatedAt
-  deletedAt               DateTime?
-  deletedById             String?
-  deletedBy               User?               @relation("IncomeArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  source         Source    @default(MANUAL)
+  manualOverride Boolean   @default(false)
+  externalRef    String? // e.g. Razorpay payment id - de-dupe key for ingest
+  enteredById    String?
+  enteredBy      User?     @relation("IncomeEnteredBy", fields: [enteredById], references: [id], onDelete: SetNull)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  deletedById    String?
+  deletedBy      User?     @relation("IncomeArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   @@unique([source, externalRef])
   @@index([date])
@@ -578,7 +583,7 @@ model PendingPayment {
   enrollmentId      String?
   enrollment        Enrollment?          @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
   programLevel      String // Level.code (was ProgramLevel enum)
-  programLevelRef   Level     @relation("PendingPaymentLevel", fields: [programLevel], references: [code], onUpdate: Cascade, onDelete: Restrict)
+  programLevelRef   Level                @relation("PendingPaymentLevel", fields: [programLevel], references: [code], onUpdate: Cascade, onDelete: Restrict)
   /// ER v2 EMI_PLAN.num_emis / levels_taken. INPUTS the founder sets when building the plan
   /// (the spec's "2 EMIs per level" rule), not outputs - which is why they are stored rather
   /// than counted off Instalment rows that may not all exist yet.
@@ -807,7 +812,7 @@ model Lead {
   dateIn            DateTime         @db.Date
   stage             LeadStage        @default(NEW_LEAD)
   wonLevel          String? // Level.code; set when stage → WON; feeds "conversions by level" (PRD1 §5.4)
-  wonLevelRef       Level?    @relation("LeadWonLevel", fields: [wonLevel], references: [code], onUpdate: Cascade, onDelete: SetNull)
+  wonLevelRef       Level?           @relation("LeadWonLevel", fields: [wonLevel], references: [code], onUpdate: Cascade, onDelete: SetNull)
   paymentPlan       PaymentPlan? // set from DEPOSIT_PAID onward - split pay vs full pay
   notes             String?
   source            Source           @default(MANUAL) // ingest provenance (Synamate / sheet / capture)
@@ -1683,15 +1688,15 @@ enum InvoiceStatus {
 }
 
 model Invoice {
-  id                 String            @id @default(cuid())
-  kind               InvoiceKind       @default(INVOICE)
+  id                   String            @id @default(cuid())
+  kind                 InvoiceKind       @default(INVOICE)
   /// INV-yy9999 / EST-yy9999 (lib/invoice-compliance). An INVOICE carries a provisional
   /// DRAFT-xxxxxxxx until it is issued and draws its real number then; INV-0001…0007 are the
   /// pre-October 2026 format and keep the numbers they were sent with.
-  number             String            @unique
-  status             InvoiceStatus     @default(DRAFT)
-  leadId             String?
-  lead               Lead?             @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  number               String            @unique
+  status               InvoiceStatus     @default(DRAFT)
+  leadId               String?
+  lead                 Lead?             @relation(fields: [leadId], references: [id], onDelete: SetNull)
   /// WHO THIS INVOICE IS FOR, when they are a student (migration M1, 24/10/2026).
   ///
   /// `leadId` alone could not answer "what has this student paid": it needs a join through
@@ -1701,51 +1706,51 @@ model Invoice {
   ///
   /// SetNull, never Cascade: an invoice is a financial record and must outlive the student row it
   /// points at. Cascading would let a student deletion erase issued invoices.
-  studentId          String?
-  student            Student?          @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  studentId            String?
+  student              Student?          @relation(fields: [studentId], references: [id], onDelete: SetNull)
   /// The specific enrolment being billed, where one applies. Narrower than `studentId`: a student
   /// may hold several enrolments, and "which programme is this invoice for" is a different
   /// question from "whose invoice is it".
-  enrollmentId       String?
-  enrollment         Enrollment?       @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
-  customerName       String
-  customerEmail      String?
-  customerPhone      String?
+  enrollmentId         String?
+  enrollment           Enrollment?       @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  customerName         String
+  customerEmail        String?
+  customerPhone        String?
   /// The recipient's postal address - §14 Abs. 4 Nr. 1 UStG; required to issue.
-  customerAddress    String?
-  issueDate          DateTime          @db.Date
-  dueDate            DateTime?         @db.Date
+  customerAddress      String?
+  issueDate            DateTime          @db.Date
+  dueDate              DateTime?         @db.Date
   /// The date (start only) or period of the service - §14 Abs. 4 Nr. 6 UStG; required to issue.
-  servicePeriodStart DateTime?         @db.Date
-  servicePeriodEnd   DateTime?         @db.Date
+  servicePeriodStart   DateTime?         @db.Date
+  servicePeriodEnd     DateTime?         @db.Date
   /// The coaching agreement this invoice bills under (Agreement.documentNo, snapshotted). When
   /// set, the agreement's payment and refund terms (§7.3, §7.4, §8) print on the invoice.
-  agreementRef       String?
+  agreementRef         String?
   /// When the invoice drew its real number. Non-null = issued = locked: no edit, no return to
   /// DRAFT, no permanent delete. Always null on an estimate.
-  issuedAt           DateTime?
+  issuedAt             DateTime?
   /// Which currency this invoice was priced in. Everything below is stored on BOTH sides so the
   /// KPI cards, the ageing and the ledger can keep aggregating in rupees without re-converting
   /// at today's rate; the entered side is the one the document prints.
-  currency           InvoiceCurrency   @default(INR)
-  subtotalInrMinor   BigInt            @default(0)
-  subtotalEurMinor   BigInt            @default(0)
-  discountInrMinor   BigInt            @default(0)
-  discountEurMinor   BigInt            @default(0)
-  taxPercent         Decimal           @default(0) @db.Decimal(6, 3)
+  currency             InvoiceCurrency   @default(INR)
+  subtotalInrMinor     BigInt            @default(0)
+  subtotalEurMinor     BigInt            @default(0)
+  discountInrMinor     BigInt            @default(0)
+  discountEurMinor     BigInt            @default(0)
+  taxPercent           Decimal           @default(0) @db.Decimal(6, 3)
   /// What the tax is CALLED on this document - "GST", "VAT", or null when the invoice carries no
   /// tax at all. Snapshotted from the Console's per-currency setting at save, because a later
   /// change to the rate must never rewrite what an issued invoice says it charged.
-  taxLabel           String?
+  taxLabel             String?
   /// Why no tax is charged, printed in place of a tax line on a 0% invoice ("Gemäß § 19 UStG…").
   /// Snapshotted at issue from the Console's per-currency note when the invoice has none.
-  taxNote            String?
-  taxInrMinor        BigInt            @default(0)
-  taxEurMinor        BigInt            @default(0)
-  totalInrMinor      BigInt            @default(0)
-  totalEurMinor      BigInt            @default(0)
-  fxRateUsed         Decimal           @db.Decimal(14, 6)
-  notes              String?
+  taxNote              String?
+  taxInrMinor          BigInt            @default(0)
+  taxEurMinor          BigInt            @default(0)
+  totalInrMinor        BigInt            @default(0)
+  totalEurMinor        BigInt            @default(0)
+  fxRateUsed           Decimal           @db.Decimal(14, 6)
+  notes                String?
   /// ══════════════════════════════════════════════════════════════════════════════════════
   ///  THE PUBLIC LINK  (issue B5)
   /// ══════════════════════════════════════════════════════════════════════════════════════
@@ -1776,7 +1781,7 @@ model Invoice {
   /// would mean the link could never be displayed again, so the trade here is 256 bits of
   /// entropy plus an expiry plus revocation, which is what actually bounds the exposure. If
   /// invoices ever get a "the link is shown once" flow, hash it and drop this paragraph.
-  publicToken        String            @unique
+  publicToken          String            @unique
   /// When the link stops working. Null = no expiry, which is what every row issued before this
   /// field has and what a founder may deliberately choose for a long-running subscription.
   publicTokenExpiresAt DateTime?
@@ -1784,17 +1789,17 @@ model Invoice {
   /// customer who asks. Distinct from `status: VOID`, which is a statement about the DOCUMENT;
   /// this is a statement about one URL. `rotateInvoiceLink` clears it and mints a fresh token.
   publicTokenRevokedAt DateTime?
-  sentAt             DateTime?
-  paidAt             DateTime?
-  createdById        String?
-  createdBy          User?             @relation("InvoiceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
-  deletedAt          DateTime?
-  deletedById        String?
-  deletedBy          User?             @relation("InvoiceArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
-  items              InvoiceLineItem[]
-  payments           InvoicePayment[]
+  sentAt               DateTime?
+  paidAt               DateTime?
+  createdById          String?
+  createdBy            User?             @relation("InvoiceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  deletedAt            DateTime?
+  deletedById          String?
+  deletedBy            User?             @relation("InvoiceArchivedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  items                InvoiceLineItem[]
+  payments             InvoicePayment[]
 
   @@index([status])
   @@index([kind, createdAt])
@@ -2577,7 +2582,7 @@ model Enrollment {
   batchId         String?
   batch           Batch?          @relation(fields: [batchId], references: [id], onDelete: SetNull)
   programLevel    String // Level.code - SOLO / GUIDED / ELITE only for B2 (service-validated)
-  programLevelRef Level  @relation("EnrollmentLevel", fields: [programLevel], references: [code], onUpdate: Cascade, onDelete: Restrict)
+  programLevelRef Level           @relation("EnrollmentLevel", fields: [programLevel], references: [code], onUpdate: Cascade, onDelete: Restrict)
   enrollmentDate  DateTime        @db.Date
   duration        ProgramDuration
   programEndDate  DateTime?       @db.Date // enrollment + 90/120 days; null for LIFETIME
@@ -3247,7 +3252,7 @@ model CurriculumTemplate {
   /// Level.code this curriculum is written for (GUIDED / ELITE). Nullable: a template may be
   /// shared across tiers, and the batch's own level is what the seat guard checks.
   levelCode   String?
-  levelRef    Level?   @relation("CurriculumLevel", fields: [levelCode], references: [code], onUpdate: Cascade, onDelete: SetNull)
+  levelRef    Level?    @relation("CurriculumLevel", fields: [levelCode], references: [code], onUpdate: Cascade, onDelete: SetNull)
   description String?
   /// Days of sprint that follow the final session - the sheet's "90 Day Sprint" footer row.
   /// Guided is 90, Elite 120; null means this curriculum has no sprint phase.
@@ -3399,14 +3404,14 @@ model ClassSession {
   /// opens a register or shows a join link; the other two are excluded at every one of those
   /// call sites rather than by a Prisma middleware, the same discipline as the soft-delete
   /// archive and `Enrollment.status`.
-  status           SessionStatus @default(SCHEDULED)
+  status        SessionStatus @default(SCHEDULED)
   /// Why, and who said so. The reason is free text because "why was this class called off" has
   /// no useful vocabulary - unlike `Enrollment.discontinueReason`, this is not a metric anybody
   /// aggregates, it is a sentence the cohort is shown.
-  cancelReason     String?
-  cancelledAt      DateTime?
-  cancelledById    String?
-  cancelledBy      User?         @relation("SessionCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
+  cancelReason  String?
+  cancelledAt   DateTime?
+  cancelledById String?
+  cancelledBy   User?         @relation("SessionCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
 
   tasks            SessionTask[]
   attendance       SessionAttendance[]
@@ -5362,7 +5367,7 @@ model GnPendingJoiner {
   studentId String
   student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
   level     String // Level.code (was ProgramLevel enum)
-  levelRef  Level  @relation("JoinerLevel", fields: [level], references: [code], onUpdate: Cascade, onDelete: Restrict)
+  levelRef  Level   @relation("JoinerLevel", fields: [level], references: [code], onUpdate: Cascade, onDelete: Restrict)
 
   preference    GnSlotPreference @default(EITHER)
   /// Free text, as captured on the confirmation call ("evening", "after 7pm").
@@ -5711,7 +5716,7 @@ enum MilestoneProgressStatus {
 model ProgramMilestone {
   id         String    @id @default(cuid())
   levelCode  String // Level.code - per program, as the diagram asks
-  levelRef   Level  @relation("MilestoneLevel", fields: [levelCode], references: [code], onUpdate: Cascade, onDelete: Restrict)
+  levelRef   Level     @relation("MilestoneLevel", fields: [levelCode], references: [code], onUpdate: Cascade, onDelete: Restrict)
   key        Milestone // reuse the shipped 7-value enum rather than inventing a parallel one
   name       String
   targetDay  Int // day-N of the 90/120-day tracker
@@ -5742,4 +5747,154 @@ model MilestoneProgress {
   @@unique([enrollmentId, milestoneId])
   @@index([status])
   @@map("milestone_progress")
+}
+
+// ───────────────────────────── in-app improvements ─────────────────────────────
+
+/// What kind of problem the REPORTER thinks this is. Their opinion, not a classification -
+/// triage may re-kind it, and that re-kinding is recorded as an ImprovementEvent so the accuracy of
+/// the picker is measurable. The seven are derived from the problem classes this app actually
+/// produces; see src/lib/improvement.ts and docs/IMPROVEMENTS_MODULE_PLAN.md §1.1.
+enum ImprovementKind {
+  NOT_WORKING
+  WRONG_RESULT
+  LOGIC_CHANGE
+  MISSING_STATE
+  NEW_FEATURE
+  CONFUSING
+  ACCESS
+}
+
+/// How badly it hurts, in the reporter's words. Drives notification urgency ONLY, never triage
+/// order - see `notifiesImmediately` in src/lib/improvement.ts for why.
+enum ImprovementSeverity {
+  BLOCKING
+  ANNOYING
+  MINOR
+}
+
+/// FIXED means the developer shipped something; CLOSED means the reporter agrees it is fixed.
+/// Collapsing the two is how a tracker fills with things everyone believes are done.
+/// Legal moves live in `IMPROVEMENT_TRANSITIONS` (src/lib/improvement.ts), not here.
+enum ImprovementStatus {
+  NEW
+  TRIAGED
+  ACCEPTED
+  IN_PROGRESS
+  FIXED
+  CLOSED
+  DECLINED
+  DUPLICATE
+}
+
+enum ImprovementEventKind {
+  STATUS
+  COMMENT
+  REKIND
+  ASSIGN
+  ATTACH
+}
+
+/// A problem somebody hit while using the app, with enough captured around it to be diagnosed
+/// without a follow-up conversation.
+///
+/// `context` is the field that earns this table: it is captured SERVER-side at submit time and
+/// answers "is the engine behind this screen even armed?" before a human reads the report. Most
+/// engines in this app ship OFF, so "this section does nothing" is the commonest report there is
+/// and it is usually not a bug. See src/server/improvement-context.ts.
+model Improvement {
+  id           String              @id @default(cuid())
+  /// IMP-0001. Drawn from the shared `document_sequence` counter at create - see
+  /// src/server/improvement-ref.ts for why it does not route through nextDocumentNumber().
+  ref          String              @unique
+  kind         ImprovementKind
+  severity     ImprovementSeverity
+  status       ImprovementStatus   @default(NEW)
+  title        String
+  /// The kind-specific questions and their answers, shaped by `answersSchema(kind)`. JSON rather
+  /// than ~20 nullable columns, of which any one report fills three. Unknown keys are dropped on
+  /// the way in, so a crafted POST cannot write arbitrary keys into a rendered column.
+  answers      Json
+  reporterNote String?
+
+  /// The route PATTERN (`/students/[id]`), never the raw path: this value is rendered into a
+  /// queue, a title and an email, and a raw path puts a record id into all three.
+  route        String
+  routeParams  Json?
+  /// Resolved from the section catalogue, not parsed out of the URL. Null for a non-section route.
+  sectionKey   String?
+  /// "Point at the problem" - selector, visible text, nearest heading. See `elementTagSchema`.
+  elementTag   Json?
+  screenWidth  Int?
+  screenHeight Int?
+
+  /// Server-captured and scrubbed through lib/observability's `scrubContext`. Never client-supplied.
+  context      Json
+  /// Client ring buffer: route changes, failed actions, errors. Paths and messages only.
+  breadcrumbs  Json?
+  /// Next's own error digest when the report came from the crash screen, so the report and the
+  /// Sentry event share a grouping key.
+  clientDigest String?
+  appVersion   String?
+
+  reporterId   String
+  reporter     User   @relation("ImprovementReporter", fields: [reporterId], references: [id])
+  /// The role AT REPORT TIME. Roles change, and "why could they see this?" must stay answerable.
+  reporterRole String
+
+  assigneeId    String?
+  assignee      User?         @relation("ImprovementAssignee", fields: [assigneeId], references: [id])
+  duplicateOfId String?
+  duplicateOf   Improvement?  @relation("ImprovementDuplicate", fields: [duplicateOfId], references: [id])
+  duplicates    Improvement[] @relation("ImprovementDuplicate")
+
+  devNote        String?
+  /// Shown to the reporter on FIXED / DECLINED. The internal reasoning stays in `devNote`.
+  resolution     String?
+  fixedInVersion String?
+
+  /// When the developer notification was ATTEMPTED. `SENT` from Resend means accepted, not
+  /// delivered, so this records the attempt and nothing stronger.
+  notifiedAt     DateTime?
+  firstTriagedAt DateTime?
+  fixedAt        DateTime?
+  closedAt       DateTime?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  /// 10th soft-deleted model (src/lib/soft-delete.ts). A report is archived, never deleted -
+  /// including a declined one, which is the most valuable row in the table six months later.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?     @relation("ImprovementArchivedBy", fields: [deletedById], references: [id])
+
+  events ImprovementEvent[]
+
+  @@index([status, createdAt])
+  @@index([sectionKey, status])
+  @@index([reporterId, createdAt])
+  @@index([deletedAt])
+  @@map("improvement")
+}
+
+/// The back-and-forth on one report: every status move, re-kind, assignment and comment.
+///
+/// `visibleToReporter` is what makes the loop work. A reporting channel where nobody hears back
+/// goes quiet in two weeks, so a reply can be addressed to the person who filed it - while a
+/// triage note stays internal by default.
+model ImprovementEvent {
+  id                String               @id @default(cuid())
+  reportId          String
+  report            Improvement          @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  kind              ImprovementEventKind
+  fromValue         String?
+  toValue           String?
+  body              String?
+  visibleToReporter Boolean              @default(false)
+  actorId           String
+  actor             User                 @relation("ImprovementEventActor", fields: [actorId], references: [id])
+  createdAt         DateTime             @default(now())
+
+  @@index([reportId, createdAt])
+  @@map("improvement_event")
 }

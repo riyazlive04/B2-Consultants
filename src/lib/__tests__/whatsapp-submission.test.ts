@@ -13,7 +13,13 @@ import assert from "node:assert/strict";
 import {
   SUBMISSION_TEMPLATES,
   submissionBody,
+  supersededSubmissionBody,
   lintTemplate,
+  // Imported rather than restated: this test's job is to prove the pack does not drift from the
+  // SOP, and a local copy of "which steps get a suffix" / "which links become variables" would
+  // be the first thing to drift.
+  BODY_SUFFIX,
+  LINK_VARS,
   BODY_CHAR_LIMIT,
 } from "../whatsapp-submission";
 import { OUTREACH_STEPS, STEP_BY_KEY } from "../outreach-sop";
@@ -97,18 +103,23 @@ describe("Submission pack - bodies are derived from the SOP, not retyped", () =>
       const body = submissionBody(t);
       // Strip every variable from both sides; the surrounding prose must be identical. This is
       // what stops the pack drifting from what the app actually sends.
-      const strip = (s: string) =>
-        s
+      const strip = (s: string) => {
+        let out = s
           .replace(/\{\{[\w.]+\}\}/g, "§")
           .replace(/\[Prospect’s First Name\]|\[Your Name\]|\[DATE\]|\[TIME\]|<<INSERT ZOOM LINK HERE>>/g, "§")
-          .replace(/\s*<< ATTACH VIDEO TO THIS MESSAGE>>\s*/g, "")
-          .replace(/\s+/g, " ")
-          .trim();
+          .replace(/\s*<< ATTACH VIDEO TO THIS MESSAGE>>\s*/g, "");
+        // A link the submission turns into a variable is the SAME hole on both sides: literal in
+        // the SOP (what a telecaller reads), `{{sss_url}}` in the body (what Meta holds). Without
+        // this the comparison would report every such link as drift and hide real drift behind it.
+        for (const url of Object.keys(LINK_VARS)) out = out.split(url).join("§");
+        return out.replace(/\s+/g, " ").trim();
+      };
       const sopStripped = strip(sop);
       const bodyStripped = strip(body);
-      // Steps 20 and 20b get one documented closing line appended - they share a body, so they
-      // share its trailing-variable problem and its fix. Everything else must match exactly.
-      if (t.step === "SSS_CONFIRM_2" || t.step === "SSS_CONFIRM_3") {
+      // A step with a documented closing line keeps the SOP wording as its PREFIX; everything
+      // else must match exactly. Read off BODY_SUFFIX, so adding a fourth suffix cannot quietly
+      // turn into "this body drifted".
+      if (t.step in BODY_SUFFIX) {
         assert.ok(bodyStripped.startsWith(sopStripped), `${t.name} must keep the SOP wording as its prefix`);
       } else {
         assert.equal(bodyStripped, sopStripped, `${t.name} drifted from the SOP text`);
@@ -131,12 +142,33 @@ describe("Submission pack - bodies are derived from the SOP, not retyped", () =>
     }
   });
 
-  test("the SOP's links survive verbatim", () => {
+  test("the SOP's links survive verbatim, except the one that is now a variable", () => {
     const byStep = (s: string) => submissionBody(SUBMISSION_TEMPLATES.find((t) => t.step === s)!);
     assert.ok(byStep("INTRO_WHATSAPP").includes("https://optin.b2consultants.de/apply"));
     assert.ok(byStep("INTRO_WHATSAPP").includes("https://optin.b2consultants.de/lang"));
     assert.ok(byStep("DISCO_WELCOME").includes("https://casestudies.b2consultants.de/casestudies"));
-    assert.ok(byStep("SSS_CANCEL_MSG").includes("https://optin.b2consultants.de/sss"));
+  });
+
+  /**
+   * The SSS booking link became `{{sss_url}}` on 26/10/2026, filled from one founder-editable
+   * config, so that moving that page never needs a re-submission. It is the only SOP link to
+   * move so far; the three above are still literal and the test above holds them there.
+   *
+   * Asserted from BOTH directions deliberately. A regression could go either way - the
+   * substitution silently not running, or it running over a link that was meant to stay literal
+   * - and only one of those is visible by reading the body.
+   */
+  test("the SSS booking link is a variable, not a literal", () => {
+    const body = submissionBody(SUBMISSION_TEMPLATES.find((t) => t.step === "SSS_CANCEL_MSG")!);
+    assert.ok(body.includes("{{sss_url}}"), "the SSS link must reach Meta as a variable");
+    assert.ok(!body.includes("https://optin.b2consultants.de/sss"), "no literal SSS URL should remain");
+
+    // The superseded body is the OPPOSITE: it is what Meta is holding right now, and what Meta is
+    // holding is the literal. If this ever flips, the old/new comparison in the submission pack
+    // stops showing the one line that changed.
+    const was = supersededSubmissionBody(SUBMISSION_TEMPLATES.find((t) => t.step === "SSS_CANCEL_MSG")!);
+    assert.ok(was?.includes("https://optin.b2consultants.de/sss"), "the superseded body must keep the literal");
+    assert.ok(!was?.includes("{{sss_url}}"));
   });
 
   test("WhatsApp bold markers survive", () => {

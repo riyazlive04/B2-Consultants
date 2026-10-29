@@ -18,7 +18,7 @@ import {
   type WatiTemplateSummary,
 } from "@/lib/whatsapp";
 import { formatDuration, formatDurationList } from "@/lib/duration";
-import type { BookingRulesConfig } from "@/lib/config-schema";
+import type { BookingRulesConfig, PublicLinksConfig } from "@/lib/config-schema";
 import { safeAction } from "@/lib/action-guard";
 
 const inputCls =
@@ -26,6 +26,28 @@ const inputCls =
 
 /** Said once per field group: the only thing an operator has to know to type these boxes. */
 const DURATION_HINT = "Use h or m - e.g. 3h, 45m, 1h30m. A bare number means hours.";
+
+function LinkField({
+  name,
+  label,
+  defaultValue,
+  hint,
+}: {
+  name: string;
+  label: string;
+  defaultValue: string;
+  hint?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs font-medium text-muted">{label}</span>
+      {/* `type="url"` so a typo is caught by the browser before the save action has to refuse it,
+          and `inputMode="url"` so a phone offers the right keyboard. */}
+      <TextInput name={name} type="url" inputMode="url" defaultValue={defaultValue} className="mt-1" />
+      {hint ? <span className="mt-0.5 block text-caption text-muted">{hint}</span> : null}
+    </label>
+  );
+}
 
 function NumField({ name, label, defaultValue, hint }: { name: string; label: string; defaultValue: number; hint?: string }) {
   return (
@@ -77,11 +99,14 @@ function ScheduleGroup({
 export function WhatsAppSettingsForm({
   settings,
   rules,
+  links,
   catalog = [],
 }: {
   settings: WatiSettings;
   /** The confirm-or-cancel loop's settings; stored with the booking rules, edited here too. */
   rules: BookingRulesConfig;
+  /** The public pages the templates link to; their own config, edited here too. */
+  links: PublicLinksConfig;
   catalog?: WatiTemplateSummary[];
 }) {
   const router = useRouter();
@@ -206,6 +231,42 @@ export function WhatsAppSettingsForm({
             <input name="paused" type="checkbox" defaultChecked={settings.paused} className="h-4 w-4 rounded border-line" />
             <span className="text-sm">Pause all sending</span>
           </label>
+        </div>
+      </section>
+
+      {/* ── Public links ───────────────────────────────────────────────────────────
+          Directly under General, because these are the only settings on this page that change
+          what a prospect READS rather than when they read it. Editable here precisely so that
+          moving a landing page never needs a Meta re-submission: the templates carry
+          {{apply_url}} / {{sss_url}} / {{workshop_url}}, and these are the values. */}
+      <section className="rounded-card border border-line bg-surface p-5 shadow-card">
+        <h3 className="font-display text-base font-semibold">Public links</h3>
+        <p className="mt-1 text-xs text-muted">
+          Where outbound messages send people. Templates carry these as variables, so changing one
+          here takes effect on the next send - no re-approval from Meta. The stage{" "}
+          <em>emails</em> use the same values, so both halves of a touchpoint always point to the
+          same page. A blank or non-https link is rejected: an unresolved variable stops the
+          message sending at all rather than sending it without a link.
+        </p>
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <LinkField
+            name="applyUrl"
+            label="Discovery Call booking page"
+            defaultValue={links.applyUrl}
+            hint="{{apply_url}} - the opt-in page a new prospect books from."
+          />
+          <LinkField
+            name="sssUrl"
+            label="Solution Strategy Session page"
+            defaultValue={links.sssUrl}
+            hint="{{sss_url}} - booking and rebooking an SSS."
+          />
+          <LinkField
+            name="workshopUrl"
+            label="Workshop registration page"
+            defaultValue={links.workshopUrl}
+            hint="{{workshop_url}} - workshop self-registration."
+          />
         </div>
       </section>
 

@@ -176,11 +176,11 @@ async function programmeTakenBy(levelCode: string, exceptId?: string): Promise<s
 /**
  * The secret in a public invoice URL.
  *
- * `Invoice.publicToken` defaults to `cuid()` in the schema, and a cuid is an IDENTIFIER, not a
- * secret: it is built from a timestamp, a counter and a machine fingerprint, so tokens issued
- * near each other are near each other. That is fine for a primary key and wrong for the only
- * thing standing between the open internet and a document carrying a customer's name, email,
- * phone, what they were charged and the issuer's tax ID.
+ * `Invoice.publicToken` USED to come from Prisma's `@default(cuid())`, and a cuid is an
+ * IDENTIFIER, not a secret: it is built from a timestamp, a counter and a machine fingerprint, so
+ * tokens issued near each other are near each other. That is fine for a primary key and wrong for
+ * the only thing standing between the open internet and a document carrying a customer's name,
+ * email, phone, what they were charged and the issuer's tax ID.
  *
  * 32 random bytes from the CSPRNG - the same strength `lib/agreement-token.ts` already uses for
  * a signing link, which is the other public document this app hands out. There was no reason
@@ -195,8 +195,21 @@ async function programmeTakenBy(levelCode: string, exceptId?: string): Promise<s
  * deliberately, on the rows that still matter.
  *
  * The schema's `@default(cuid())` is GONE as of the 26 Oct migration (issue B5), so this function
- * is now the only source of an invoice token - the database can no longer quietly hand out a
- * cuid if a write path forgets to pass one.
+ * is now the only source of an invoice token.
+ *
+ * ── One correction to that migration's own note ──────────────────────────────────────────────
+ * `20261026090000_cancellations_reversals_and_link_hardening/migration.sql` says the column "was
+ * `DEFAULT cuid()`" and runs `ALTER COLUMN "publicToken" DROP DEFAULT`. The default was only ever
+ * a PRISMA CLIENT default: the creating migration (`20260711173536_synamate_payments_phase3`)
+ * declares the column plain `TEXT NOT NULL`, and no migration since added a database default. So
+ * the DROP DEFAULT was a harmless no-op, and the real guarantee is that `@default(cuid())` is out
+ * of `schema.prisma` - which makes it a guarantee enforced by the CLIENT, not by Postgres. A
+ * write path that forgets to pass a token now fails Prisma's own required-field check rather than
+ * being silently handed a cuid, which is the behaviour that was wanted; it is just not the
+ * database-level backstop the migration comment implies.
+ *
+ * The migration file itself is left alone on purpose: it has been applied on live, and editing an
+ * applied migration changes its checksum and makes the next `prisma migrate deploy` refuse to run.
  */
 function mintPublicToken(): string {
   return randomBytes(32).toString("base64url");

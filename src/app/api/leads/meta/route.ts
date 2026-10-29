@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { upsertIntakeLead } from "@/server/lead-intake";
+import { recordDelivery } from "@/server/intake-route";
+import { captureMessage } from "@/lib/observability";
 
 /**
  * Meta Lead Ads webhook (Wave-1 lead capture - replaces Synamate's Meta inbox).
@@ -74,6 +76,9 @@ function flattenFields(fd: FieldDatum[]): Record<string, unknown> {
   return flat;
 }
 
+/** Names this endpoint in Console → Integrations and in the error tracker. */
+const DELIVERY_NAME = "meta";
+
 export async function POST(req: NextRequest) {
   const raw = await req.text();
   const appSecret = process.env.META_APP_SECRET;
@@ -89,6 +94,7 @@ export async function POST(req: NextRequest) {
   try {
     body = JSON.parse(raw);
   } catch {
+    await recordDelivery(DELIVERY_NAME, false, "unreadable body (not JSON)");
     return new Response("Bad request", { status: 400 });
   }
 
@@ -105,18 +111,44 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Always ack quickly; if we can't fetch fields yet, record the id so nothing is lost.
+  /*
+   * ── WHY EVERY `continue` BELOW NOW LEAVES A TRACE ────────────────────────────────────────
+   *
+   * Meta is PAID traffic, and this loop had four ways to drop a lead in silence: no page token,
+   * a Graph fetch that was not ok, a form whose fields do not map to a name + phone, and a
+   * thrown request. Each one `continue`d, the handler returned 200, and Meta - correctly - never
+   * redelivered. The comment above said "record the id so nothing is lost"; nothing recorded it.
+   *
+   * The recovery key is the `leadgen_id`, not the lead's details: Meta keeps the answers and
+   * they can be re-pulled from the Graph API at any time with that id. So the id is what gets
+   * logged, and the PII stays where it already is. `scripts/replay-pabbly.mjs` is the pattern
+   * for re-driving one once the cause is fixed.
+   *
+   * Reasons are counted rather than reported one by one, because a broken page token drops every
+   * lead in the batch and 40 identical error-tracker events say no more than one does.
+   */
   let captured = 0;
+  const dropped: { id: string; why: string }[] = [];
   for (const { id } of leadgenIds) {
-    if (!token) continue; // no page token → can't fetch fields; ack without creating
+    // No page token → we cannot fetch the answers at all. Ack (Meta's retries would not help)
+    // but say so: this is a configuration fault that silently voids a whole ad campaign.
+    if (!token) { dropped.push({ id, why: "META_PAGE_ACCESS_TOKEN is not set" }); continue; }
     try {
       const res = await fetch(`https://graph.facebook.com/${encodeURIComponent(gv)}/${encodeURIComponent(id)}?access_token=${encodeURIComponent(token)}`, {
         cache: "no-store",
       });
-      if (!res.ok) continue;
+      // Usually an expired or wrongly-scoped page token (190/102). The status is the whole
+      // diagnosis and carries no lead data, so it is safe to keep.
+      if (!res.ok) { dropped.push({ id, why: `graph ${res.status}` }); continue; }
       const data = (await res.json()) as { field_data?: FieldDatum[] };
       const mapped = mapFields(data.field_data ?? []);
-      if (!mapped) continue;
+      if (!mapped) {
+        // The form asked for something `mapFields` does not recognise as a name or a phone.
+        // The FIELD NAMES are form configuration, not the answers, so they are the one useful
+        // thing to keep here - without them "unmappable" is unactionable.
+        dropped.push({ id, why: `no name/phone in fields: ${(data.field_data ?? []).map((f) => f.name).slice(0, 12).join(",")}` });
+        continue;
+      }
       await upsertIntakeLead({
         ...mapped,
         leadSource: "META_ADS",
@@ -126,10 +158,32 @@ export async function POST(req: NextRequest) {
         intakePayload: flattenFields(data.field_data ?? []),
       }, { announceReturning: true });
       captured += 1;
-    } catch {
-      /* transient Graph error - Meta will redeliver; de-dupe keeps it idempotent */
+    } catch (err) {
+      // Transient Graph error - Meta WILL redeliver and de-dupe keeps it idempotent, so this one
+      // is genuinely recoverable on its own. Recorded anyway: "transient" every time for a week
+      // is not transient, and that is only visible if each occurrence is counted.
+      dropped.push({ id, why: `fetch failed: ${err instanceof Error ? err.name : "unknown"}` });
     }
   }
 
-  return NextResponse.json({ received: leadgenIds.length, captured });
+  if (dropped.length > 0) {
+    const summary = [...new Set(dropped.map((d) => d.why))].join("; ");
+    await recordDelivery(
+      DELIVERY_NAME,
+      false,
+      `${dropped.length}/${leadgenIds.length} lead(s) not captured: ${summary}`,
+    );
+    await captureMessage("Meta lead ad not captured", {
+      where: `webhook:${DELIVERY_NAME}`,
+      level: "warning",
+      // Grouped by CAUSE, so an expired page token is one issue and a bad form mapping another.
+      fingerprint: ["lead-intake-dropped", DELIVERY_NAME, summary.slice(0, 120)],
+      // The leadgen ids ARE the recovery list: re-pull these from the Graph API once fixed.
+      extra: { droppedCount: dropped.length, received: leadgenIds.length, dropped: dropped.slice(0, 25) },
+    });
+  } else if (leadgenIds.length > 0) {
+    await recordDelivery(DELIVERY_NAME, true);
+  }
+
+  return NextResponse.json({ received: leadgenIds.length, captured, dropped: dropped.length });
 }

@@ -705,7 +705,7 @@ async function autoSendDue(
       ? await sopEmailSend(row, subject, body)
       : await sopWhatsAppSend(row, s.step, specialist, body);
 
-    tallySend(out.delivery, { sent: res.sent, failed: res.status === "FAILED", error: res.error });
+    tallySend(out.delivery, { sent: res.sent, failed: res.status === "FAILED", error: res.error, skipKind: res.skipKind });
 
     if (res.sent) {
       await markSent(s.id, body, null, res.messageId);
@@ -751,7 +751,9 @@ export async function sopWhatsAppSend(
   body: string,
 ) {
   const kind = mapToWhatsAppKind(step);
-  if (!kind) return { sent: false, status: "SKIPPED" as const, error: "not a WhatsApp step", messageId: null };
+  // Not counted as a config skip: a step with no WhatsApp kind is an email or a manual step, so
+  // nothing was ever going to be sent on this channel. There is nothing for anyone to fix.
+  if (!kind) return { sent: false, status: "SKIPPED" as const, error: "not a WhatsApp step", messageId: null, skipKind: undefined };
   return sendWhatsApp({
     kind,
     to: row.lead.phone,
@@ -921,7 +923,10 @@ async function releaseSssBooking(journeyId: string): Promise<{ cancelled: boolea
  */
 async function sopEmailSend(row: JourneyRow, subject: string | null, body: string) {
   if (!row.lead.email) {
-    return { sent: false, status: "SKIPPED" as const, error: "lead has no email address", messageId: null };
+    // A fact about the lead rather than a switch, and the same class as "no valid WhatsApp
+    // number": fixable, and invisible until counted. `MIN_SILENT_SKIPS` keeps one such lead from
+    // making the whole channel look broken.
+    return { sent: false, status: "SKIPPED" as const, error: "lead has no email address", messageId: null, skipKind: "data" as const };
   }
   const res = await sendEmailMessage({
     leadId: row.leadId,

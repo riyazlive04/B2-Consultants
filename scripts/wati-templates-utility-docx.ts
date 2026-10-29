@@ -31,7 +31,12 @@ import {
 } from "docx";
 import { writeFileSync } from "node:fs";
 // The SOP pack, for the --all document. Isomorphic (no server-only), so a script may read it.
-import { SUBMISSION_TEMPLATES, submissionBody, type SubmissionTemplate } from "../src/lib/whatsapp-submission";
+import {
+  SUBMISSION_TEMPLATES,
+  submissionBody,
+  supersededSubmissionBody,
+  type SubmissionTemplate,
+} from "../src/lib/whatsapp-submission";
 import { STEP_BY_KEY } from "../src/lib/outreach-sop";
 import path from "node:path";
 
@@ -68,7 +73,14 @@ type Tpl = {
    * it - so it is attached when that one list is built, and absent everywhere else. That is
    * why every reader of it is optional-chained rather than asserted.
    */
-  action?: { group: Action; label: string; why: string; categoryChanged?: boolean };
+  action?: {
+    group: Action;
+    label: string;
+    why: string;
+    categoryChanged?: boolean;
+    /** What Meta approved last time, for a re-submission. Null where nothing was superseded. */
+    previousBody?: string | null;
+  };
 };
 
 /**
@@ -83,6 +95,15 @@ type Tpl = {
  * and an npm script does not compile.
  */
 type Mode = "inventory" | "batch" | "all" | "action";
+
+/**
+ * Exported for `scripts/wati-templates-action-csv.ts`, which renders the same work list as a
+ * spreadsheet tab. It imports `actionTemplates()` rather than rebuilding the list from
+ * `NEEDS_ACTION`: two readers of the same list is fine, two derivations of it is how the Word
+ * document and the sheet end up disagreeing about which templates need submitting.
+ */
+export type { Tpl };
+export { ACTION_GROUP, ACTION_ORDER };
 
 const DOC_TITLE: Record<Mode, string> = {
   inventory: "WhatsApp Templates - Full Inventory",
@@ -144,7 +165,12 @@ export const PENDING_SUBMISSION: { name: string; why: string }[] = [
   { name: "b2_stage_strategy_call_booked", why: "no template has ever existed for this stage" },
   { name: "b2_stage_disco_booked", why: "no template has ever existed for this stage" },
   { name: "b2_stage_disco_not_booked", why: "no template has ever existed for this stage" },
-  { name: "b2_stage_disco_completed", why: "no template has ever existed for this stage" },
+  // b2_stage_disco_completed WAS HERE and was PULLED on 26/10/2026 - the reviewer stopped it:
+  // "next steps are manual so triggering the message doesnot make any sense, we need a tree with
+  // 2 branches here". Submitting a body that promises next steps nobody has decided yet would
+  // buy an approval for the wrong message, so it moves to NEEDS_ACTION as a DECIDE instead. Its
+  // page stays in the inventory (it is still a touchpoint the app can send); it is just not work
+  // anybody should be doing this round.
   { name: "b2_stage_sss_booked", why: "no template has ever existed for this stage" },
   { name: "b2_stage_sss_completed", why: "no template has ever existed for this stage" },
   { name: "b2_stage_proposal_sent", why: "no template has ever existed for this stage" },
@@ -155,7 +181,21 @@ export const PENDING_SUBMISSION: { name: string; why: string }[] = [
   { name: "b2_stage_deposit_paid", why: "no template has ever existed for this stage" },
   { name: "b2_stage_won", why: "no template has ever existed for this stage" },
   { name: "b2_stage_lost", why: "no template has ever existed for this stage" },
-  { name: "b2_stage_no_show", why: "no template has ever existed for this stage" },
+  // ── A NAME COLLISION, AND THE CONVENTION FOR ONE ────────────────────────────────────────────
+  // Submitted as `b2_stage_no_show_1` on 26/10/2026: `b2_stage_no_show` was ALREADY TAKEN in WATI,
+  // which this list had recorded as "no template has ever existed for this stage". That is the
+  // assumption this file warns about in its own header - nothing here reads the live catalogue, so
+  // every "never submitted" is written by hand and can be wrong. One was.
+  //
+  // A `_1` suffix therefore means exactly one thing: THE UNSUFFIXED NAME WAS TAKEN. It is not a
+  // version number and there is no `_2` convention. Suffixing is the right move rather than
+  // reusing the existing name - Meta holds one body per (name, language), so submitting this body
+  // under the taken name would have replaced whatever is already there, in review, and taken that
+  // template out of service for however long the queue runs.
+  //
+  // ⚠ The touchpoint binding must name `b2_stage_no_show_1`, not `b2_stage_no_show` - WhatsApp →
+  // Settings, STAGE_NO_SHOW. Binding the unsuffixed name points at somebody else's template.
+  { name: "b2_stage_no_show_1", why: "never submitted; `b2_stage_no_show` was already taken in WATI, so it carries the _1 suffix" },
 
   // ── One new touchpoint (issue C4) ───────────────────────────────────────────────────────────
   // This is the BLOCKING item for the WhatsApp password-reset route: the screens are worth
@@ -194,12 +234,12 @@ type Action = "APPROVE" | "RESUBMIT" | "DECIDE";
 const ACTION_GROUP: Record<Action, string> = {
   APPROVE: "1 · Never submitted — needs a first approval",
   RESUBMIT: "2 · Approved once, the body has changed — re-submit",
-  DECIDE: "3 · No body change, but a wording decision is open",
+  DECIDE: "3 · Blocked on a decision — do not submit yet",
 };
 const ACTION_LABEL: Record<Action, string> = {
   APPROVE: "Submit for approval",
   RESUBMIT: "Re-submit — replaces the approved body",
-  DECIDE: "Decide the wording before the next submission",
+  DECIDE: "Take the decision before submitting anything",
 };
 const ACTION_ORDER: Action[] = ["APPROVE", "RESUBMIT", "DECIDE"];
 
@@ -216,6 +256,16 @@ export const NEEDS_ACTION: {
    * category USED to be, so there is nothing to diff against.
    */
   categoryChanged?: boolean;
+  /**
+   * The body Meta approved last time, where nothing in the codebase records it.
+   *
+   * The SOP pack's rewrites carry theirs as `acceptedFix.was`, so `actionTemplates()` DERIVES
+   * those and this field stays empty for them. This pack has no such field - it holds one body per
+   * template and simply overwrites it - so where a body here has been edited after approval, the
+   * old one has to be written down or it is gone. Written down for exactly that reason and no
+   * other: if it ever becomes derivable, delete it.
+   */
+  previousBody?: string;
 }[] = [
   // ── Never submitted ──
   // Derived, deliberately. See the note above.
@@ -243,13 +293,45 @@ export const NEEDS_ACTION: {
   // The group that no other list catches, and the only group where doing nothing BREAKS something
   // that used to work.
   {
-    name: "b2_book_order",
+    name: "b2_sss_rescheduled",
     action: "RESUBMIT",
+    categoryChanged: true,
+    previousBody:
+      "Hi {{name}}, your Success Strategy Session has been rescheduled to *{{slot_time}}* IST.\n\n" +
+      "If this time doesn't work for you, you can choose another here at your convenience: {{sss_url}}",
     why:
-      "approved 03/08/2026; the body changed 26/10/2026 to add the Visual Dictionary, at the reviewer's instruction. " +
-      "One body per (name, language), so this edit replaces the approved template in review - and BOOK_ORDER sends " +
-      "nothing until it clears. A wording decision is still open on it: read the note on its page BEFORE submitting, " +
-      "because taking it afterwards costs a second re-approval.",
+      "the reviewer corrected the call's NAME on 26/10/2026 - it is the \"Solution\" Strategy Session, not \"Success\" - and the " +
+      "correction is applied in the body below. One word, and still a full re-submission: Meta holds one body per " +
+      "(name, language), so the approved template now says something B2 does not. " +
+      "This one was MISSED by the first pass of this list, and the reason is worth knowing: the three SOP rewrites are " +
+      "recorded in code as an `acceptedFix` and this pack has no such field, so a body edited here leaves no trace at all. " +
+      "The live catalogue had this name as MARKETING at the 3 Oct cross-reference while the pack declares UTILITY, so set " +
+      "the category in the same edit - but check WATI first, since that cross-reference is three weeks old.",
+  },
+  {
+    name: "b2_book_order",
+    // Was RESUBMIT. The reviewer answered "this needs to be discussed as well" on 26/10/2026, and
+    // a re-submission is exactly what must NOT happen while the content is unsettled: Meta holds
+    // one body per (name, language), so submitting the edit takes the APPROVED body out of
+    // service and BOOK_ORDER sends nothing until the replacement clears - for a wording nobody
+    // has agreed. Doing nothing is safe here, and that is the point of the group: the approved
+    // body is still live and still sends.
+    action: "DECIDE",
+    previousBody:
+      "Hello {{publisher_name}}, this is a book order from B2 Consultants (ref *{{order_ref}}*).\n\n" +
+      "Please arrange the German *{{level}}* course books for our student {{student_name}}.\n\n" +
+      "Ship to: {{ship_to}}\n" +
+      "Contact on delivery: {{ship_phone}}\n\n" +
+      "Kindly confirm the quotation and expected dispatch date. Thank you.",
+    why:
+      "approved 03/08/2026, and HOLD IT THERE for now. The body below changed on 26/10/2026 to add the Visual " +
+      "Dictionary at the reviewer's own instruction, and on 26/10/2026 the same reviewer answered “this needs to be " +
+      "discussed as well” - so the edit is drafted but the content is not agreed. Submitting it anyway is the one " +
+      "move that costs something: Meta holds ONE body per (name, language), so the edit would take the APPROVED body " +
+      "out of service and BOOK_ORDER would send nothing until the replacement cleared, for a wording nobody has signed " +
+      "off. Doing nothing is free and safe - the approved body is live and still sends. Settle TWO things first, both " +
+      "on its page below: whether the Visual Dictionary belongs on every level's order, and whether the order should " +
+      "name a quantity at all (today it asks for “the set”, which a publisher has to interpret).",
   },
   {
     name: "b2_sop_sss_confirm_1",
@@ -265,9 +347,10 @@ export const NEEDS_ACTION: {
     action: "RESUBMIT",
     categoryChanged: true,
     why:
-      "the reviewer rewrote the body on 26/10/2026, same two changes as b2_sop_sss_confirm_1, so MARKETING → UTILITY. " +
-      "Note the body stops at the Zoom link on purpose: the app appends \"Please reply *YES* to confirm.\" at send time, " +
-      "so submitting it with that line would send it twice.",
+      "the reviewer rewrote the body on 26/10/2026, same two changes as b2_sop_sss_confirm_1, so MARKETING -> UTILITY. " +
+      "SUBMIT THE CLOSING LINE. The reviewer's text ends on {{zoom_link}} and Meta commonly rejects a body that ends with a " +
+      "variable, so the body here adds \"Please reply *YES* to confirm.\" after the link. That line is part of what goes to " +
+      "Meta - it is NOT added at send time - so paste the body exactly as shown, this list's version, not the sheet's.",
   },
   {
     name: "b2_sop_sss_cancel",
@@ -279,6 +362,21 @@ export const NEEDS_ACTION: {
   },
 
   // ── A decision with no edit attached, yet ──
+  {
+    name: "b2_stage_disco_completed",
+    action: "DECIDE",
+    why:
+      "PULLED FROM THE SUBMISSION LIST on 26/10/2026. The reviewer stopped it: “next steps are manual so triggering " +
+      "the message doesnot make any sense, we need a tree with 2 branches here.” They are right, and the body is the " +
+      "evidence - it promises “we will be in touch shortly with your next steps”, and what happens after a discovery " +
+      "call is decided by a human on the call, differently for each prospect. One template cannot carry two outcomes, so " +
+      "an approval taken now would be an approval for the wrong message. WHAT THE TWO BRANCHES ALREADY ARE, in the app: a " +
+      "qualified prospect goes on to the Solution Strategy Session (SSS_BOOKED, which already has b2_stage_sss_booked) " +
+      "and an unqualified one is told so (SOP_NOT_QUALIFIED, which already has b2_sop_not_qualified, submitted this " +
+      "round). So the decision is probably NOT to write a third template: it is whether DISCO_COMPLETED needs a message " +
+      "of its own at all, given both branches are covered one step later by templates that can name a real next step. " +
+      "Nothing is lost by leaving this touchpoint unbound in the meantime - it has never sent anything.",
+  },
   {
     name: "b2_payment_reminder",
     action: "DECIDE",
@@ -522,7 +620,13 @@ export const TEMPLATES: Tpl[] = [
     ],
     body:
       "Hi {{name}}, your Solution Strategy Session has been rescheduled to *{{slot_time}}* IST.\n\n" +
-      "If this time doesn't work for you, you can choose another here at your convenience: {{sss_url}}",
+      "If this time doesn't work for you, you can choose another here at your convenience: " +
+      "{{sss_url}} - your new time is held until then.",
+    note: {
+      tag: "The three SSS links are now one",
+      text:
+        "REVIEWER ASKED (26/10/2026): “Perfect (we have to check with the Link as we have 3 links currently)” ANSWER: they were right, and it was a real defect rather than a worry - this app held THREE different answers to “where does someone rebook an SSS?”: a `SSS_URL` constant in server/lead-template-vars.ts, a second literal hardcoded inside `sendSssRescheduled`, and `${base}/sss` off this app's own origin in the test-variable pool. Which one a prospect received depended on which code path sent the message, and the test send showed a URL no real send would ever use. All three now read `getPublicLinksConfig().sssUrl`, so there is one value, it is editable at WhatsApp → Settings, and changing it needs no re-submission. A closing clause was also added after {{sss_url}}: the body used to END on a variable, which Meta commonly rejects.",
+    },
   },
 
   // ── C · Coaching agreements ──
@@ -1150,12 +1254,20 @@ export const TEMPLATES: Tpl[] = [
     sub: "Stage · New lead",
     category: "MARKETING",
     fires: "Every time a lead enters New Lead - the first thing a brand-new opt-in hears from us.",
-    vars: [{ name: "name", sample: "Priya" }],
+    vars: [{ name: "name", sample: "Priya" }, { name: "apply_url", sample: "https://optin.b2consultants.de/apply" }],
+    /**
+     * The reviewer rewrote this on 26/10/2026. Two edits were made to their text before it went
+     * in, both from the creation rules in docs/WHATSAPP_TEMPLATE_CREATION_RULES.md:
+     *   - "your next step towards Germany... the next step is to book" said "next step" twice in
+     *     two sentences. The second is now "To move forward, book", which also closes the
+     *     missing comma.
+     *   - the link is a variable, and the body no longer ENDS on it.
+     */
     body:
-      "Hi {{name}}, thanks for your interest in finding your next job in Germany.\n\n" +
-      "The next step is a free 20-minute Personalized Discovery Call with our team so we can " +
-      "understand your situation. You can book a time that suits you here: " +
-      "https://optin.b2consultants.de/apply",
+      "Hi {{name}}, thanks for your interest in taking your next step towards Germany 🇩🇪.\n\n" +
+      "To move forward, book a free 20-minute Personalized Discovery Call with our team so we can " +
+      "understand your situation and propose possible solutions.\n\n" +
+      "You can book a time that suits you here: {{apply_url}} - it takes under two minutes.",
     note: {
       tag: "Overlaps SOP Step 3 - bind only one",
       text:
@@ -1169,11 +1281,13 @@ export const TEMPLATES: Tpl[] = [
     sub: "Stage · WhatsApp sent",
     category: "MARKETING",
     fires: "Every time a lead enters WhatsApp Sent.",
-    vars: [{ name: "name", sample: "Priya" }],
+    vars: [{ name: "name", sample: "Priya" }, { name: "apply_url", sample: "https://optin.b2consultants.de/apply" }],
+    // Reviewer 26/10/2026: "perfect". The wording is theirs, untouched; only the link moved into
+    // a variable, with a closing clause so the body does not end on one.
     body:
       "Hi {{name}}, just checking you received our message about your move to Germany.\n\n" +
-      "Whenever you are ready, you can book your free Discovery Call here: " +
-      "https://optin.b2consultants.de/apply",
+      "Whenever you are ready, you can book your free Discovery Call here: {{apply_url}} - it " +
+      "takes under two minutes.",
     note: {
       warn: true,
       tag: "Consider leaving this one unbound",
@@ -1185,17 +1299,20 @@ export const TEMPLATES: Tpl[] = [
     area: AREA_K,
     name: "b2_stage_strategy_call_booked",
     kind: "STAGE_STRATEGY_CALL_BOOKED",
-    sub: "Stage · Strategy call booked",
+    // "Discovery Call Booked", not "Strategy call booked" - see the note below. The TEMPLATE name
+    // keeps `strategy_call` because it mirrors the WhatsAppKind, which is the convention for all
+    // seventeen of these; only the words a human reads are corrected.
+    sub: "Stage · Discovery Call Booked",
     category: "UTILITY",
-    fires: "Every time a lead enters Strategy Call Booked.",
+    fires: "Every time a lead enters Discovery Call Booked (the STRATEGY_CALL_BOOKED stage).",
     vars: [{ name: "name", sample: "Priya" }],
     body:
       "Hi {{name}}, your Personalized Discovery Call with B2 Consultants is booked.\n\n" +
       "Our team is preparing for it and will be in touch if we need anything more from you.",
     note: {
-      tag: "Made UTILITY",
+      tag: "Discovery Call - the STAGE is misnamed, the body is right",
       text:
-        "The email half closes with a link to the case-studies page, which is social proof and would make this MARKETING on its own. It is dropped here: this message's job is to confirm an appointment the prospect has just made, and the case studies reach them through the SOP ladder anyway. No time is quoted - see the note on variables at the top of this section.",
+        "REVIEWER ASKED (26/10/2026): “Strategy call or Discovery call?” ANSWER: Discovery call, and the body already says so - nothing in it changes. `STRATEGY_CALL_BOOKED` is a LEGACY enum name: the app itself calls this stage “Discovery Call Booked” on every screen (LEAD_STAGE_LABELS in lib/labels.ts and SYNAMATE_STAGES in lib/pipeline-stages.ts, which labels.test.ts holds to each other), and B2 sells exactly one such call - the Personalized Discovery Call. There is no separate “strategy call” anywhere in the product; the Solution Strategy Session is the LATER call and has its own stages, touchpoints and templates (b2_stage_sss_booked onwards). The stale word was in this pack's own heading and is now corrected. Separately, on category: the email half closes with a link to the case-studies page, which is social proof and would make this MARKETING on its own. It is dropped here - this message's job is to confirm an appointment the prospect has just made - and no time is quoted, for the reason given at the top of this section.",
     },
   },
   {
@@ -1223,11 +1340,20 @@ export const TEMPLATES: Tpl[] = [
     sub: "Stage · Discovery call not booked",
     category: "MARKETING",
     fires: "Every time a lead enters Disco Not Booked - including from the no-slots capture on /book.",
-    vars: [{ name: "name", sample: "Priya" }],
+    vars: [{ name: "name", sample: "Priya" }, { name: "apply_url", sample: "https://optin.b2consultants.de/apply" }],
+    /**
+     * The reviewer rewrote this on 26/10/2026 as "It takes less than 2 minutes to get your German
+     * roadmap, there is no obligation." Their three facts are kept and two faults are fixed:
+     *   - "It" read back to the CALL in the previous sentence, making the message say the call
+     *     takes under 2 minutes when it takes 20 - a misleading claim, and a rejection reason in
+     *     its own right. The subject is now "Booking".
+     *   - a comma splice joined the two clauses.
+     */
     body:
       "Hi {{name}}, you have not booked your free Personalized Discovery Call yet.\n\n" +
-      "It takes 20 minutes and there is no obligation. You can pick a time here: " +
-      "https://optin.b2consultants.de/apply",
+      "Booking takes less than 2 minutes, and there is no obligation - you come away with your " +
+      "German roadmap.\n\n" +
+      "You can pick a time here: {{apply_url}}, whenever suits you.",
     note: {
       tag: "Now also reaches the no-slots capture",
       text:
@@ -1289,9 +1415,9 @@ export const TEMPLATES: Tpl[] = [
       "Take your time with it. If anything is unclear, reply to this message and we will walk you " +
       "through it.",
     note: {
-      tag: "MARKETING, and not arguable",
+      tag: "MARKETING, and not arguable - plus an open question on WHEN it fires",
       text:
-        "A message whose subject is a commercial offer is MARKETING whatever its tone. Declaring it UTILITY would be the gaming that earns an account flag rather than a cheaper message - see the rationale at the top of src/lib/whatsapp-submission.ts.",
+        "A message whose subject is a commercial offer is MARKETING whatever its tone. Declaring it UTILITY would be the gaming that earns an account flag rather than a cheaper message - see the rationale at the top of src/lib/whatsapp-submission.ts. REVIEWER ASKED (26/10/2026): “Perfect, but currently we dont send any proposal actually, whatever happens, happens inside the call, how do we handle this” ANSWER, and it is a BINDING decision rather than a wording one: the body is approved as it stands, so GET IT APPROVED either way - an unapproved template can never be switched on later, and an approval costs nothing to hold. What must not happen is BINDING it while the offer is only ever made verbally on the call, because the body says “you now have our offer” and the prospect would have nothing in hand. Two honest options: (a) leave this touchpoint UNBOUND and let the stage exist for pipeline reporting only - PROPOSAL_SENT folds into the “Offer and didn’t buy” column, so moving a lead there after a verbal offer still reports correctly; or (b) start sending something real at that moment (the offer summary, or the agreement itself) and then bind it. Note b2_stage_offer_followup has the same dependency one step later and the reviewer passed it as “Perfect”, so whichever way this goes, the two should go the same way.",
     },
   },
   {
@@ -1301,11 +1427,22 @@ export const TEMPLATES: Tpl[] = [
     sub: "Stage · Sent to workshop",
     category: "MARKETING",
     fires: "Every time a lead enters Sent to Workshop.",
-    vars: [{ name: "name", sample: "Priya" }],
+    vars: [{ name: "name", sample: "Priya" }, { name: "workshop_url", sample: "https://workshop.b2consultants.de/self-reg-1" }],
+    /**
+     * REVIEWER, 26/10/2026: "instead of team sending, lets redirect them to the workshop page
+     * always". So the closing line is now the registration page rather than a promise that
+     * somebody will follow up - which also removes the one sentence in here that nobody could
+     * keep automatically. The link is `{{workshop_url}}`, filled from WhatsApp -> Settings.
+     *
+     * The stage EMAIL in lib/stage-messages.ts was changed in the same breath, for the reason
+     * stated at the top of this section: two halves of one touchpoint must not send a prospect
+     * to two different places, and one half promising a follow-up while the other hands over a
+     * self-registration link is exactly that.
+     */
     body:
       "Hi {{name}}, we think our workshop is the right next step for you. It covers what it really " +
       "takes to get a job in Germany.\n\n" +
-      "Our team will share the date and the joining details with you shortly.",
+      "You can register for the next session here: {{workshop_url}} - pick the date that suits you.",
   },
   {
     area: AREA_K,
@@ -1315,10 +1452,13 @@ export const TEMPLATES: Tpl[] = [
     category: "MARKETING",
     fires: "Every time a lead enters Workshop Follow-up.",
     vars: [{ name: "name", sample: "Priya" }],
+    // Reviewer's rewrite of 26/10/2026, which added "so that we can help you with your open
+    // questions". Kept, with the comma before "so that" removed - it made the clause read as an
+    // afterthought rather than the reason for replying.
     body:
       "Hi {{name}}, thank you for joining our workshop.\n\n" +
       "We would like to hear what you took away from it, and to help with your next step. Just " +
-      "reply to this message.",
+      "reply to this message and we will help with any open questions you have.",
   },
   {
     area: AREA_K,
@@ -1345,9 +1485,9 @@ export const TEMPLATES: Tpl[] = [
       "Hi {{name}}, the only step left to secure your place in the programme is the deposit.\n\n" +
       "Reply to this message if you need the payment details again, or if you have any questions.",
     note: {
-      tag: "UTILITY, on the same footing as b2_payment_reminder",
+      tag: "UTILITY, same footing as b2_payment_reminder - and how it is triggered",
       text:
-        "This is a payment step on a purchase the prospect has already agreed to, which is Meta's own UTILITY example and exactly the footing b2_payment_reminder is submitted on. The email half's we are glad you have decided to join us is dropped - warm, and the one persuasive line in it.",
+        "This is a payment step on a purchase the prospect has already agreed to, which is Meta's own UTILITY example and exactly the footing b2_payment_reminder is submitted on. The email half's we are glad you have decided to join us is dropped - warm, and the one persuasive line in it. REVIEWER ASKED (26/10/2026): “Perfect, but need to know the triggering process” ANSWER: it is not a dunning schedule and it does not repeat. It fires ONCE each time a lead ENTERS the Deposit Follow-up stage (board column “No Deposit and follow up”) - and only on entering, so a lead parked there is never messaged again. The mechanism is a sweep, not a hook: every stage writer appends a LeadStageHistory row, and server/stage-messages.ts reads that table as an event stream on each outreach cron tick, which is why all eighteen places that can set a stage - a Pipeline drag, the Opportunities board, a lead edit, a call log, the SOP engine - trigger it identically, whether a human or an engine moved the card. Three gates sit in front of it: the per-stage WhatsApp toggle (WhatsApp → Stage messages), a bound approved template for STAGE_DEPOSIT_FOLLOWUP, and the channel not being paused. The cursor also means switching the stage on never replays a backlog - only moves made after that point are announced. CONSEQUENCE WORTH KNOWING: nothing in the app watches for a deposit going UNPAID, so if nobody moves the card, nobody is reminded; the reminder is only as reliable as the stage discipline behind it.",
     },
   },
   {
@@ -1387,11 +1527,11 @@ export const TEMPLATES: Tpl[] = [
     sub: "Stage · Lost",
     category: "MARKETING",
     fires: "Every time a lead enters Lost.",
-    vars: [{ name: "name", sample: "Priya" }],
+    vars: [{ name: "name", sample: "Priya" }, { name: "apply_url", sample: "https://optin.b2consultants.de/apply" }],
     body:
       "Hi {{name}}, thank you for your interest in B2 Consultants.\n\n" +
       "If now is not the right time, that is completely fine. Whenever you are ready, you are " +
-      "welcome to come back to us: https://optin.b2consultants.de/apply\n\n" +
+      "welcome to come back to us: {{apply_url}}\n\n" +
       "All the best with your plans for Germany.",
     note: {
       warn: true,
@@ -1402,16 +1542,16 @@ export const TEMPLATES: Tpl[] = [
   },
   {
     area: AREA_K,
-    name: "b2_stage_no_show",
+    name: "b2_stage_no_show_1",
     kind: "STAGE_NO_SHOW",
     sub: "Stage · No-show",
     category: "MARKETING",
     fires: "Every time a lead enters No-show.",
-    vars: [{ name: "name", sample: "Priya" }],
+    vars: [{ name: "name", sample: "Priya" }, { name: "apply_url", sample: "https://optin.b2consultants.de/apply" }],
     body:
       "Hi {{name}}, we were looking forward to speaking with you but it looks like you could not " +
       "make your call.\n\n" +
-      "No problem - you can pick a new time here: https://optin.b2consultants.de/apply",
+      "No problem - you can pick a new time here: {{apply_url}}, whenever suits you.",
     note: {
       tag: "Overlaps two other templates, one already approved",
       text:
@@ -2043,7 +2183,13 @@ function allTemplates(): Tpl[] {
  * and three UTILITY rewrites of SSS messages have more in common with each other here than any of
  * them has with the rest of the SSS calendar.
  */
-function actionTemplates(): Tpl[] {
+/** The SOP pack's superseded body for a name, in WATI dialect - null if it has none. */
+function supersededBody(name: string): string | null {
+  const t = SUBMISSION_TEMPLATES.find((x) => x.name === name);
+  return t ? supersededSubmissionBody(t) : null;
+}
+
+export function actionTemplates(): Tpl[] {
   const byName = new Map(allTemplates().map((t) => [t.name, t]));
   const missing = NEEDS_ACTION.filter((e) => !byName.has(e.name)).map((e) => e.name);
   if (missing.length) {
@@ -2057,7 +2203,14 @@ function actionTemplates(): Tpl[] {
     NEEDS_ACTION.filter((e) => e.action === group).map((e) => ({
       ...byName.get(e.name)!,
       area: ACTION_GROUP[group],
-      action: { group, label: ACTION_LABEL[group], why: e.why, categoryChanged: e.categoryChanged },
+      action: {
+        group,
+        label: ACTION_LABEL[group],
+        why: e.why,
+        categoryChanged: e.categoryChanged,
+        // Derived where the SOP pack records it, written down where nothing does.
+        previousBody: e.previousBody ?? supersededBody(e.name),
+      },
     })),
   );
 }

@@ -35,6 +35,7 @@ import { getMyCatchUp } from "./catch-up";
 import { getAttendanceConfig } from "./founder-config";
 import { getAgreementTaskCounts } from "./agreement-state";
 import { deliveryNotifications } from "./delivery-health";
+import { getImprovementBellCounts } from "./improvements";
 import { MILESTONE_LABELS } from "@/lib/labels";
 import { SEATED_STATUSES } from "@/lib/enrollment-lifecycle";
 import { activationBlockers, seatCount } from "@/lib/batch";
@@ -817,6 +818,46 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
           href: "/arena",
         });
       }
+    }
+  }
+
+  /**
+   * ── Admin: problems people have reported ──
+   *
+   * Two counts, both stateless like everything else in this centre: the card appears while
+   * reports are unread and disappears when the queue is clear. Nothing is stored about whether
+   * it was "shown", because the bell is recomputed on every page load and a row saying otherwise
+   * would be a second source of truth.
+   *
+   * Keyed on ROLE, not on `improvements.triage`. This function is memoised per `role:userId` and is
+   * called from three places; widening its signature to carry capabilities for a badge would be a
+   * poor trade. Somebody holding the capability without the admin role still gets the queue
+   * itself, and the developer gets the email - the badge is the one surface they miss.
+   *
+   * A blocking report is `escalated`, which sorts it above every automated alert. That flag
+   * exists for "a person deliberately raised this for attention", and somebody saying they cannot
+   * do their job is the purest case of it in the app.
+   */
+  if (role === "ADMIN") {
+    const counts = await getImprovementBellCounts();
+    if (counts.blocking > 0) {
+      items.push({
+        id: "improvements-blocking",
+        severity: "risk",
+        escalated: true,
+        title: `${counts.blocking} improvement${counts.blocking === 1 ? "" : "s"} blocking somebody's work`,
+        body: "Somebody says they cannot get their job done. Open the queue to see where.",
+        href: "/improvements?severity=BLOCKING",
+      });
+    }
+    if (counts.untriaged > 0) {
+      items.push({
+        id: "improvements-untriaged",
+        severity: "info",
+        title: `${counts.untriaged} improvement${counts.untriaged === 1 ? "" : "s"} waiting to be read`,
+        body: "Reported from inside the app, with the screen and the context attached.",
+        href: "/improvements?status=NEW",
+      });
     }
   }
 

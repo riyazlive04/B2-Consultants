@@ -72,8 +72,17 @@ export async function GET() {
         attempted24h: d.attempted24h,
         sent24h: d.sent24h,
         failed24h: d.failed24h,
+        /**
+         * The half `state` cannot report. A channel that is armed and skips every send before
+         * reaching the provider has `attempted24h: 0` and therefore `state: "idle"` - identical
+         * to a quiet week. These two fields are what tell them apart from outside the app, which
+         * is what `jq -e '.deliverySilent | length == 0'` now asserts.
+         */
+        skippedConfig24h: d.skippedConfig24h,
+        silent: d.silent,
       })),
       deliveryDead: delivery.filter((d) => d.state === "dead").map((d) => d.job),
+      deliverySilent: delivery.filter((d) => d.silent).map((d) => d.job),
     });
   } catch {
     // 503 so Caddy/Docker mark the container unhealthy rather than routing to it.

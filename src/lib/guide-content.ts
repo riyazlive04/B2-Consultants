@@ -115,6 +115,19 @@ export const GUIDES: GuideEntry[] = [
     tip: "Editing the live ruleset re-scores work done since that ruleset began. To change only what happens next, create a new version instead.",
   },
   {
+    section: "improvements", icon: "📣", title: "Improvements", href: "/improvements",
+    what: "Everything people hit while using the app, with the screen and the context already attached. Admin-only to read; anyone can file one.",
+    path: ["Sidebar", "Admin", "Improvements"],
+    steps: [
+      "Anyone can file one. The Suggest-an-improvement button sits in the top bar on every screen, for every role - telecallers, coaches, tutors and students included. It opens where they are, so nobody has to describe which page they were on.",
+      "The reporter picks what kind of thing it is first, and the questions change to match. “A number looks wrong” asks what it shows and what it should show; “the rule should work differently” asks what the rule is now and why it is wrong. That is what stops a report arriving as “doesn't work”.",
+      "Each report carries its own context, captured by the app rather than typed: the screen, the person's role and grants, the running build, and - the useful one - whether the engine behind that screen was switched OFF at the time. Most “this section does nothing” reports are answered by that line alone, before you read a word.",
+      "Work the queue top to bottom: New → Triaged → Accepted → In progress → Fixed → Closed. “Fixed” means you shipped something; “Closed” means the person who reported it agrees. Anything you type as a resolution is shown to them.",
+      "The numbers above the queue say how many are waiting, how many are blocking somebody's work, and how many were filed against a screen whose engine was off.",
+    ],
+    tip: "Set the developer's address in Console → System → Improvements. Without it the queue still works and the bell still counts, but nobody is emailed - which is a working setup, not a broken one.",
+  },
+  {
     section: "activity", icon: "🛡️", title: "Activity Log", href: "/activity",
     what: "Every action anyone takes in the app, stamped with the exact time it happened. Admin-only.",
     steps: [

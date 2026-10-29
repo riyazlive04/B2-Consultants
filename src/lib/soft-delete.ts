@@ -1,7 +1,11 @@
 /**
- * Soft-delete ("delete → Archive") helpers shared by the 9 core record types:
+ * Soft-delete ("delete → Archive") helpers shared by the 10 core record types:
  * Lead, Company, Opportunity, ContactTask, Income, Expense, Invoice,
- * PendingPayment, Product.
+ * PendingPayment, Product, Improvement.
+ *
+ * `Improvement` is the newest and the clearest case for the pattern: a report declined as
+ * "we are not changing this" is the most valuable row in that table six months later, when
+ * somebody proposes the same change again. It leaves every queue and stays readable.
  *
  * A delete stamps `deletedAt`/`deletedById`; active list/count reads spread
  * `ACTIVE` into their `where`; the per-section "Archived" tab reads with

@@ -63,6 +63,8 @@ const MUST_ACT: Record<string, string[]> = {
   "app/(app)/_components/GermanNoteDashboard.tsx": ["No workshops yet"],
   "app/(app)/arena/_components/ArenaClient.tsx": ["No quests are configured"],
   "app/(app)/my-desk/page.tsx": ["No team profile linked to your login"],
+  // A filtered-out queue is a dead end with an obvious way out, so it carries one.
+  "app/(app)/improvements/page.tsx": ["Nothing matches"],
 };
 
 /**
@@ -80,6 +82,13 @@ const DELIBERATELY_TERMINAL: Record<string, string[]> = {
   "app/(app)/attendance/_components/AttendanceDesk.tsx": ["No cohort assigned to you"],
   "app/(app)/classroom/_components/ClassroomTimetable.tsx": ["No classes scheduled yet"],
   "app/(app)/arena/_components/ArenaClient.tsx": ["The Arena is empty"],
+  /*
+   * An empty improvements queue is the best possible news, and the control that fills it is the Report
+   * button in the top bar - which is already on this screen and every other one. A button here
+   * would either duplicate it or, worse, invite somebody to invent a report to fill the space.
+   * The body says where reports come from instead.
+   */
+  "app/(app)/improvements/page.tsx": ["Nothing reported yet"],
 };
 
 describe("empty states - the setup dead ends offer the next step", () => {

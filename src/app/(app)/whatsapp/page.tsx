@@ -6,7 +6,7 @@ import { EngineOffNotice, PageHeader } from "@/components/ui/kit";
 import { enginesOff } from "@/server/engine-status";
 import { requireSection } from "@/lib/rbac";
 import { getWhatsAppAdminData } from "@/server/whatsapp-metrics";
-import { getBookingRulesConfig } from "@/server/founder-config";
+import { getBookingRulesConfig, getPublicLinksConfig } from "@/server/founder-config";
 import { WhatsAppHistory } from "./_components/WhatsAppHistory";
 import { WhatsAppSettingsForm } from "./_components/WhatsAppSettingsForm";
 import { WhatsAppTools } from "./_components/WhatsAppTools";
@@ -45,6 +45,9 @@ export default async function WhatsAppPage() {
   const data = await getWhatsAppAdminData();
   // The confirm-or-cancel loop is edited on the Settings tab but stored with the booking rules.
   const bookingRules = await getBookingRulesConfig();
+  // The pages the templates link to. Edited on the same tab because the link and the template
+  // that carries it are one decision; stored on their own because the stage EMAILS read them too.
+  const links = await getPublicLinksConfig();
   const { status, counts } = data;
 
   /**
@@ -204,7 +207,7 @@ export default async function WhatsAppPage() {
         urlKey="tab"
         tabs={[
           { label: `History${counts.total ? ` (${counts.total})` : ""}`, content: <WhatsAppHistory rows={data.messages} /> },
-          { label: "Settings", content: <WhatsAppSettingsForm settings={data.settings} rules={bookingRules} catalog={data.catalog} /> },
+          { label: "Settings", content: <WhatsAppSettingsForm settings={data.settings} rules={bookingRules} links={links} catalog={data.catalog} /> },
           { label: `Opt-outs & test`, content: <WhatsAppTools optOuts={data.optOuts} templates={data.settings.templates} /> },
         ]}
       />

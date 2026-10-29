@@ -5,6 +5,7 @@ import {
   degradedVerdict,
   describeDelivery,
   formatDuration,
+  silentVerdict,
   type DeliveryState,
   type FailureClass,
 } from "@/lib/delivery-health";
@@ -35,6 +36,13 @@ export type DeliveryHealthRow = {
   sent24h: number;
   failed24h: number;
   recipientFailed24h: number;
+  /**
+   * Sends declined over a fixable configuration fault, and whether that is now material. The
+   * channel can be `idle` and `silent` at the same time - `idle` says nothing reached the
+   * provider, `silent` says that was not because there was nothing to send.
+   */
+  skippedConfig24h: number;
+  silent: boolean;
   deadSinceMs: number | null;
   lastSentMs: number | null;
   lastError: string | null;
@@ -70,6 +78,8 @@ export async function deliveryHealth(): Promise<DeliveryHealthRow[]> {
       sent24h: w.sent,
       failed24h: w.failed,
       recipientFailed24h: w.recipientFailed,
+      skippedConfig24h: w.skippedConfig,
+      silent: silentVerdict(w, now),
       deadSinceMs: d.deadSince ? now - Date.parse(d.deadSince) : null,
       lastSentMs: d.lastSentAt ? now - Date.parse(d.lastSentAt) : null,
       lastError: d.lastError,
@@ -100,24 +110,35 @@ export async function getDeliveryFailureReport(): Promise<DeliveryFailureItem[]>
   const items: DeliveryFailureItem[] = [];
 
   for (const r of rows) {
-    if (r.state !== "dead" && r.state !== "degraded") continue;
+    /*
+     * `r.silent` is the third way in, and it is the one that was missing. An armed channel whose
+     * every send is skipped before reaching the provider has `attempted === 0`, so it lands on
+     * `idle` - and this loop used to drop `idle` on the floor. That is how a WhatsApp channel sat
+     * armed and sending nothing for a week with no surface anywhere saying so.
+     */
+    if (r.state !== "dead" && r.state !== "degraded" && !r.silent) continue;
     // A degraded channel whose only failures were Meta's per-recipient cap is worth showing, but
     // it is not a fault - so it never gets a "fix this" line.
-    const copy = describeDelivery({ ...r, attempted: r.attempted24h, sent: r.sent24h, failed: r.failed24h, recipientFailed: r.recipientFailed24h });
+    const copy = describeDelivery({ ...r, attempted: r.attempted24h, sent: r.sent24h, failed: r.failed24h, recipientFailed: r.recipientFailed24h, skippedConfig: r.skippedConfig24h });
     if (!copy) continue;
 
     items.push({
       key: `delivery:${r.job}`,
       name: `${CHANNEL_LABELS[r.channel]} · ${r.job}`,
-      state: r.state,
+      // A silent channel is NOT dead - the provider has never been asked. It ranks with
+      // degraded, which is also "working, but not for everyone".
+      state: r.state === "dead" ? "dead" : "degraded",
       since: r.deadSinceMs === null ? null : formatDuration(r.deadSinceMs),
       consequence: copy.body,
       where:
         r.state === "dead"
           ? "Console → System → Maintenance for the credentials, then WhatsApp → History to see who was missed."
-          : "",
+          : r.silent
+            ? "WhatsApp → Settings to bind an approved template to the touchpoint, then WhatsApp → History for who was skipped."
+            : "",
       evidence:
         `${r.attempted24h} attempted, ${r.sent24h} sent, ${r.failed24h} failed in 24 h` +
+        (r.skippedConfig24h > 0 ? `, ${r.skippedConfig24h} skipped before reaching the provider` : "") +
         (r.recipientFailed24h > 0 ? ` (${r.recipientFailed24h} were Meta's per-recipient cap)` : "") +
         (r.lastError ? ` · last error: "${r.lastError}"` : ""),
     });
@@ -145,10 +166,12 @@ export async function deliveryNotifications(): Promise<DeliveryNotification[]> {
   const out: DeliveryNotification[] = [];
 
   for (const r of rows) {
-    const copy = describeDelivery({ ...r, attempted: r.attempted24h, sent: r.sent24h, failed: r.failed24h, recipientFailed: r.recipientFailed24h });
+    const copy = describeDelivery({ ...r, attempted: r.attempted24h, sent: r.sent24h, failed: r.failed24h, recipientFailed: r.recipientFailed24h, skippedConfig: r.skippedConfig24h });
     if (!copy) continue;
     out.push({
       key: `delivery:${r.job}`,
+      // `watch`, not `risk`: the provider is fine and the fix is a dropdown, so this must not
+      // outrank a genuine outage on the same card.
       severity: r.state === "dead" ? "risk" : "watch",
       title: copy.title,
       body: copy.body,

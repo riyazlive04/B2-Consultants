@@ -157,6 +157,18 @@ export type InvoiceDetail = {
   taxLabel: string | null;
   notes: string | null;
   publicToken: string;
+  /**
+   * The state of the PUBLIC LINK, as three separate facts the screen has to be able to state.
+   *
+   * `tokenLegacy` is the one that is easy to miss: every invoice raised before the 26 Oct
+   * hardening carries a `cuid()`, which embeds a timestamp and a counter, so two issued near each
+   * other are structurally related. The migration deliberately did NOT rotate them - that would
+   * break links already sitting in customers' inboxes - which leaves the judgement with the
+   * founder, per invoice. A judgement nobody can see is not a judgement, so it is reported here.
+   */
+  tokenLegacy: boolean;
+  tokenRevokedAt: Date | null;
+  tokenExpiresAt: Date | null;
   subtotalDisplay: string;
   taxDisplay: string;
   totalDisplay: string;
@@ -235,6 +247,15 @@ export const getInvoice = cache(async function getInvoice(id: string): Promise<I
     taxLabel: i.taxLabel,
     notes: i.notes,
     publicToken: i.publicToken,
+    /*
+     * A cuid is exactly 25 chars, starts with `c`, and is lowercase base36. A minted token is 32
+     * random bytes in base64url - 43 chars, and mixed case. Shape is the only thing to go on:
+     * there is no column recording which mint produced a token, and adding one to label rows
+     * that are all identifiable by inspection would be a migration for nothing.
+     */
+    tokenLegacy: /^c[a-z0-9]{24}$/.test(i.publicToken),
+    tokenRevokedAt: i.publicTokenRevokedAt,
+    tokenExpiresAt: i.publicTokenExpiresAt,
     subtotalDisplay: formatMinor(own(i.subtotalInrMinor, i.subtotalEurMinor), currency),
     taxDisplay: formatMinor(own(i.taxInrMinor, i.taxEurMinor), currency),
     totalDisplay: formatMinor(total, currency),

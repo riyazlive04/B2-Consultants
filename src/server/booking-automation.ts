@@ -218,7 +218,7 @@ export async function runBookingConfirmations(): Promise<BookingAutomationRun> {
       await prisma.bookingRequest.update({ where: { id: b.id }, data: { confirmSentAt: new Date() } });
       const out = await sendBookingConfirmRequest(b.id);
       asked++;
-      tallySend(delivery, { sent: out.sent, failed: out.status === "FAILED", error: out.error });
+      tallySend(delivery, { sent: out.sent, failed: out.status === "FAILED", error: out.error, skipKind: out.skipKind });
       // `asked` counts the ask attempt (that's what the stamp records); the feed only claims a
       // message the prospect actually received - a SKIPPED send means WhatsApp is off or paused.
       if (out.sent && b.slot) {

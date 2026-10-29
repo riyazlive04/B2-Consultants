@@ -1,4 +1,4 @@
-import test from "node:test";
+import test, { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   classifyFailure,
@@ -13,6 +13,7 @@ import {
   foldDelivery,
   mergeTallies,
   RE_ALERT_COOLDOWN_MS,
+  silentVerdict,
   tallyLateFailures,
   tallySend,
   type DeliveryStateJson,
@@ -464,4 +465,153 @@ test("describeDelivery: a healthy or idle channel says nothing at all", () => {
   };
   assert.equal(describeDelivery({ ...base, state: "healthy" }), null);
   assert.equal(describeDelivery({ ...base, state: "idle" }), null);
+});
+
+
+/**
+ * ARMED BUT SILENT - the case that reads as a quiet week.
+ *
+ * On live for the week to 26 Oct 2026 the WhatsApp channel was armed (`WATI_ENABLED=true`), and
+ * the entire week's outbound history was one message with status SKIPPED. Every health surface
+ * read calm, because a skip never reaches `attempted` and `attempted === 0` means `idle` - the
+ * same verdict as "nothing was due". These tests pin the distinction, and pin that drawing it
+ * cost none of the asymmetries the rest of the file exists to protect.
+ */
+describe("a config skip is counted, reported, and never escalated", () => {
+  const dataSkip = {
+    sent: false,
+    failed: false,
+    error: 'Template "b2_intro" needs {{date}}, and this contact has no value for it',
+    skipKind: "data" as const,
+  };
+
+  it("counts a data skip without touching anything a verdict reads", () => {
+    const t = emptyTally();
+    for (let i = 0; i < 5; i++) tallySend(t, dataSkip);
+
+    assert.equal(t.skippedConfig, 5);
+    // The whole safety argument: a config fault cannot move the numbers that mark a channel dead.
+    assert.equal(t.attempted, 0, "a skip must never count as an attempt - nothing reached WATI");
+    assert.equal(t.failed, 0);
+    assert.equal(t.byClass.systemic + t.byClass.unknown, 0, "a config skip must never be escalatable");
+    assert.equal(classifyTick(t), "idle", "the tick verdict must be unchanged by this field");
+  });
+
+  it("keeps the skip reason as the headline when nothing else failed", () => {
+    const t = emptyTally();
+    tallySend(t, dataSkip);
+    assert.match(t.firstError ?? "", /no value for it/);
+  });
+
+  it("yields to a real provider error, which is the more useful headline", () => {
+    const t = emptyTally();
+    tallySend(t, { sent: false, failed: true, error: "HTTP 503 from WATI" });
+    tallySend(t, dataSkip);
+    assert.equal(t.firstError, "HTTP 503 from WATI");
+  });
+
+  it("does not count a channel that is simply switched off", () => {
+    const t = emptyTally();
+    tallySend(t, { sent: false, failed: false, error: "WhatsApp is paused in settings", skipKind: "system" });
+    // `not-armed.ts` and /api/health's `channels` both already say this. Counting it here would
+    // put a second, permanent entry on a list whose value is that it reaches zero.
+    assert.equal(t.skippedConfig, 0);
+  });
+
+  it("does not count a dry run or an allowlist block, which carry no skipKind", () => {
+    const t = emptyTally();
+    tallySend(t, { sent: false, failed: false, error: "DRY RUN - not sent." });
+    tallySend(t, { sent: false, failed: false, error: "OUTBOUND_ALLOWLIST is set" });
+    assert.equal(t.skippedConfig, 0);
+  });
+
+  it("survives the JSON boundary, and an old row without the field reads as zero", () => {
+    const t = emptyTally();
+    tallySend(t, dataSkip);
+    const crossed = collectDelivery({ run: JSON.parse(JSON.stringify(t)) });
+    assert.equal(crossed?.skippedConfig, 1);
+
+    const legacy = collectDelivery({ run: { attempted: 0, sent: 0, failed: 0 } });
+    assert.equal(legacy?.skippedConfig, 0, "an unmeasured past is not evidence of a problem");
+  });
+
+  it("accumulates into the stored 24h window", () => {
+    const t0 = "2026-10-20T00:00:00.000Z";
+    const tally = emptyTally();
+    for (let i = 0; i < 4; i++) tallySend(tally, dataSkip);
+
+    const folded = foldDelivery(emptyDeliveryState(t0), tally, t0, "whatsapp");
+    assert.equal(folded.next?.window.skippedConfig, 4);
+    // And still not dead, however many ticks like this one go by.
+    assert.equal(folded.channelDead, false);
+    assert.equal(folded.crossedDead, false);
+  });
+
+  it("never marks a channel dead however long it stays silent", () => {
+    let state: DeliveryStateJson | null = emptyDeliveryState("2026-10-20T00:00:00.000Z");
+    for (let i = 0; i < 60; i++) {
+      const tally = emptyTally();
+      tallySend(tally, dataSkip);
+      const at = new Date(Date.parse("2026-10-20T00:00:00.000Z") + i * 60_000).toISOString();
+      const r = foldDelivery(state, tally, at, "whatsapp");
+      state = r.next;
+      assert.equal(r.channelDead, false, `tick ${i} marked the channel dead over a config fault`);
+    }
+  });
+});
+
+describe("silentVerdict", () => {
+  const since = "2026-10-20T00:00:00.000Z";
+  const now = Date.parse("2026-10-20T06:00:00.000Z"); // well past MIN_WINDOW_AGE_MS
+
+  it("reports a channel that skipped a material number and sent nothing", () => {
+    assert.equal(silentVerdict({ since, attempted: 0, sent: 0, skippedConfig: 3 }, now), true);
+  });
+
+  it("stays quiet for one or two skips - a lead with no booked call is not an incident", () => {
+    assert.equal(silentVerdict({ since, attempted: 0, sent: 0, skippedConfig: 2 }, now), false);
+  });
+
+  it("stays quiet once anything has got through", () => {
+    // One success proves the binding works for somebody; the right surface is then that
+    // recipient's contact card, not a channel-wide alarm.
+    assert.equal(silentVerdict({ since, attempted: 1, sent: 1, skippedConfig: 9 }, now), false);
+  });
+
+  it("stays quiet in a window too young to mean anything", () => {
+    const justStarted = Date.parse("2026-10-20T00:10:00.000Z");
+    assert.equal(silentVerdict({ since, attempted: 0, sent: 0, skippedConfig: 9 }, justStarted), false);
+  });
+});
+
+describe("describeDelivery - the silent channel gets words", () => {
+  const base = {
+    job: "whatsapp",
+    channel: "whatsapp" as const,
+    deadSinceMs: null,
+    attempted: 0,
+    sent: 0,
+    failed: 0,
+    recipientFailed: 0,
+    lastError: 'No WATI template configured for "Booking confirmation"',
+  };
+
+  it("says the switch is on and nothing is going out", () => {
+    const copy = describeDelivery({ ...base, state: "idle", silent: true, skippedConfig: 7 });
+    assert.ok(copy, "a silent channel must not be described as nothing at all");
+    assert.match(copy.title, /switched on but sending nothing/);
+    assert.match(copy.body, /7 messages/);
+    assert.match(copy.body, /WhatsApp → Settings/);
+  });
+
+  it("is silent itself when the skips are not material", () => {
+    assert.equal(describeDelivery({ ...base, state: "idle", silent: false, skippedConfig: 1 }), null);
+  });
+
+  it("yields to the dead headline - a refusing provider outranks an unbound template", () => {
+    const copy = describeDelivery({
+      ...base, state: "dead", silent: true, skippedConfig: 7, deadSinceMs: 7_200_000, attempted: 9,
+    });
+    assert.match(copy!.title, /has sent nothing/);
+  });
 });

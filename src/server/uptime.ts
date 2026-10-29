@@ -49,6 +49,16 @@ export const STALE_AFTER_MINUTES: Record<string, number> = {
   workflows: 180,
   "daily-log": 1500, // once a day
   retention: 1500,
+  /*
+   * Also once a day (30 4 * * *). Absent from this table it fell to DEFAULT_STALE_MINUTES, so
+   * the health probe called it stale from 07:30 until the next 04:30 run - about 21 hours out of
+   * every 24, on a job that was working perfectly. An alarm that is on almost always carries no
+   * information, and this is the only alarm that would reveal a dead contract-chasing engine.
+   *
+   * Any job that ticks less often than DEFAULT_STALE_MINUTES must appear here. The test in
+   * `__tests__/cron-stale-thresholds.test.ts` fails if a cron route ships without an entry.
+   */
+  agreements: 1500,
 };
 
 const DEFAULT_STALE_MINUTES = 180;

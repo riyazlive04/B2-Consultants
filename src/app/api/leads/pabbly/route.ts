@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { upsertIntakeLead } from "@/server/lead-intake";
+import { recordDelivery } from "@/server/intake-route";
+import { captureMessage } from "@/lib/observability";
 import { takeToken, tooManyRequests, RATE_RULES } from "@/lib/rate-limit";
 import {
   cap,
@@ -29,6 +31,12 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/**
+ * Names this endpoint in Console → Integrations and in the error tracker. The same string the
+ * rate-limit bucket uses, so a throttled delivery and a rejected one are filed under one name.
+ */
+const DELIVERY_NAME = "pabbly";
+
 export async function POST(req: NextRequest) {
   // Fail CLOSED: without a configured secret this would accept unauthenticated lead
   // injection from anyone who finds the URL.
@@ -50,7 +58,7 @@ export async function POST(req: NextRequest) {
   // The 429 now carries `Retry-After`. That is the substantive fix: Pabbly honours it and
   // REDELIVERS. The previous bare 429 told it nothing, so a throttled lead was simply lost -
   // a rate limiter that drops real leads is worse than no rate limiter.
-  const gate = takeToken("webhook:pabbly", RATE_RULES.leadWebhook);
+  const gate = takeToken(`webhook:${DELIVERY_NAME}`, RATE_RULES.leadWebhook);
   if (!gate.ok) return tooManyRequests(gate.retryAfterSec);
 
   let body: Record<string, unknown>;
@@ -58,6 +66,7 @@ export async function POST(req: NextRequest) {
     const parsed = await req.json();
     body = (parsed && typeof parsed === "object" ? parsed : {}) as Record<string, unknown>;
   } catch {
+    await recordDelivery(DELIVERY_NAME, false, "unreadable body (not JSON)");
     return new Response("Bad request", { status: 400 });
   }
 
@@ -75,6 +84,34 @@ export async function POST(req: NextRequest) {
   const { name, phone, email, city, externalRef } = extractContact(f);
 
   if (!name || !phone) {
+    /*
+     * A REJECTED LEAD IS STILL A LEAD, AND THIS IS WHERE IT USED TO VANISH.
+     *
+     * `upsertIntakeLead` needs a phone (it is the de-dupe key and the only channel a telecaller
+     * can act on), so a payload without one cannot become a row. But returning 422 and nothing
+     * else meant the ONLY trace of it was the Caddy access log - paid traffic disappearing with
+     * no record anyone running the business would ever look at.
+     *
+     * Two things happen now, and they answer different questions:
+     *   recordDelivery  - Console → Integrations stops saying this endpoint is healthy. It keeps
+     *                     the LAST delivery per endpoint, so a run of rejects reads as a broken
+     *                     mapping rather than silence.
+     *   captureMessage  - reaches Sentry when a DSN is set, and the in-process ring buffer when
+     *                     it is not, which is what Console → System reads.
+     *
+     * `missing` names the FIELD, never the value: the identifying scraps that did arrive are the
+     * lead's own PII, and a dropped lead is not a reason to copy it into an error tracker. What
+     * the operator needs is "Pabbly is sending us no phone number", and the field name says that.
+     */
+    const missing = [!name && "name", !phone && "phone"].filter(Boolean).join(" + ");
+    await recordDelivery(DELIVERY_NAME, false, `rejected: no ${missing}`);
+    await captureMessage("Pabbly lead rejected - required field absent", {
+      where: `webhook:${DELIVERY_NAME}`,
+      level: "warning",
+      // One issue however many leads it hits: the thing to fix is the mapping, once.
+      fingerprint: ["lead-intake-rejected", DELIVERY_NAME, missing],
+      extra: { missing, fieldsSeen: Object.keys(f).slice(0, 40) },
+    });
     return NextResponse.json({ ok: false, error: "name and phone are required" }, { status: 422 });
   }
 
@@ -106,6 +143,8 @@ export async function POST(req: NextRequest) {
     // dropped - which is what happened to every landing-page score before this line existed.
     intakePayload: f,
   }, { announceReturning: true });
+
+  await recordDelivery(DELIVERY_NAME, true);
 
   // `reopened` distinguishes the two 200s that used to look identical: a genuine retry, versus a
   // dormant lead this opt-in just put back in front of a caller. Without it, "we got a 200" said

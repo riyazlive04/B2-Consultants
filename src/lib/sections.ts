@@ -547,6 +547,19 @@ export const SECTION_CATALOGUE = [
   // access rules are being respected, so it must not be switchable-off or grantable to the
   // people it reports on. A telecaller who could hide the log, or read it, would defeat it.
   { key: "activity", label: "Activity Log", href: "/activity", phase: 1, icon: "shield", group: "Admin", roles: ["ADMIN"], locked: true },
+  /**
+   * Problems people hit while using the app, with the context they were hit in.
+   *
+   * ADMIN-only to READ, and a separate `improvements.triage` capability to ACT - so the developer can be
+   * given a seat that can work the queue and nothing else. Everyone can FILE one: the Report
+   * button lives in the shell for all six roles, which is deliberate and is why this section
+   * being admin-only is not a contradiction. A student hitting a dead end is the report most
+   * worth having and the one least likely to arrive any other way.
+   *
+   * Not `locked`: unlike the activity log, nothing here reports on the people who can open it, so
+   * there is no reason the founder should be unable to hand it to someone or switch it off.
+   */
+  { key: "improvements", label: "Improvements", href: "/improvements", phase: 1, icon: "inbox", group: "Admin", roles: ["ADMIN"] },
   /*
    * REMOVED 23/10/2026: `automation` - the trigger → action workflow builder.
    *
@@ -558,12 +571,35 @@ export const SECTION_CATALOGUE = [
    * THE ENGINE CODE STAYS, and that is deliberate rather than an oversight. Unlike CV Studio,
    * which was self-contained, automation is wired into shared infrastructure -
    * `lib/config-schema.ts`, `lib/soft-delete.ts`, `lib/outreach-sop.ts`, `api/cron/workflows` and
-   * four `server/automation-*` modules. Unpicking that is surgery on files everything else
-   * depends on, for no visible benefit: with the routes and the nav entry gone, the feature is
-   * out of the application as far as anyone using it is concerned.
+   * `server/automation-queue.ts`. Unpicking that is surgery on files everything else depends on,
+   * for no visible benefit: with the routes and the nav entry gone, the feature is out of the
+   * application as far as anyone using it is concerned.
    *
-   * `server/automation.ts` and friends are now unreferenced by any route. Removing them is a
-   * clean follow-up whenever it is wanted; it just should not ride along with a UI change.
+   * ⚠ `server/automation.ts` IS LIVE CODE. DO NOT DELETE IT.
+   *
+   * An earlier version of this note said it was "now unreferenced by any route" and offered its
+   * removal as a clean follow-up. That was wrong, and wrong in the direction that breaks the
+   * app - a 26 Oct audit read this comment and reported the module as dead weight. What actually
+   * references it:
+   *
+   *   api/cron/workflows/route.ts  `runDueWorkflows` - ticked every 5 min by the container's
+   *                                crontab, so the engine runs in production right now
+   *   server/booking-actions.ts    `emitTrigger("BOOKING_CREATED")`
+   *   server/contacts-actions.ts   `emitTrigger("CONTACT_CREATED")`, `("TAG_ADDED")`
+   *   server/forms-actions.ts      `emitTrigger("FORM_SUBMITTED")`
+   *   server/opportunities-actions.ts `emitTrigger("STAGE_CHANGED")`
+   *   server/payments-actions.ts   `emitTrigger("INVOICE_PAID")`
+   *
+   * What went away on 23/10 was the BUILDER - the screens for authoring a workflow. The runtime
+   * that executes saved workflows, and the six action modules that notify it, were never
+   * touched. With no builder there is no way to create a NEW workflow, so the engine is mostly
+   * quiet; "mostly quiet" and "unreferenced" are not the same claim, and only one of them is
+   * safe to act on. Deleting the module breaks every form submission, tag add, stage move,
+   * booking and recorded payment in the app.
+   *
+   * Removing it for real means first removing the six `emitTrigger` call sites and the cron
+   * route, and deciding what happens to any `WorkflowEnrollment` rows still mid-flight. That is
+   * a deliberate piece of work, not a follow-up.
    */
 ] as const satisfies readonly SectionCatalogueEntry[];
 

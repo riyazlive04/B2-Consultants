@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { NEEDS_ACTION, PENDING_SUBMISSION, TEMPLATES } from "../../../scripts/wati-templates-utility-docx";
+import { NEEDS_ACTION, PENDING_SUBMISSION, TEMPLATES, actionTemplates } from "../../../scripts/wati-templates-utility-docx";
 import { SUBMISSION_TEMPLATES } from "../whatsapp-submission";
 import { WHATSAPP_AVAILABLE_VARS, WHATSAPP_KINDS } from "../whatsapp";
 
@@ -189,16 +189,52 @@ describe("the batch awaiting submission", () => {
     }
   });
 
-  it("covers every stage message, because none of them has ever had a template", () => {
-    // The seventeen are the bulk of the batch and the easiest to leave half-done: they were added
-    // in one pass, and a stage omitted here is a stage whose WhatsApp half stays dead while the
-    // other sixteen come alive - which looks like a bug in Stage Messages rather than a gap in a
-    // submission list.
+  it("accounts for every stage message, whether or not it is being submitted", () => {
+    /**
+     * The seventeen are the bulk of the batch and the easiest to leave half-done: they were added
+     * in one pass, and a stage omitted here is a stage whose WhatsApp half stays dead while the
+     * other sixteen come alive - which looks like a bug in Stage Messages rather than a gap in a
+     * submission list.
+     *
+     * ── WHY THIS ASSERTS AGAINST `NEEDS_ACTION` AND NOT `PENDING_SUBMISSION` ─────────────────
+     * It used to require all seventeen to be PENDING, which held only while the answer for every
+     * stage was "submit it". On 26/10/2026 the reviewer stopped one - b2_stage_disco_completed,
+     * whose next steps are decided by a human on the call, so one template cannot carry them -
+     * and it moved to the DECIDE group instead. Pinning the old rule would have meant either
+     * submitting a body nobody agreed or deleting the coverage check that makes a forgotten
+     * stage impossible.
+     *
+     * So the invariant is the one actually worth holding, and it is STRICTER than before: every
+     * stage template must appear on the WORK LIST somewhere. Being submitted and being
+     * deliberately held are both acceptable; being absent from both is not, because that is the
+     * state in which a stage is silently forgotten.
+     */
     const stageTemplates = TEMPLATES.filter((t) => t.kind.startsWith("STAGE_"));
-    const batch = new Set(PENDING_SUBMISSION.map((e) => e.name));
-    const absent = stageTemplates.filter((t) => !batch.has(t.name)).map((t) => t.name);
-    assert.deepEqual(absent, [], `stage templates missing from the submission batch: ${absent.join(", ")}`);
+    const onWorkList = new Set(NEEDS_ACTION.map((e) => e.name));
+    const absent = stageTemplates.filter((t) => !onWorkList.has(t.name)).map((t) => t.name);
+    assert.deepEqual(absent, [], `stage templates on no list at all: ${absent.join(", ")}`);
     assert.equal(stageTemplates.length, 17, "there are 17 LeadStages, so there should be 17 stage templates");
+
+    /**
+     * And a stage that is NOT awaiting a first approval must say which other thing it is, not
+     * drift out of `PENDING_SUBMISSION` by an accidental deletion - a dropped line and a taken
+     * decision look identical afterwards.
+     *
+     * RESUBMIT and DECIDE are both legitimate - b2_stage_disco_completed was pulled by the
+     * reviewer on 26/10/2026 and sits in DECIDE. What is NOT legitimate is a stage whose entry
+     * claims a first approval it cannot have, or no entry at all.
+     *
+     * Note a stage can leave this branch by being RENAMED rather than reclassified: `b2_stage_no_show`
+     * was already taken in WATI, so the pack now carries `b2_stage_no_show_1` - still a first
+     * approval, still in PENDING_SUBMISSION, just under a different name.
+     */
+    const pending = new Set(PENDING_SUBMISSION.map((e) => e.name));
+    for (const t of stageTemplates.filter((x) => !pending.has(x.name))) {
+      const entry = NEEDS_ACTION.find((e) => e.name === t.name);
+      assert.ok(entry, `${t.name} is on no list at all`);
+      assert.notEqual(entry!.action, "APPROVE", `${t.name} is not in PENDING_SUBMISSION, so it is not a first approval`);
+      assert.ok(entry!.why.trim().length > 20, `${t.name} must say why it is held back`);
+    }
   });
 });
 
@@ -252,6 +288,36 @@ describe("the work list", () => {
     // instruction with nothing to do, on the one page where a reader is already being careful.
     const wrong = NEEDS_ACTION.filter((e) => e.categoryChanged && e.action !== "RESUBMIT").map((e) => e.name);
     assert.deepEqual(wrong, [], `categoryChanged only means something on a re-submission: ${wrong.join(", ")}`);
+  });
+
+  it("makes every re-submission name the body it replaces", () => {
+    /**
+     * THE GUARD THAT EXISTS BECAUSE OF WHAT THIS LIST MISSED.
+     *
+     * `b2_sss_rescheduled` belonged in the RESUBMIT group from the first draft and was not in it.
+     * The reviewer had corrected one word in its body - "Success" Strategy Session became
+     * "Solution" - the correction was applied, and the approved template was left saying something
+     * B2 does not say. It was missed for a structural reason: the SOP pack records a rewrite as an
+     * `acceptedFix`, which the test above checks, while THIS pack holds one body per template and
+     * simply overwrites it, so an edit here leaves no trace whatsoever.
+     *
+     * Nothing in the repo records what Meta currently holds, so no assertion can catch a
+     * re-submission nobody has thought of. What it can do is stop a listed one being vague: an
+     * entry that cannot say what it replaces is an entry whose author did not check, and the
+     * submitter cannot diff the new body against anything. Deriving it from the SOP pack where
+     * possible means only this pack's own edits have to be written down.
+     */
+    const resubmits = actionTemplates().filter((t) => t.action?.group === "RESUBMIT");
+    assert.ok(resubmits.length > 0, "fixture check - there should be re-submissions");
+    const vague = resubmits.filter((t) => !t.action?.previousBody?.trim()).map((t) => t.name);
+    assert.deepEqual(vague, [], `a re-submission must name the body it replaces: ${vague.join(", ")}`);
+    for (const t of resubmits) {
+      assert.notEqual(
+        t.action!.previousBody!.trim(),
+        t.body.trim(),
+        `${t.name} is listed as a re-submission but its previous body is identical - either it needs no re-submission, or the old body was copied from the new one`,
+      );
+    }
   });
 
   it("marks a re-submission wherever the SOP pack records an accepted rewrite", () => {

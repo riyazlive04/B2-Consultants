@@ -1,5 +1,6 @@
 import "server-only";
 import { bookingUrl, leadTemplateVars } from "./lead-template-vars";
+import { getPublicLinksConfig } from "./founder-config";
 import { Prisma, type WhatsAppKind, type WhatsAppStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { levelLabels } from "./levels";
@@ -102,6 +103,20 @@ export type SendOutcome = {
   sent: boolean;
   skipped: boolean;
   error?: string;
+  /**
+   * WHICH KIND of skip, for `tallySend` - the distinction this function already makes internally
+   * (`systemOff` vs `dataSkip`) and used to throw away before anything could count it.
+   *
+   *   "system"  WATI is off, paused or unconfigured. Somebody's deliberate choice; `channels` in
+   *             /api/health and `not-armed.ts` both already report it.
+   *   "data"    the engine wanted to send and a FIXABLE fault stopped it: no template bound, a
+   *             template WATI reports as not APPROVED, a declared variable with no value for this
+   *             recipient, or the domain gate. This is the one that reads as a quiet week.
+   *
+   * Absent on a dry run and on a local OUTBOUND_ALLOWLIST block - neither is a fault, and neither
+   * should ever appear on a health surface.
+   */
+  skipKind?: "system" | "data";
 };
 
 async function isOptedOut(number: string): Promise<boolean> {
@@ -287,7 +302,7 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
   const skipReason = systemOff ?? dataSkip;
   if (skipReason) {
     if (systemOff && !logSkips) {
-      return { messageId: null, status: "SKIPPED", sent: false, skipped: true, error: skipReason };
+      return { messageId: null, status: "SKIPPED", sent: false, skipped: true, error: skipReason, skipKind: "system" };
     }
     /**
      * A data-skip writes a row so the reason is not invisible - but ONCE, not once per tick.
@@ -309,7 +324,17 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
         select: { status: true, error: true },
       });
       if (last?.status === "SKIPPED" && last.error === skipReason) {
-        return { messageId: null, status: "SKIPPED", sent: false, skipped: true, error: skipReason };
+        /*
+         * No ROW is written (that is this branch's whole purpose - 5,175 duplicates in two days),
+         * but the skip is still reported to the tally. The de-duplication is about not burying a
+         * contact card in identical rows; it was never meant to make the channel look idle, and
+         * for an engine that re-attempts a due step every minute this branch is the one that
+         * fires almost every time. Suppressing the count here would suppress the whole signal.
+         */
+        return {
+          messageId: null, status: "SKIPPED", sent: false, skipped: true, error: skipReason,
+          skipKind: systemOff ? "system" : "data",
+        };
       }
     }
     const messageId = await writeRow({
@@ -323,7 +348,10 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
       sentById,
       target,
     });
-    return { messageId, status: "SKIPPED", sent: false, skipped: true, error: skipReason };
+    return {
+      messageId, status: "SKIPPED", sent: false, skipped: true, error: skipReason,
+      skipKind: systemOff ? "system" : "data",
+    };
   }
 
   // THE SAFETY VALVE. Applied last, after every check has run against the REAL recipient - so a
@@ -686,7 +714,7 @@ export async function runDueReminders(): Promise<ReminderRun> {
     else if (out.status === "FAILED") { t.failed++; total.failed++; budget--; }
     else { t.skipped++; total.skipped++; }
 
-    tallySend(delivery, { sent: out.sent, failed: out.status === "FAILED", error: out.error });
+    tallySend(delivery, { sent: out.sent, failed: out.status === "FAILED", error: out.error, skipKind: out.skipKind });
 
     if (!out.sent) return;
     await logSystemActivity(SYSTEM_ACTORS.reminders, {
@@ -1122,7 +1150,9 @@ export async function sendSssRescheduled(journeyId: string, sentById?: string | 
     vars: {
       name: firstName(j.lead.name),
       slot_time: j.sssAt ? formatDateTimeInZone(j.sssAt, "Asia/Kolkata") : "",
-      sss_url: "https://optin.b2consultants.de/sss",
+      // Was a literal here, which is how this app came to hold three different SSS links. One
+      // source now - see the note at the top of server/lead-template-vars.ts.
+      sss_url: (await getPublicLinksConfig()).sssUrl,
     },
   });
 }
@@ -1284,6 +1314,7 @@ async function sampleVars(): Promise<Record<string, string>> {
   const cut = slotTime.lastIndexOf(", ");
   const [date, time] = cut === -1 ? [slotTime, ""] : [slotTime.slice(0, cut), slotTime.slice(cut + 2)];
   const base = (process.env.BETTER_AUTH_URL ?? "").replace(/\/+$/, "");
+  const links = await getPublicLinksConfig();
 
   // The real sender name is the one the SOP engine falls back to, so a test shows what a lead
   // would actually read. Imported lazily: outreach.ts imports this module, and a top-level import
@@ -1311,7 +1342,11 @@ async function sampleVars(): Promise<Record<string, string>> {
     slot_time: slotTime,
     due_date: formatDate(tomorrow),
     booking_url: bookingUrl(),
-    sss_url: `${base}/sss`,
+    // The REAL configured links, not a guess off this app's own origin: a test send is worth
+    // having only if it renders the URL a prospect would actually receive.
+    apply_url: links.applyUrl,
+    sss_url: links.sssUrl,
+    workshop_url: links.workshopUrl,
     zoom_link: "https://zoom.us/j/0000000000",
     amount: formatInrMinor(2_500_000), // ₹25,000 in paise
     total: formatInrMinor(7_500_000),

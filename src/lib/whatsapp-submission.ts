@@ -104,6 +104,18 @@ const V = {
     source: "Appointment slot (disco) or SSS date/time, rendered in IST",
     sample,
   }),
+  /**
+   * The SSS booking page. Its `sopName` is the LITERAL URL the SOP text carries, because that is
+   * what `LINK_VARS` substitutes - unlike every other entry here, whose placeholder is a bracket
+   * token. Filled from WhatsApp -> Settings (`publicLinksConfig.sssUrl`), and guaranteed
+   * non-empty there, which is what makes it safe to declare: an unresolved variable skips the send.
+   */
+  sssUrl: (): TemplateVarSpec => ({
+    name: "sss_url",
+    sopName: "https://optin.b2consultants.de/sss",
+    source: "WhatsApp -> Settings -> Public links (one value, app-wide)",
+    sample: "https://optin.b2consultants.de/sss",
+  }),
   zoom: (): TemplateVarSpec => ({
     name: "zoom_link",
     sopName: "<<INSERT ZOOM LINK HERE>>",
@@ -432,8 +444,8 @@ export const SUBMISSION_TEMPLATES: SubmissionTemplate[] = [
     category: "UTILITY",
     language: "en",
     categoryNote:
-      "Notifies the prospect their SSS slot was released, then asks them to re-book with a link. Re-engagement CTA → MARKETING. Like Step 16, no confirmation request in it - still MARKETING.",
-    vars: [V.name("Priya")],
+      "UTILITY on the rewritten body. The note here used to end “still MARKETING”, which was true of the body this one replaced and contradicted the category one line above it - a category mismatch is the single most common rejection reason, so it is corrected rather than left for whoever submits to reconcile. What changed: the superseded text was a re-engagement pitch (“we had to release your slot for another candidate”, “book a call with Ameen to finalise your plan”); the reviewer's body reports a state change on the prospect's own appointment and offers the rebooking link plainly, which is Meta's own UTILITY shape. The booking link is now {{sss_url}} rather than a literal - see LINK_VARS - and a closing line follows it so the body does not end on a variable.",
+    vars: [V.name("Priya"), V.sssUrl()],
   },
 ];
 
@@ -447,14 +459,42 @@ const TO_WATI: OutreachVars = {
 };
 
 /**
+ * Literal links in the SOP text → the variable the app fills at send time.
+ *
+ * ── WHY THE SUBMITTED BODY DIFFERS FROM THE SOP HERE ───────────────────────────────────────
+ * The SOP document is what a TELECALLER reads, and a human reading a script wants to see the
+ * actual URL. Meta holds a template, and a template that hardcodes the URL cannot have it
+ * changed without a re-submission - which takes the touchpoint offline until it clears. So the
+ * link stays literal in `lib/outreach-sop.ts` and becomes a variable on the way to Meta. This is
+ * the same kind of dialect change as `[Prospect’s First Name]` → `{{name}}` above, and it lives
+ * at the same seam.
+ *
+ * ⚠ APPLIED TO THE LIVE BODY ONLY, NEVER TO A SUPERSEDED ONE. `supersededSubmissionBody` shows
+ * what Meta is holding RIGHT NOW, and what Meta is holding is the literal URL. Substituting it
+ * there too would render the old and new bodies identical at the one line that changed, which is
+ * the single thing that comparison exists to show.
+ */
+export const LINK_VARS: Record<string, string> = {
+  "https://optin.b2consultants.de/sss": "{{sss_url}}",
+};
+
+/**
  * Meta rejects a body that ends with a variable. Step 20's SOP wording does exactly that, so it
  * gets one closing line. This is the ONLY place the submitted text departs from the SOP, it is
  * additive, and it is called out in that template's notes so the reviewer sees it.
  */
-const BODY_SUFFIX: Partial<Record<OutreachStep, string>> = {
+export const BODY_SUFFIX: Partial<Record<OutreachStep, string>> = {
   SSS_CONFIRM_2: "\n\nPlease reply *YES* to confirm.",
   // Same body as Step 20, so the same trailing-variable problem and the same fix.
   SSS_CONFIRM_3: "\n\nPlease reply *YES* to confirm.",
+  // Step 21 ended on its booking link, and now that the link is `{{sss_url}}` it would end on a
+  // variable - the same rejection risk, so the same fix. Phrased to suit a RELEASED slot: there
+  // is no held time left to reassure them about.
+  //
+  // The key is `SSS_CANCEL_MSG` (Step 21, the WhatsApp message), NOT `SSS_CANCEL` (Step 22/23,
+  // a SYSTEM step with no body) - keying the wrong one appends nothing at all, silently, and
+  // the only thing that caught it was the lint asserting no body ends with a variable.
+  SSS_CANCEL_MSG: "\n\nReply to this message if you would like us to suggest a time.",
 };
 
 /**
@@ -462,9 +502,42 @@ const BODY_SUFFIX: Partial<Record<OutreachStep, string>> = {
  * stripped because it becomes a media header, not body text.
  */
 export function submissionBody(t: SubmissionTemplate): string {
-  const sop = STEP_BY_KEY[t.step]?.body ?? "";
-  const wati = renderOutreachTemplate(sop, TO_WATI);
-  return (wati.replace(/\s*<< ATTACH VIDEO TO THIS MESSAGE>>\s*$/, "").trimEnd() + (BODY_SUFFIX[t.step] ?? "")).trim();
+  return toSubmissionBody(STEP_BY_KEY[t.step]?.body ?? "", t.step);
+}
+
+/**
+ * The SOP→WATI transform on its own, so it can be applied to a body that is NOT the step's current
+ * one.
+ *
+ * Extracted for `supersededSubmissionBody` below. The alternative was to re-implement the three
+ * steps of the transform there, and a second copy of "substitute the variables, strip the video
+ * marker, append the closing line" is a copy that will disagree with this one the first time any
+ * of the three changes - at which point the old and new bodies shown side by side would differ in
+ * ways nobody ever decided.
+ */
+function toSubmissionBody(sopBody: string, step: OutreachStep, opts: { links?: boolean } = {}): string {
+  let wati = renderOutreachTemplate(sopBody, TO_WATI);
+  // Default ON: every caller but the superseded-body one wants the link as a variable. See the
+  // warning on LINK_VARS for why that one caller must opt out.
+  if (opts.links !== false) {
+    for (const [url, variable] of Object.entries(LINK_VARS)) wati = wati.split(url).join(variable);
+  }
+  return (wati.replace(/\s*<< ATTACH VIDEO TO THIS MESSAGE>>\s*$/, "").trimEnd() + (BODY_SUFFIX[step] ?? "")).trim();
+}
+
+/**
+ * What was submitted LAST time, in WATI dialect - or null where nothing was superseded.
+ *
+ * `acceptedFix.was` is the raw SOP transcription, which is not what Meta holds: Meta holds the
+ * substituted version. Comparing the new body against the raw one would show differences that are
+ * only dialect (`[Prospect’s First Name]` vs `{{name}}`) and hide the one that matters, so this
+ * runs the superseded text through the same transform the live body goes through. The two are then
+ * comparable line for line, which is the only reason to show the old one at all.
+ */
+export function supersededSubmissionBody(t: SubmissionTemplate): string | null {
+  if (!t.acceptedFix) return null;
+  // `links: false` - what Meta holds is the literal URL. See the warning on LINK_VARS.
+  return toSubmissionBody(t.acceptedFix.was, t.step, { links: false });
 }
 
 /** Meta's hard body cap. Worth failing loudly at build time rather than at submission. */

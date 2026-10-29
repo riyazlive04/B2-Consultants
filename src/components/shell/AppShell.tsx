@@ -17,6 +17,7 @@ import { authClient } from "@/lib/auth-client";
 import { ThemeToggle } from "./ThemeToggle";
 import { NavClock } from "./NavClock";
 import { RecordButton } from "./RecordButton";
+import { SuggestImprovementButton } from "./SuggestImprovementButton";
 import { SectionAccessProvider } from "./SectionAccess";
 import { BrandLogo } from "./BrandLogo";
 import { AppFooter } from "./AppFooter";
@@ -218,16 +219,32 @@ export function AppShell({
 
   const Rail = ({ compact, inDrawer = false }: { compact: boolean; inDrawer?: boolean }) => (
     <nav className="flex h-full flex-col p-3">
-      {/* brand + collapse toggle */}
-      <div className={`mb-5 flex items-center ${compact ? "justify-center" : "justify-between"} px-1`}>
+      {/*
+        brand + collapse toggle
+
+        ── THE FULL LOCKUP IN BOTH STATES, NOT THE BARE MARK (26/10/2026) ───────────────────────
+        This used to be the "mark" variant - the bracket alone - with the name set beside it in
+        HTML, which left the app's own logo without the word CONSULTANTS in it. The founder asked
+        for the real lockup here in both the expanded and the collapsed rail, so that is what this
+        renders, and the HTML wordmark is GONE in the expanded state: the artwork now carries the
+        name, and keeping both would say "B2 Consultants" twice in one row. The workspace label
+        stays, because that is the one thing the artwork cannot say.
+
+        ⚠ SIZING IS CONSTRAINED BY THE RAIL, AND THE COLLAPSED ONE IS TIGHT. The lockup is almost
+        square (1844x1544) and its strapline is only ~10% of its height, so the word CONSULTANTS
+        renders at roughly a tenth of whatever height is set here:
+          - expanded  (240px rail): h-16 = 64px tall, so the strapline lands near 6px.
+          - collapsed (76px rail):  12px of padding each side leaves ~52px, and the lockup is
+            wider than it is tall, so height is capped by WIDTH at ~40px - a ~4px strapline.
+        At that size it reads as the shape of the lockup rather than as a word anyone can make
+        out. It is present and correct, which is what was asked for; making it legible in the
+        collapsed state needs a wider rail, which is a separate decision about the whole rail.
+        The `px-1` is dropped when compact to buy back those last few pixels of width.
+      */}
+      <div className={`mb-5 flex items-center ${compact ? "justify-center" : "justify-between px-1"}`}>
         <Link href="/" prefetch className="flex items-center gap-2.5">
-          <BrandLogo className="h-10 flex-none" />
-          {!compact && (
-            <span className="flex flex-col leading-tight">
-              <span className="font-display text-sm font-bold text-ink">B2 Consultants</span>
-              <span className="text-caption text-ink-3">{workspaceLabel}</span>
-            </span>
-          )}
+          <BrandLogo variant="full" className={compact ? "h-10 flex-none" : "h-16 flex-none"} />
+          {!compact && <span className="text-caption leading-tight text-ink-3">{workspaceLabel}</span>}
         </Link>
         {!inDrawer && !compact && (
           <button
@@ -375,9 +392,20 @@ export function AppShell({
           </button>
           {/* The wordmark yields below 375px - on a 320px phone the hamburger already says "this
               is the app", and the alternative was squashing the icon buttons under their 40px hit
-              target (§7). Between 375 and md it stays. */}
+              target (§7). Between 375 and md it stays.
+
+              The NAME is set in HTML beside the mark, not taken from the artwork. This bar used to
+              show the bracket alone, which is the one place in the app where neither the artwork
+              nor any adjacent text said "Consultants" - BrandLogo's own contract is that "mark" is
+              used next to an HTML wordmark, and here there was none. The "full" lockup is not the
+              fix at this size: its strapline is ~10% of the height, so at h-8 it would render at
+              about 3px. "B2" alone is enough on a phone - the full name would cost the icon strip
+              room it does not have below md. */}
           <Link href="/" className="hidden flex-none items-center gap-2 min-[375px]:flex md:hidden">
             <BrandLogo className="h-8" />
+            <span className="font-display text-sm font-bold leading-none text-ink">
+              B2 <span className="hidden min-[430px]:inline">Consultants</span>
+            </span>
           </Link>
 
           {/* The always-visible metric strip: search · month · runway · theme · alerts · user.
@@ -426,6 +454,9 @@ export function AppShell({
             <span className="hidden sm:inline-flex">
               <ThemeToggle />
             </span>
+            {/* Report sits beside the bell rather than next to Record: Record is a primary CTA
+                gated on Finance, this is a quiet tool offered to every role on every screen. */}
+            <SuggestImprovementButton />
             <span className="flex-none">{bellSlot}</span>
             <Link href="/profile" title="Your profile" className="flex flex-none items-center gap-2 rounded-full py-1 md:pr-2">
               <Avatar size={34} />

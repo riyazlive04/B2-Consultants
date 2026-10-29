@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Plus, Trash2, Send, Download, Link2, Ban, CheckCircle2, ArrowRightLeft, Lock, Mail,
+  ShieldAlert, RefreshCw, Link2Off,
 } from "lucide-react";
 import type { InvoiceDetail, InvoiceLineOption } from "@/server/payments-metrics";
 import type { InvoiceTaxConfig } from "@/lib/config-schema";
@@ -29,7 +30,7 @@ import {
 import { safeAction } from "@/lib/action-guard";
 import {
   createInvoice, updateInvoice, setInvoiceStatus, sendInvoice, recordPayment, deleteInvoice, convertEstimate,
-  sendReceipt,
+  sendReceipt, rotateInvoiceLink,
 } from "@/server/payments-actions";
 
 /**
@@ -134,6 +135,13 @@ export default function InvoiceEditor({
   const [saving, setSaving] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkBusy, setLinkBusy] = useState(false);
+  /**
+   * Null = no expiry, which stays the default. An invoice paid in instalments is opened over
+   * months, so a link that dies mid-plan is a support call - the server applies the same rule.
+   */
+  const [rotateExpiryDays, setRotateExpiryDays] = useState<number | null>(null);
 
   // This screen hand-rolls its <input>s (they're denser than the form kit's), so each one picks up
   // its character rule through fieldKindProps rather than a `kind` prop. Not hooks - safe to call
@@ -277,6 +285,58 @@ export default function InvoiceEditor({
     toast("Public link copied");
   }
 
+  /**
+   * REPLACE OR KILL THE PUBLIC LINK.
+   *
+   * `rotateInvoiceLink` shipped on 26 Oct with the migration that gave the token an expiry and a
+   * kill switch, and the migration's own note said the admin screen "gains a regenerate action,
+   * so a weak token can be replaced deliberately on the rows that still matter". The action was
+   * written and capability-gated; no screen ever called it. So the pre-26-Oct invoices kept their
+   * guessable tokens not by decision but because there was no button, and the deliberate choice
+   * the migration described could not actually be made. This is that button.
+   *
+   * Both modes are confirmed, and the confirmations are worded differently on purpose: one breaks
+   * a link for good, the other hands back a replacement that still has to be sent to the customer.
+   */
+  async function manageLink(mode: "rotate" | "revoke") {
+    if (!invoice) return;
+    const ok = await askConfirm(
+      mode === "rotate"
+        ? {
+            title: "Replace this invoice link?",
+            body:
+              `The current link stops working immediately, including the copy in ` +
+              `${invoice.customerName || "the customer"}'s inbox. You get a new one to send them.`,
+            confirmLabel: "Replace link",
+          }
+        : {
+            title: "Revoke this invoice link?",
+            body:
+              `${invoice.customerName || "The customer"} will no longer be able to open this invoice. ` +
+              `The invoice itself is untouched - only the URL stops working. Replace it instead if they still need it.`,
+            confirmLabel: "Revoke link",
+            danger: true,
+          },
+    );
+    if (!ok) return;
+
+    setLinkBusy(true);
+    const res = await safeAction(() => rotateInvoiceLink(invoice.id, mode, rotateExpiryDays));
+    setLinkBusy(false);
+    if (!res.ok) return toast(res.error, "error");
+
+    if (mode === "rotate" && res.url) {
+      // Straight to the clipboard: a replacement link is worthless until it reaches the customer,
+      // and the old URL is already dead by the time this toast is read.
+      await navigator.clipboard.writeText(res.url).catch(() => {});
+      toast("New link copied - send it to the customer");
+    } else {
+      toast("Link revoked");
+    }
+    setLinkOpen(false);
+    router.refresh();
+  }
+
   const canShare = invoice && invoice.status !== "DRAFT" && invoice.status !== "VOID";
   /** Issued = numbered and locked. Everything below renders read-only. */
   const locked = !!invoice?.issued;
@@ -309,7 +369,15 @@ export default function InvoiceEditor({
         {invoice && (
           <div className="flex flex-wrap items-center gap-2">
             {invoice.status === "DRAFT" && <Btn variant="soft" icon={<Send size={15} />} onClick={send}>Send</Btn>}
-            {canShare && <Btn variant="ghost" icon={<Link2 size={15} />} onClick={copyLink}>Link</Btn>}
+            {canShare && (
+              <Btn
+                variant="ghost"
+                icon={invoice.tokenRevokedAt ? <Link2Off size={15} /> : <Link2 size={15} />}
+                onClick={() => setLinkOpen(true)}
+              >
+                {invoice.tokenRevokedAt ? "Link revoked" : "Link"}
+              </Btn>
+            )}
             {canShare && <a href={`/i/${invoice.publicToken}/pdf?download=1`} target="_blank" rel="noreferrer"><Btn variant="ghost" icon={<Download size={15} />}>PDF</Btn></a>}
             {kind === "INVOICE" && invoice.status !== "PAID" && invoice.status !== "VOID" && <Btn variant="soft" icon={<CheckCircle2 size={15} />} onClick={() => setPayOpen(true)}>Record payment</Btn>}
             {kind === "ESTIMATE" && invoice.status !== "ACCEPTED" && <Btn variant="soft" icon={<ArrowRightLeft size={15} />} onClick={convert}>Convert to invoice</Btn>}
@@ -349,6 +417,42 @@ export default function InvoiceEditor({
             gets one. Nothing here is lost in the meantime - the draft keeps everything typed into
             it.
           </p>
+        </div>
+      )}
+
+      {/*
+        THE LINK IN THE CUSTOMER'S INBOX IS A BEARER CREDENTIAL, AND THIS ONE IS A WEAK ONE.
+
+        Invoices raised before the 26 Oct hardening carry a `cuid()`: a timestamp plus a counter,
+        so two issued near each other are structurally related. `/i/<token>` shows the customer's
+        name, postal address, email, phone, the amount and the agreement reference, and the token
+        is the whole of the protection.
+
+        The migration deliberately did not rotate them - that breaks links already sent, silently,
+        for people who have done nothing wrong. But "deliberately not rotated" is only a decision
+        if somebody can see the row and choose; until this notice existed, every such invoice was
+        unrotated by default and invisible. Warn, not bad: nothing is broken.
+
+        Suppressed once revoked - a dead link has no strength to worry about.
+      */}
+      {canShare && invoice.tokenLegacy && !invoice.tokenRevokedAt && (
+        <div className="flex items-start gap-2 rounded-card border border-warn-soft bg-warn-soft/40 px-4 py-3">
+          <ShieldAlert size={16} className="mt-0.5 flex-none text-warn" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-ink">This invoice&rsquo;s public link uses an old, weaker token</p>
+            <p className="mt-1 text-sm text-ink-2">
+              Anyone holding the URL can read {invoice.customerName || "the customer"}&rsquo;s name, address, phone
+              and what they were charged, and it never expires. Replacing it breaks the copy already in their inbox,
+              so it is worth doing on invoices that still matter and leaving on ones long since paid.
+            </p>
+            <button
+              type="button"
+              onClick={() => setLinkOpen(true)}
+              className="mt-2 text-sm font-semibold text-primary hover:underline"
+            >
+              Manage this link
+            </button>
+          </div>
         </div>
       )}
 
@@ -690,6 +794,63 @@ export default function InvoiceEditor({
           )}
         </div>
       </div>
+
+      {/*
+        THE PUBLIC LINK, AND THE THREE THINGS THAT CAN BE DONE TO IT.
+
+        Copy / Replace / Revoke live together because they are one question - "who can open this
+        invoice, and should they still be able to" - and splitting them across a toolbar put the
+        copy button an inch from a destructive one with no context between them.
+      */}
+      <Modal open={linkOpen} onClose={() => setLinkOpen(false)} title="Public invoice link" size="sm">
+        {invoice && (
+          <div className="space-y-4">
+            <div>
+              <p className="text-caption font-semibold uppercase text-ink-3">The link {invoice.customerName || "the customer"} uses</p>
+              {/* `break-all` because a token is one unbroken word and would otherwise push the
+                  modal wider than the viewport on a phone. */}
+              <p className="mt-1 break-all rounded-control border border-line bg-surface-2 px-2.5 py-2 font-mono text-caption text-ink-2">
+                /i/{invoice.publicToken}
+              </p>
+              <p className="mt-1.5 text-caption text-muted">
+                {invoice.tokenRevokedAt
+                  ? "Revoked - this URL no longer opens. Replace it to give the customer a working one."
+                  : invoice.tokenExpiresAt
+                    ? `Works until ${invoice.tokenExpiresAt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}.`
+                    : "No expiry - it works for as long as the customer keeps the email."}
+                {invoice.tokenLegacy && !invoice.tokenRevokedAt && " Minted before 26 Oct 2026, so it is a weaker token than a new one."}
+              </p>
+            </div>
+
+            <Field label="Expiry for the replacement link">
+              <Select
+                value={rotateExpiryDays === null ? "" : String(rotateExpiryDays)}
+                onChange={(e) => setRotateExpiryDays(e.target.value ? Number(e.target.value) : null)}
+                options={[
+                  { value: "", label: "No expiry (default)" },
+                  { value: "30", label: "30 days" },
+                  { value: "90", label: "90 days" },
+                  { value: "365", label: "1 year" },
+                ]}
+              />
+            </Field>
+
+            <div className="flex flex-wrap justify-end gap-2">
+              {!invoice.tokenRevokedAt && (
+                <Btn variant="ghost" type="button" icon={<Link2 size={15} />} onClick={copyLink}>Copy</Btn>
+              )}
+              {!invoice.tokenRevokedAt && (
+                <Btn variant="ghost" type="button" icon={<Ban size={15} />} disabled={linkBusy} onClick={() => manageLink("revoke")}>
+                  Revoke
+                </Btn>
+              )}
+              <Btn variant="soft" type="button" icon={<RefreshCw size={15} />} disabled={linkBusy} onClick={() => manageLink("rotate")}>
+                {linkBusy ? "Working..." : "Replace link"}
+              </Btn>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <Modal open={payOpen} onClose={() => setPayOpen(false)} title="Record payment" size="sm">
         <form action={pay} className="space-y-4">

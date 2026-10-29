@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { upsertIntakeLead } from "@/server/lead-intake";
 import { recordDelivery } from "@/server/intake-route";
+import { captureMessage } from "@/lib/observability";
 import { takeToken, tooManyRequests, RATE_RULES } from "@/lib/rate-limit";
 import { extractContact, extractUtm, secretMatches, unwrap } from "@/server/webhook-payload";
 import { getLeadWebhookConfig, LEAD_WEBHOOK_NAME } from "@/server/lead-webhook";
@@ -84,7 +85,22 @@ export async function POST(req: NextRequest) {
     const { name, phone, email, city, externalRef } = extractContact(f);
 
     if (!name || !phone) {
-      await recordDelivery(LEAD_WEBHOOK_NAME, false, "name and phone are required");
+      /*
+       * `recordDelivery` alone only reaches somebody who thinks to open Console → Integrations.
+       * A funnel page that stops sending a phone number drops EVERY lead from that page, so it
+       * also goes to the error tracker - same treatment as `/api/leads/pabbly`.
+       *
+       * Field names only, never the values that did arrive: a lead we failed to save is not a
+       * reason to copy their details into a third-party error tracker.
+       */
+      const missing = [!name && "name", !phone && "phone"].filter(Boolean).join(" + ");
+      await recordDelivery(LEAD_WEBHOOK_NAME, false, `rejected: no ${missing}`);
+      await captureMessage("Lead webhook rejected a submission - required field absent", {
+        where: `webhook:${LEAD_WEBHOOK_NAME}`,
+        level: "warning",
+        fingerprint: ["lead-intake-rejected", LEAD_WEBHOOK_NAME, missing],
+        extra: { missing, fieldsSeen: Object.keys(f).slice(0, 40) },
+      });
       return NextResponse.json({ ok: false, error: "name and phone are required" }, { status: 422 });
     }
 

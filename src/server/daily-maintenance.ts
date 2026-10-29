@@ -7,6 +7,7 @@ import { getMaintenanceConfig } from "./founder-config";
 import { runOverdueSweep } from "./overdue-sweep";
 import { runPendingStatusSweep } from "./pending-sweep";
 import { runRetentionSweep } from "./retention";
+import { runImprovementDigest } from "./improvement-digest";
 import { runScheduledReport } from "./scheduled-report";
 import { backfillInvoiceIssuance } from "./invoice-posting";
 import { runDunning } from "./dunning";
@@ -98,6 +99,11 @@ export async function runDailyMaintenance(): Promise<DailyMaintenanceRun> {
 
   // Self-guarded to fire once per period.
   await safe("scheduledReport", runScheduledReport);
+
+  // One summary of what people reported, to whoever is fixing it. Self-guarded to once per IST
+  // day and sends nothing on a day with nothing new. Inside `safe` like everything else here, so
+  // a mailer outage cannot fail the tick that also runs the overdue sweep.
+  await safe("improvementDigest", runImprovementDigest);
 
   return { ranAt: new Date().toISOString(), jobs };
 }

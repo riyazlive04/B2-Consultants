@@ -106,6 +106,30 @@ export type DeliveryTally = {
    */
   lateFailed: number;
   byClass: Record<FailureClass, number>;
+  /**
+   * Sends the engine WANTED to make and declined over a fixable configuration fault, before the
+   * provider was ever contacted: no template bound to the touchpoint, a template WATI reports as
+   * REJECTED/PENDING, an approved template whose declared variable has no value for this
+   * recipient, or the WhatsApp domain gate refusing their origin.
+   *
+   * ── WHY A SKIP NEEDED ITS OWN COUNTER ─────────────────────────────────────────────────────
+   * `tallySend` drops a skip before it reaches `attempted`, and rightly so: nothing was offered
+   * to WATI, so it says nothing about whether WATI works. But the consequence of that is that a
+   * channel which is ARMED, is being asked to send, and declines every single one over a config
+   * fault reports `attempted: 0` - which `deliveryHealth()` reads as `idle`, the same verdict as
+   * a genuinely quiet week. On live for the week to 26 Oct 2026 that was exactly the picture:
+   * one WhatsApp message, status SKIPPED, and every health surface calm.
+   *
+   * So it is counted separately and NEVER folded into `attempted`, `failed` or `byClass`. Every
+   * verdict, streak, window-dead and alert path below is arithmetically untouched by this field:
+   * a config fault still cannot mark a channel dead (`not-armed.ts` and this counter own it),
+   * which is the asymmetry that keeps the dead-channel alert worth reading.
+   *
+   * EXCLUDED, on purpose: WATI switched off or paused (`channels` in /api/health already says
+   * so, and `not-armed.ts` owns it), the local OUTBOUND_ALLOWLIST, and a dry run. None of those
+   * is a fault - they are all somebody's deliberate choice.
+   */
+  skippedConfig: number;
   /** First failure string of the tick, for the alert body and the Console card. */
   firstError: string | null;
 };
@@ -117,6 +141,7 @@ export function emptyTally(): DeliveryTally {
     failed: 0,
     lateFailed: 0,
     byClass: { suppressed: 0, recipient: 0, systemic: 0, config: 0, unknown: 0 },
+    skippedConfig: 0,
     firstError: null,
   };
 }
@@ -124,9 +149,28 @@ export function emptyTally(): DeliveryTally {
 /** One call per send. Mutating on purpose: this sits in a loop and must not allocate. */
 export function tallySend(
   t: DeliveryTally,
-  outcome: { sent: boolean; failed: boolean; error?: string | null },
+  outcome: {
+    sent: boolean;
+    failed: boolean;
+    error?: string | null;
+    /**
+     * For a SKIP only: `"data"` where the engine wanted to send and a fixable configuration
+     * fault stopped it, `"system"` where the channel is simply off or paused. Absent means "do
+     * not count this skip at all" - a dry run or a local allowlist block.
+     */
+    skipKind?: "system" | "data" | null;
+  },
 ): void {
-  if (!outcome.sent && !outcome.failed) return; // a SKIP that never reached the provider
+  if (!outcome.sent && !outcome.failed) {
+    // A SKIP never reached the provider, so it may not touch `attempted` - but a DATA skip is
+    // still a message that did not go out, and the only record of it was a row nobody reads.
+    if (outcome.skipKind === "data") {
+      t.skippedConfig++;
+      // Only if nothing has failed yet: a real provider error is always the more useful headline.
+      if (!t.firstError && outcome.error) t.firstError = outcome.error.slice(0, 300);
+    }
+    return;
+  }
   t.attempted++;
   if (outcome.sent) {
     t.sent++;
@@ -155,6 +199,7 @@ export function mergeTallies(...tallies: (DeliveryTally | null | undefined)[]): 
     out.sent += t.sent;
     out.failed += t.failed;
     out.lateFailed += t.lateFailed;
+    out.skippedConfig += t.skippedConfig ?? 0; // `?? 0` - an older tally crossed JSON without it
     for (const k of Object.keys(out.byClass) as FailureClass[]) out.byClass[k] += t.byClass[k] ?? 0;
     if (!out.firstError && t.firstError) out.firstError = t.firstError;
   }
@@ -205,6 +250,7 @@ function normaliseTally(raw: DeliveryTally): DeliveryTally {
   out.sent = num(raw.sent);
   out.failed = num(raw.failed);
   out.lateFailed = num(raw.lateFailed);
+  out.skippedConfig = num(raw.skippedConfig);
   const by = (raw.byClass ?? {}) as Record<string, unknown>;
   for (const k of Object.keys(out.byClass) as FailureClass[]) out.byClass[k] = num(by[k]);
   out.firstError = typeof raw.firstError === "string" ? raw.firstError.slice(0, 300) : null;
@@ -285,6 +331,12 @@ export type DeliveryWindow = {
   sent: number;
   failed: number;
   recipientFailed: number;
+  /**
+   * Config-faulted skips in the window. Reported, never escalated - see `DeliveryTally`.
+   * Absent on every row written before this field existed, which `coerceDeliveryState` reads
+   * as 0: an unmeasured past is not evidence of a problem.
+   */
+  skippedConfig: number;
 };
 
 export type DeliveryStateJson = {
@@ -301,7 +353,7 @@ export type DeliveryStateJson = {
 };
 
 function emptyWindow(nowIso: string): DeliveryWindow {
-  return { since: nowIso, attempted: 0, sent: 0, failed: 0, recipientFailed: 0 };
+  return { since: nowIso, attempted: 0, sent: 0, failed: 0, recipientFailed: 0, skippedConfig: 0 };
 }
 
 export function emptyDeliveryState(nowIso: string): DeliveryStateJson {
@@ -342,6 +394,7 @@ export function coerceDeliveryState(raw: unknown, nowIso: string): DeliveryState
       sent: num(w.sent),
       failed: num(w.failed),
       recipientFailed: num(w.recipientFailed),
+      skippedConfig: num(w.skippedConfig),
     },
   };
 }
@@ -390,6 +443,7 @@ export function foldDelivery(
   state.window.sent += tally.sent;
   state.window.failed += e.failed;
   state.window.recipientFailed += e.recipientFailed;
+  state.window.skippedConfig += tally.skippedConfig;
 
   if (e.attempted > 0 || tally.lateFailed > 0) state.lastAttemptAt = nowIso;
   if (tally.sent > 0) state.lastSentAt = nowIso;
@@ -484,6 +538,39 @@ export function degradedVerdict(
 }
 
 /**
+ * ARMED, ASKED TO SEND, AND SENDING NOTHING - over configuration rather than an outage.
+ *
+ * `degradedVerdict` cannot see this case: it reasons about `failed / attempted`, and a config
+ * skip is in neither number. So the channel reads `idle`, which is also what a genuinely quiet
+ * week reads as, and the two are the ones that most need telling apart.
+ *
+ * The thresholds mirror `degradedVerdict`'s reasoning rather than inventing new ones:
+ *
+ *   MATERIAL  at least `MIN_SILENT_SKIPS` skips, so one lead with no booked call - which has no
+ *             {{date}} to quote and is correctly skipped - never raises anything.
+ *   DECISIVE  nothing at all got through in the window. One success proves the mapping works for
+ *             somebody, and then the right surface is that recipient's contact card, not a
+ *             channel-wide alarm.
+ *   CURRENT   the window has had time to accumulate, reusing `MIN_WINDOW_AGE_MS`, so a container
+ *             that restarted ten minutes ago is not accused of anything.
+ *
+ * It returns a boolean and feeds a `watch`-severity card. It never contributes to `deadTicks`,
+ * never withholds the dead-man's-switch ping and never pages anyone: the fault is a template
+ * binding in WhatsApp → Settings, and the person who fixes it reads a list, not a page.
+ */
+const MIN_SILENT_SKIPS = 3;
+
+export function silentVerdict(
+  w: { attempted: number; sent: number; skippedConfig: number; since: string },
+  nowMs: number,
+): boolean {
+  if ((w.skippedConfig ?? 0) < MIN_SILENT_SKIPS) return false;
+  if (w.sent > 0) return false;
+  const age = nowMs - Date.parse(w.since);
+  return Number.isFinite(age) && age > MIN_WINDOW_AGE_MS;
+}
+
+/**
  * The copy, in one place, so the home-page card, the Console card and the tests all read the same
  * words. Consequence first and fix second, matching `not-armed.ts` - and the degraded variant
  * deliberately offers no fix, because for Meta's cap there isn't one.
@@ -497,6 +584,9 @@ export function describeDelivery(row: {
   sent: number;
   failed: number;
   recipientFailed: number;
+  /** Config-faulted skips in the window, and whether they are material - see `silentVerdict`. */
+  skippedConfig?: number;
+  silent?: boolean;
   lastError: string | null;
 }): { title: string; body: string } | null {
   const label = CHANNEL_LABELS[row.channel];
@@ -518,6 +608,25 @@ export function describeDelivery(row: {
       body:
         `${row.failed} of ${row.attempted} sends failed in the last 24 h.${cap} ` +
         `Those prospects were not reached and are not retried automatically. History shows who.`,
+    };
+  }
+  /*
+   * Checked LAST, so a channel that is dead or degraded keeps the stronger headline: a provider
+   * that is refusing matters more than a template that is unbound, and both can be true at once.
+   *
+   * Named for what the operator sees - the switch is on, the history is empty - because "armed
+   * but silent" was the phrase that went unsaid for a week on live while every surface read calm.
+   */
+  if (row.silent) {
+    const n = row.skippedConfig ?? 0;
+    const err = row.lastError ? ` The first one said: "${row.lastError}".` : "";
+    return {
+      title: `${label} is switched on but sending nothing`,
+      body:
+        `${n} message${n === 1 ? "" : "s"} should have gone out in the last 24 h and ${n === 1 ? "it was" : "every one was"} ` +
+        `skipped before reaching WhatsApp - an unbound or unapproved template, or a template variable ` +
+        `with no value for the recipient.${err} Nothing is broken at the provider; the binding is in ` +
+        `WhatsApp → Settings, and WhatsApp → History lists exactly who was skipped and why.`,
     };
   }
   return null;

@@ -1345,6 +1345,78 @@ export function coerceSssConfig(value: unknown): SssConfig {
   return parsed.success ? parsed.data : DEFAULT_SSS_CONFIG;
 }
 
+// ───────────────────────── public links (WhatsApp/email template URLs) ─────────────────────────
+
+/**
+ * The public pages our outbound messages send people to - one source for all of them.
+ *
+ * ── WHY THIS EXISTS: THE LINK USED TO LIVE IN THE TEMPLATE BODY ─────────────────────────────
+ * Every stage and SOP template used to carry its URL as literal text, on the reasoning that a
+ * static URL is reviewed by Meta once instead of on every send. That reasoning held right up
+ * until a link needed changing, and then it cost far more than it saved, twice over:
+ *
+ *   1. Meta holds ONE body per (name, language). Editing the URL in an approved body is a
+ *      REPLACEMENT in review, and the touchpoint sends NOTHING until it clears - silently, as a
+ *      logged skip. So a link change took a prospect-facing message offline for days.
+ *   2. Nothing kept the copies in step. The SSS link alone had drifted into THREE different
+ *      values - `SSS_URL` here, a literal in `sendSssRescheduled`, and `${base}/sss` in the
+ *      test-variable pool - which is what the 26/10/2026 template review flagged ("we have to
+ *      check with the Link as we have 3 links currently").
+ *
+ * So the link is now a VARIABLE in the body (`{{apply_url}}`, `{{sss_url}}`, `{{workshop_url}}`)
+ * and this config is what fills it. Changing where a message points is a settings edit on
+ * WhatsApp → Settings; no re-submission, no outage, and one value cannot drift from another
+ * because there is only one of each.
+ *
+ * ⚠ EVERY FIELD MUST BE NON-EMPTY, AND THAT IS LOAD-BEARING. `sendWhatsApp` SKIPS a send whose
+ * declared variable resolves to nothing, so a blank link here would not deliver a message
+ * without a link - it would deliver no message at all. That is why the coercer below repairs
+ * field-by-field against the shipped defaults instead of all-or-nothing: one malformed URL in
+ * the stored row must not blank the other two.
+ *
+ * ⚠ THE EMAIL HALF READS THE SAME VALUES. `lib/stage-messages.ts` sends an email beside every
+ * stage WhatsApp; two halves of one touchpoint must never send people to two different places.
+ */
+const publicUrl = z
+  .string()
+  .trim()
+  .min(1, "Required - a blank link stops the message sending at all")
+  .max(300)
+  .url("Must be a full URL")
+  .refine((u) => u.startsWith("https://"), "Must start with https:// - Meta rejects plain http");
+
+export const publicLinksConfigSchema = z.object({
+  /** The opt-in page where a prospect books their Personalized Discovery Call. */
+  applyUrl: publicUrl,
+  /** The Solution Strategy Session booking/rebooking page. */
+  sssUrl: publicUrl,
+  /** The workshop self-registration page. */
+  workshopUrl: publicUrl,
+});
+
+export type PublicLinksConfig = z.infer<typeof publicLinksConfigSchema>;
+
+export const DEFAULT_PUBLIC_LINKS_CONFIG: PublicLinksConfig = {
+  applyUrl: "https://optin.b2consultants.de/apply",
+  sssUrl: "https://optin.b2consultants.de/sss",
+  workshopUrl: "https://workshop.b2consultants.de/self-reg-1",
+};
+
+/**
+ * Field-by-field, not all-or-nothing - see the non-empty warning above. A stored row with one
+ * bad URL keeps its two good ones and repairs only the broken field.
+ */
+export function coercePublicLinksConfig(value: unknown): PublicLinksConfig {
+  const parsed = publicLinksConfigSchema.safeParse(value);
+  if (parsed.success) return parsed.data;
+  const row = (value ?? {}) as Record<string, unknown>;
+  const field = (key: keyof PublicLinksConfig) => {
+    const one = publicUrl.safeParse(row[key]);
+    return one.success ? one.data : DEFAULT_PUBLIC_LINKS_CONFIG[key];
+  };
+  return { applyUrl: field("applyUrl"), sssUrl: field("sssUrl"), workshopUrl: field("workshopUrl") };
+}
+
 // ───────────────────────────── goals ─────────────────────────────
 
 export const goalMetricSchema = z.enum(GOAL_METRICS as unknown as [string, ...string[]]);
@@ -1714,6 +1786,50 @@ export const DEFAULT_SPEED_TO_LEAD_ALERT: SpeedToLeadAlertConfig = {
 export function coerceSpeedToLeadAlert(value: unknown): SpeedToLeadAlertConfig {
   const parsed = speedToLeadAlertSchema.safeParse(value);
   return parsed.success ? parsed.data : DEFAULT_SPEED_TO_LEAD_ALERT;
+}
+
+// ───────────────────────── improvements ─────────────────────────
+
+/**
+ * WHO HEARS ABOUT A REPORTED PROBLEM.
+ *
+ * The Report button itself needs no switch and has none: it writes one row and sends nothing
+ * outside the org, so shipping it disarmed would reproduce the very failure this module exists to
+ * surface - a built feature nobody can tell is switched off. What IS configurable is the
+ * notification, because that leaves the building.
+ *
+ * `developerEmail` is config and not an env var on purpose. The WhatsApp link variables were
+ * moved out of env for the same reason: an env var means a redeploy to change who gets the mail,
+ * which is how a notification channel ends up pointing at somebody who has left. Empty means
+ * "in-app only", which is a working configuration, not a broken one.
+ */
+export const improvementsSchema = z.object({
+  developerEmail: z.union([emailAddress, z.literal("")]),
+  /** Email the developer the moment a BLOCKING report lands. Lesser ones ride the daily digest. */
+  emailOnBlocking: z.boolean(),
+  /** One summary of everything else, on the existing daily tick. */
+  dailyDigest: z.boolean(),
+});
+
+export type ImprovementsConfig = z.infer<typeof improvementsSchema>;
+
+/**
+ * Ships with no address, both toggles ON.
+ *
+ * That combination is deliberate: with no address nothing is sent at all, so the toggles are
+ * harmless until somebody fills one field in - and once they do, it works without a second visit
+ * to find two switches. The opposite default (an address, sending off) is the shape that produces
+ * "I set it up and nothing happened".
+ */
+export const DEFAULT_IMPROVEMENTS: ImprovementsConfig = {
+  developerEmail: "",
+  emailOnBlocking: true,
+  dailyDigest: true,
+};
+
+export function coerceImprovements(value: unknown): ImprovementsConfig {
+  const parsed = improvementsSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_IMPROVEMENTS;
 }
 
 // ───────────────────────── dunning ladder ─────────────────────────

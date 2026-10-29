@@ -252,6 +252,17 @@ uncached queries and belong to no single screen.
 
 These have each cost a day at least once.
 
+**`npm run deploy:preflight` checks most of this table for you.** It asks the questions below that
+have definite answers - is the Docker daemon actually answering (not just "is Docker Desktop
+running"), are we on `master`, is the tree clean, is anything unpushed, does `tsconfig.json`
+include a path that no longer exists, how many `b2-app` tags are piled up locally - and exits
+non-zero if any of them is wrong. It starts Docker Desktop and waits up to three minutes if the
+daemon is down, which is the fix for the three consecutive deploys that opened that way.
+
+Docker Desktop's own "start when you sign in" is deliberately left OFF: nearly every startup item
+on this machine is disabled, which is a considered choice, and a weekly deploy is a poor reason to
+overturn it. The daemon is needed at deploy time, so that is where the preflight starts it.
+
 | Trap | What to do |
 |---|---|
 | **`.env` points at LIVE Supabase** | Never `prisma migrate deploy` with a shell-set `DATABASE_URL` — `.env` wins. Local Postgres is on `:5435` via `.env.local`. |

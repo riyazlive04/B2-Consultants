@@ -28,6 +28,7 @@ import {
   getSssPatternConfig,
   getSssConfig,
   getBookingRulesConfig,
+  getImprovementsConfig,
   getSpeedToLeadAlertConfig,
   getDunningConfig,
   getAttendanceConfig,
@@ -69,6 +70,7 @@ import { AvailabilityPanel } from "./_components/AvailabilityPanel";
 import { ConfirmLoopPanel } from "./_components/ConfirmLoopPanel";
 import { MaintenancePanel } from "./_components/MaintenancePanel";
 import { AlertsPanel } from "./_components/AlertsPanel";
+import { ImprovementsPanel } from "./_components/ImprovementsPanel";
 import { LeaderboardPanel } from "./_components/LeaderboardPanel";
 import { StudentLifecyclePanel } from "./_components/StudentLifecyclePanel";
 import { cronHealth } from "@/server/uptime";
@@ -207,6 +209,7 @@ export default async function ConsolePage() {
     paymentTypes,
     invoiceSettings,
     speedToLeadConfig,
+    improvementsConfig,
     dunningConfig,
     attendanceConfig,
     leaderboardConfig,
@@ -239,6 +242,7 @@ export default async function ConsolePage() {
     getPaymentTypesConfig(),
     getInvoiceSettings(),
     getSpeedToLeadAlertConfig(),
+    getImprovementsConfig(),
     getDunningConfig(),
     getAttendanceConfig(),
     getLeaderboardConfig(),
@@ -579,6 +583,15 @@ export default async function ConsolePage() {
                     // same story the board tells.
                     label: "Why students stop",
                     content: <StudentLifecyclePanel config={studentLifecycleConfig} />,
+                  },
+                  {
+                    // Beside Alerts & Chasing: both answer "who does the app tell, and when".
+                    // The difference is the direction - those rules talk to customers, this one
+                    // tells us what a customer or a colleague could not get done.
+                    label: "Improvements",
+                    content: (
+                      <ImprovementsPanel config={improvementsConfig} emailArmed={emailArmed} />
+                    ),
                   },
                   {
                     label: "Maintenance",

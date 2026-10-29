@@ -154,6 +154,26 @@ export const CAPABILITIES = [
    * `pipeline.configure`: someone who may reassign leads should not thereby be able to
    * silently re-tune what "qualified" means for everyone.
    */
+  /**
+   * Working the improvements queue - the one capability meant to be granted to somebody who holds
+   * nothing else.
+   *
+   * The developer is not a member of the business: they need to read reports, move them through
+   * the states and reply to the person who filed one, and they need no access to money, leads or
+   * students to do it. Granting this to a `USER` seat produces exactly that, with the activity
+   * log attributing every move - which is a better answer than a shared admin login or a
+   * token-signed external view.
+   *
+   * Filing a report is NOT gated by this, or by anything beyond having a session. See the
+   * `improvements` entry in sections.ts.
+   */
+  {
+    key: "improvements.triage",
+    name: "Triage improvements",
+    description: "Work the queue of reported problems",
+    actions: "improvement-actions (status, re-kind, comment, dev note, archive) - filing a report is ungated",
+    roles: ["ADMIN"],
+  },
   {
     key: "qualification.manage",
     name: "Edit qualification questions",

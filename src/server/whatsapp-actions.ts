@@ -31,6 +31,8 @@ import {
   type SendOutcome,
 } from "./whatsapp";
 import { logActivity, diffFields } from "./activity-log";
+import { publicLinksConfigSchema } from "@/lib/config-schema";
+import { getPublicLinksConfig, writePublicLinksConfig } from "./founder-config";
 
 /**
  * Server actions for the WhatsApp layer. Every action re-guards (the page guard doesn't protect
@@ -427,6 +429,40 @@ export async function saveWatiSettings(form: FormData): Promise<WhatsAppActionRe
   const confirmLoop = await prepareConfirmLoopSave(form, session, "WhatsApp settings");
   if (!confirmLoop.ok) return { ok: false, message: confirmLoop.error };
 
+  /**
+   * ── The public links, saved from the same form ──────────────────────────────────────
+   * Also validated before anything is written, and for a sharper reason than the loop above: a
+   * link that does not survive `publicLinksConfigSchema` must never reach the row, because the
+   * templates DECLARE these as variables and `sendWhatsApp` skips any send whose variable
+   * resolves to nothing. A rejected URL saved as a blank would not send a message without a
+   * link - it would stop that touchpoint sending at all, silently.
+   *
+   * Only written when the form actually rendered the fields. `form.get` returns null for a
+   * caller that does not (the Bookings door onto the confirm loop posts the same action), and
+   * rebuilding the config from an absent field would wipe all three links.
+   */
+  const linksPosted = form.get("applyUrl") !== null;
+  const parsedLinks = linksPosted
+    ? publicLinksConfigSchema.safeParse({
+        applyUrl: String(form.get("applyUrl") ?? "").trim(),
+        sssUrl: String(form.get("sssUrl") ?? "").trim(),
+        workshopUrl: String(form.get("workshopUrl") ?? "").trim(),
+      })
+    : null;
+  if (parsedLinks && !parsedLinks.success) {
+    const issue = parsedLinks.error.issues[0];
+    const field = String(issue?.path?.[0] ?? "link");
+    const label =
+      field === "applyUrl"
+        ? "Discovery Call booking page"
+        : field === "sssUrl"
+          ? "Solution Strategy Session page"
+          : field === "workshopUrl"
+            ? "Workshop registration page"
+            : field;
+    return { ok: false, message: `${label}: ${issue?.message ?? "is not a valid link"}` };
+  }
+
   await writeWatiSettings(settings);
   const diff = diffFields(before, settings);
   if (diff.changed.length) {
@@ -442,6 +478,24 @@ export async function saveWatiSettings(form: FormData): Promise<WhatsAppActionRe
 
   // Written only now that the WATI half is safely stored (it was validated before either write).
   if (confirmLoop.ok && confirmLoop.write) await confirmLoop.write();
+
+  // Same ordering, same reason. Logged separately because "where our messages point" is a
+  // different question from "how our cadence is set", and an answer to it belongs in the trail.
+  if (parsedLinks?.success) {
+    const beforeLinks = await getPublicLinksConfig();
+    const linkDiff = diffFields(beforeLinks, parsedLinks.data);
+    if (linkDiff.changed.length) {
+      await writePublicLinksConfig(parsedLinks.data);
+      await logActivity(session, {
+        action: "whatsapp.links.update",
+        section: "whatsapp",
+        entityType: "AppSetting",
+        entityId: "publicLinks",
+        summary: `Updated the public links - changed ${linkDiff.changed.join(", ")}`,
+        meta: { changed: linkDiff.changed, before: linkDiff.before, after: linkDiff.after },
+      });
+    }
+  }
 
   revalidatePath("/whatsapp");
   return { ok: true, message: "WhatsApp settings saved" };

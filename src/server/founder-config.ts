@@ -31,6 +31,7 @@ import {
   coerceMaintenanceConfig,
   coerceScheduledReportConfig,
   coerceFinancePostingConfig,
+  coerceImprovements,
   coerceSpeedToLeadAlert,
   coerceDunningConfig,
   coerceAttendanceConfig,
@@ -43,6 +44,7 @@ import {
   coerceCashTargetsConfig,
   coerceExpenseCategoriesConfig,
   coerceZoomConfig,
+  coercePublicLinksConfig,
   ZOOM_SETTINGS_KEY,
   DEFAULT_AGREEMENT_WORKFLOW,
   DEFAULT_CALL_DISTRIBUTION,
@@ -60,12 +62,14 @@ import {
   DEFAULT_MAINTENANCE_CONFIG,
   DEFAULT_SCHEDULED_REPORT_CONFIG,
   DEFAULT_FINANCE_POSTING_CONFIG,
+  DEFAULT_IMPROVEMENTS,
   DEFAULT_SPEED_TO_LEAD_ALERT,
   DEFAULT_DUNNING_CONFIG,
   DEFAULT_ATTENDANCE_CONFIG,
   DEFAULT_CASH_TARGETS_CONFIG,
   DEFAULT_EXPENSE_CATEGORIES_CONFIG,
   DEFAULT_ZOOM_CONFIG,
+  DEFAULT_PUBLIC_LINKS_CONFIG,
   type AgreementWorkflowConfig,
   type CallDistributionConfig,
   type BookingRulesConfig,
@@ -76,6 +80,7 @@ import {
   type DailyLogTargets,
   type SavedSignature,
   type SssConfig,
+  type PublicLinksConfig,
   type BookOrderConfig,
   type PipelineConfig,
   type TutorFeeConfig,
@@ -86,6 +91,7 @@ import {
   type MaintenanceConfig,
   type ScheduledReportConfig,
   type FinancePostingConfig,
+  type ImprovementsConfig,
   type SpeedToLeadAlertConfig,
   type DunningConfig,
   type AttendanceConfig,
@@ -138,6 +144,8 @@ export const ATTENDANCE_KEY = "attendance";
 export const STUDENT_LIFECYCLE_KEY = "studentLifecycle";
 export const CASH_TARGETS_KEY = "cashTargets";
 export const EXPENSE_CATEGORIES_KEY = "expenseCategories";
+export const PUBLIC_LINKS_KEY = "publicLinks";
+export const IMPROVEMENTS_KEY = "improvements";
 /** Aliased from config-schema, where it lives so the engine path can import it alone. */
 export const ZOOM_KEY = ZOOM_SETTINGS_KEY;
 
@@ -254,6 +262,28 @@ export async function writeZoomConfig(config: ZoomConfig): Promise<void> {
   await prisma.appSetting.upsert({
     where: { key: ZOOM_KEY },
     create: { key: ZOOM_KEY, value: config as unknown as Prisma.InputJsonValue },
+    update: { value: config as unknown as Prisma.InputJsonValue },
+  });
+  revalidateFounderConfig();
+}
+
+/**
+ * The public pages outbound messages link to - the single source behind `{{apply_url}}`,
+ * `{{sss_url}}` and `{{workshop_url}}`, and behind the stage emails' own links.
+ *
+ * Lazy like every other document here, and the default is deliberately a WORKING set of links
+ * rather than blanks: an unresolved template variable SKIPS the send outright, so "no row yet"
+ * has to mean "the shipped links" and never "no link". See `publicLinksConfigSchema`.
+ */
+export const getPublicLinksConfig = cache(async (): Promise<PublicLinksConfig> => {
+  const row = await readSetting(PUBLIC_LINKS_KEY);
+  return row ? coercePublicLinksConfig(row.value) : DEFAULT_PUBLIC_LINKS_CONFIG;
+});
+
+export async function writePublicLinksConfig(config: PublicLinksConfig): Promise<void> {
+  await prisma.appSetting.upsert({
+    where: { key: PUBLIC_LINKS_KEY },
+    create: { key: PUBLIC_LINKS_KEY, value: config as unknown as Prisma.InputJsonValue },
     update: { value: config as unknown as Prisma.InputJsonValue },
   });
   revalidateFounderConfig();
@@ -423,6 +453,22 @@ export async function writeSpeedToLeadAlertConfig(config: SpeedToLeadAlertConfig
   revalidateFounderConfig();
 }
 
+/** Who hears about a reported problem - read by server/improvement-notify.ts. */
+export const getImprovementsConfig = cache(async (): Promise<ImprovementsConfig> => {
+  const row = await readSetting(IMPROVEMENTS_KEY);
+  return row ? coerceImprovements(row.value) : DEFAULT_IMPROVEMENTS;
+});
+
+export async function writeImprovementsConfig(config: ImprovementsConfig): Promise<void> {
+  const value = config as unknown as Prisma.InputJsonValue;
+  await prisma.appSetting.upsert({
+    where: { key: IMPROVEMENTS_KEY },
+    create: { key: IMPROVEMENTS_KEY, value },
+    update: { value },
+  });
+  revalidateFounderConfig();
+}
+
 /** The three-stage payment-chase ladder - read by server/dunning.ts on the daily tick. */
 export const getDunningConfig = cache(async (): Promise<DunningConfig> => {
   const row = await readSetting(DUNNING_KEY);
@@ -566,7 +612,7 @@ export const getDailyLogTargets = cache(async (): Promise<DailyLogTargets> => {
 
 /**
  * The founder's stored countersignature, per user. Not a `cache()` read: it is only ever fetched
- * inside an issue action, and caching a ~500 KB data URL across a request buys nothing.
+ * inside an improvement action, and caching a ~500 KB data URL across a request buys nothing.
  */
 export const savedSignatureKey = (userId: string) => `agreement.signature.${userId}`;
 

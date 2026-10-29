@@ -1,0 +1,18 @@
+[Unit]
+Description=B2 Consultants — nightly Postgres backup (02:30 IST)
+
+[Timer]
+# 21:00 UTC = 02:30 Asia/Kolkata. Stated in UTC on purpose: this box's cron CONTAINER runs
+# TZ=Asia/Kolkata while systemd here is UTC, and writing one in the other's terms is how an
+# end-of-day job ends up firing 5.5 hours out. 02:30 IST is after the daily-log cutoff and well
+# clear of the telecaller workday.
+OnCalendar=*-*-* 21:00:00 UTC
+# Spread the start a little so a backup never begins at the same instant as the cron container's
+# own tick, both competing for the same 2 vCPU.
+RandomizedDelaySec=5min
+# If the box was off or rebooting at 21:00, run on next boot rather than silently skipping a day.
+Persistent=true
+Unit=b2-backup.service
+
+[Install]
+WantedBy=timers.target

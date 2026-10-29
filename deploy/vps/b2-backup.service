@@ -1,0 +1,20 @@
+[Unit]
+Description=B2 Consultants — verified nightly Postgres backup
+Documentation=file:///root/b2/docs/SELFHOSTED_SUPABASE_MIGRATION.md
+# Without this the unit can start during early boot before dockerd is accepting connections,
+# which fails as "container not healthy" and looks like a database problem rather than ordering.
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/b2-backup.sh
+# A dump is single-threaded and this box has 2 vCPU shared with Next.js SSR. Nice it so a backup
+# can never be the reason a user's page is slow.
+Nice=10
+IOSchedulingClass=idle
+# The script is idempotent and a transient docker hiccup should not skip a whole night.
+Restart=on-failure
+RestartSec=5min
+# Three tries, then leave the unit failed so `systemctl --failed` shows it.
+StartLimitBurst=3

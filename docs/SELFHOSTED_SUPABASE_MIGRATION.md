@@ -529,27 +529,54 @@ Back it up separately.
 
 ---
 
-## 13. Backups — now genuinely yours
+## 13. Backups — ✅ DONE 29 Oct 2026
 
-This is the single biggest thing hosted Supabase was doing for you. Until it is done, the position
-is worse than before the move.
+Scheduled, verified, on the box. Source of truth is `deploy/vps/`; installed as:
 
-`scripts/backup-verify.mjs` already does the right job — dump, restore into a scratch database,
-count rows, fail loudly — but it runs from the laptop against the pooler. Move it to the box:
+| | |
+|---|---|
+| Script | `/usr/local/bin/b2-backup.sh` |
+| Units | `b2-backup.service` + `b2-backup.timer` (enabled) |
+| Schedule | daily **21:00 UTC = 02:30 IST**, `Persistent=true`, ±5 min jitter |
+| Dumps | `/root/b2-backups/b2-<utc-stamp>.dump`, mode 600, dir 700 |
+| Retention | **30 days**, pruned automatically each run |
+| Last result | `/root/b2-backups/.last-status` |
 
-- Point it at `127.0.0.1:5433` (the loopback-published `db`).
-- Schedule it on the VPS (systemd timer or the existing cron container), not on a laptop that
-  travels.
-- **Copy the dump off the box.** A backup on the same disk as the database is not a backup. The
-  box has 92 GB free and a dump is ~2 MB, so retention is a non-issue; getting it *elsewhere* is
-  the point.
-- Include `volumes/storage` if §12 is ever enabled.
-- `PGDATA` is a bind mount at `/root/supabase/docker/volumes/db/data`. **Never run
-  `docker compose down -v` in that directory** — and know that even without `-v`, that path is a
-  directory on disk that an `rm -rf` of the checkout would take with it.
+**It verifies by restoring, not by exiting 0.** Each run dumps `--schema=public` with the
+container's own version-matched `pg_dump`, creates a scratch database, restores into it under
+`--single-transaction`, counts every row in both, and fails if they differ. The scratch database is
+dropped on every exit path including a crash. First run: 2,683,338 bytes, **5,741 rows verified**.
 
-Verify a restore before you believe any of it. "Backups are enabled" is not a backup —
-`OPERABILITY_PLAN.md` made that point and it is more true now.
+This caught a real bug on its first run rather than reporting a green backup: a `--schema=public`
+dump carries `CREATE SCHEMA public`, which collides with the one every new database inherits from
+`template1`, aborting the restore under `--single-transaction`. The script now drops `public` in
+the scratch database first — which is also a truer test, since it rebuilds the schema from the
+dump the way a real recovery into a fresh stack would.
+
+Retention was tested at the boundary, not assumed: fabricated dumps aged 29 / 31 / 60 days gave
+survive / delete / delete.
+
+**To restore for real:** bring a clean stack up, then
+
+```bash
+docker exec supabase-db psql -U postgres -c 'DROP SCHEMA public CASCADE;'
+docker exec -i supabase-db pg_restore -U postgres -d postgres \
+  --no-owner --no-privileges --single-transaction < /root/b2-backups/b2-<stamp>.dump
+```
+
+`auth`/`storage`/`realtime`/`supabase_migrations` are deliberately **not** in the dump — they
+belong to the stack and it recreates them (§3a).
+
+### ⚠ The one limit of this, stated plainly
+
+The dumps are on the **same disk as the database**, as requested. That covers the failures that
+actually happen — a bad migration, a wrong `DELETE`, a dropped table. It does **not** cover losing
+the box or the disk, because the only copy dies with it. Disk is at 21% of 96 GB and a dump is
+2.7 MB, so an off-box copy costs essentially nothing; it remains the highest-value thing left.
+
+Also: `PGDATA` is a bind mount at `/root/supabase/docker/volumes/db/data`. **Never run
+`docker compose down -v` there** — and even without `-v`, an `rm -rf` of the checkout takes the
+database with it. Include `volumes/storage` in the backup if §12 is ever enabled.
 
 ---
 
@@ -601,9 +628,10 @@ Verify a restore before you believe any of it. "Backups are enabled" is not a ba
 
 Still open, in priority order:
 
-1. **§13 backups.** The only remaining regression against hosted. `npm run db:backup` works
-   against the new database through the tunnel (verified, 1.67 MB), but it is still manual and
-   laptop-side. Nothing takes a scheduled backup of production right now.
-2. **Rotate the hosted credentials** and keep that project paused (§14).
+1. **An off-box copy of the backups.** Scheduled verified backups are now running on the VPS with
+   30-day retention (§13), but they share a disk with the database. This is the last real gap.
+2. **Pause the hosted project** — requires a Supabase management token or the dashboard; it cannot
+   be done from this box. Keep it **paused, not deleted**: it is the rollback (§11). Rotate its
+   credentials while you are in there.
 3. The `retention` cron reads stale (~41 h). Pre-existing, unrelated to this move — same class of
    gap as the `agreements` entry missing from `STALE_AFTER_MINUTES`.

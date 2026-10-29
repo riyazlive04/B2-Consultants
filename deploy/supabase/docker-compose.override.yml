@@ -1,0 +1,181 @@
+# B2 Consultants — hardening overlay for the self-hosted Supabase stack.
+#
+# Copy this to the upstream checkout as `docker-compose.override.yml`:
+#
+#     /root/supabase/docker/docker-compose.override.yml
+#
+# ...and then EDIT `.env`, because the obvious assumption is wrong:
+#
+#     COMPOSE_FILE=docker-compose.yml:docker-compose.override.yml
+#
+# ── TRAP 1: a file named docker-compose.override.yml is NOT auto-loaded here ──────────────────
+# Normally Compose picks it up with no flags. Upstream's `.env` ships `COMPOSE_FILE=`
+# docker-compose.yml`, and setting COMPOSE_FILE replaces the whole search — auto-override
+# included. Drop this file in place without editing `.env` and `docker compose up -d` reports
+# complete success while applying NONE of it: Postgres and the Data API stay on 0.0.0.0 and
+# nothing has a memory limit. There is no warning, because from Compose's point of view you
+# simply have an unused file in a directory.
+#
+# (The separator is `:` on Linux. It is `;` on Windows — COMPOSE_PATH_SEPARATOR — so a colon
+# copied onto a Windows laptop fails with "cannot find the file", naming both files as one.)
+#
+# Verify, always, that what you think is applied is applied:
+#     docker compose config | grep -c mem_limit        # expect 11, not 0
+#     docker compose config | grep -B2 'published:'    # every one must carry host_ip 127.0.0.1
+#
+# ── TRAP 2: `ports:` MERGES, it does not replace ──────────────────────────────────────────────
+# Compose replaces `command` and `networks` but APPENDS list entries for `ports`. So binding a
+# service to 127.0.0.1 here does not unbind upstream's 0.0.0.0 — you get both, and the public
+# one still wins for anyone scanning the box. That is why every ports block below carries the
+# `!override` tag (Compose ≥ 2.24). Removing the tag silently re-exposes the port.
+#
+# See docs/SELFHOSTED_SUPABASE_MIGRATION.md.
+#
+# ─────────────────────────── WHAT THIS FILE IS FOR ───────────────────────────
+#
+# Upstream's compose is written to be `git clone && up -d` on a laptop. Three of its defaults are
+# actively dangerous on a public VPS, and this overlay exists to correct them without forking the
+# file (so `git pull` still upgrades the stack):
+#
+#   1. `api-gw` publishes 8000 on 0.0.0.0. That is Studio AND the whole Data API, on the public
+#      internet, gated only by basic auth. Here it is bound to 127.0.0.1.
+#   2. `supavisor` publishes Postgres itself on 0.0.0.0:5432 and 0.0.0.0:6543. Here: loopback.
+#   3. Nothing has a memory limit. This box has 2 vCPU, 7.7 GB and NO SWAP, and it also runs the
+#      Next.js app. One unbounded container means the kernel picks an OOM victim, and the kernel
+#      does not know that `b2-app-1` is the thing customers are looking at.
+#
+# ─────────────────────────── THE MEMORY BUDGET ───────────────────────────
+#
+#   db 1536  supavisor 384  realtime 384  studio 384  storage 256  auth 256  rest 256
+#   meta 192  imgproxy 192  functions 256  api-gw 192          = ~4.3 GB
+#   + app ~500  + caddy/cron ~50                               = ~4.9 GB of 7.7 GB
+#
+# That leaves ~2.8 GB of headroom, which sounds generous and is not: Postgres will use page cache
+# well beyond shared_buffers, and `docker build` is NOT to be run on this box (it never was —
+# images are built on the laptop and shipped). Add swap before the first `up -d` regardless; the
+# runbook makes it step 1. A limit turns an OOM into one restarting container with a clear reason
+# in `docker inspect`, instead of a random process disappearing.
+
+services:
+  # ─────────────────── the only service the app actually talks to ───────────────────
+  db:
+    # Joins the app's network IN ADDITION to Supabase's own.
+    #
+    # Compose REPLACES this list rather than merging it, so `default` must be repeated here. Drop
+    # it and the other ten services lose their database while `db` itself looks perfectly healthy
+    # — a failure that reads like "Supabase is broken" and is actually one missing line.
+    networks:
+      - default
+      - b2_data
+    ports:
+      # Loopback only: for `prisma migrate deploy`, pg_dump and psql from the laptop over an SSH
+      # tunnel. 5433 on the host, not 5432, so it can never be confused with supavisor's published
+      # port below — they are different things and the difference matters for migrations.
+      - "127.0.0.1:5433:5432"
+    mem_limit: 1536m
+    shm_size: 256mb # Postgres parallel workers use /dev/shm; the 64m default causes random
+      # "could not resize shared memory segment" under concurrent queries.
+    command:
+      # Upstream's two flags are REPLACED, not extended, so both are repeated verbatim. Dropping
+      # `config_file` makes Postgres boot on its built-in defaults and silently ignore every
+      # Supabase-provided setting; dropping `log_min_messages=fatal` fills the log with realtime's
+      # polling queries.
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+      - -c
+      - log_min_messages=fatal
+      # ── tuning for 2 vCPU / 1.5 GB container, OLTP, ~2k rows ──
+      # The dataset is tiny (a 1.7 MB dump) so it lives entirely in cache; these settings are
+      # about concurrency and planner sanity, not about fitting data in RAM.
+      - -c
+      - shared_buffers=384MB
+      - -c
+      - effective_cache_size=1GB
+      - -c
+      - work_mem=8MB # × max_connections worst case; deliberately modest
+      - -c
+      - maintenance_work_mem=128MB
+      - -c
+      - max_connections=120 # Prisma pool + supavisor + the ten Supabase services
+      - -c
+      - random_page_cost=1.1 # NVMe, not a spinning disk — the 4.0 default mis-costs index scans
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - max_worker_processes=4
+      - -c
+      - max_parallel_workers=2 # 2 vCPU: more parallel workers than cores just adds contention
+      - -c
+      - max_parallel_workers_per_gather=1
+      # Durability stays at the default `synchronous_commit=on`. This is a finance ledger with
+      # append-only journal tables; trading a fsync for throughput on a box with no replica is
+      # exactly the wrong trade.
+
+  # ─────────────────── the front door ───────────────────
+  api-gw:
+    # `!override` is NOT decoration — see the header. Without it Compose APPENDS to upstream's
+    # list and the public 0.0.0.0 binding survives alongside this one.
+    ports: !override
+      # THE important line in this file. Upstream is `8000:8000`, i.e. 0.0.0.0, i.e. Studio and
+      # the Data API answer to the internet. Studio has no login of its own — Envoy's basic auth
+      # with DASHBOARD_USERNAME/PASSWORD is the entire gate, with no rate limit and no lockout.
+      #
+      # Bound to loopback, reach it with:  ssh -N -L 8000:127.0.0.1:8000 root@<vps>
+      # then http://localhost:8000 in a browser.
+      #
+      # If you later want it on a real domain, do NOT change this back. Add a Caddy site block
+      # that reverse-proxies to it, so TLS and access control stay in one place. The runbook has
+      # the block, commented out.
+      - "127.0.0.1:8000:8000"
+    mem_limit: 192m
+
+  # ─────────────────── the rest: capped, otherwise untouched ───────────────────
+  supavisor:
+    ports: !override
+      # Also loopback. The app does NOT go through supavisor — see the runbook — but leaving
+      # Postgres published on 0.0.0.0 because a pooler is in front of it is still publishing
+      # Postgres.
+      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:6543:6543"
+    mem_limit: 384m
+
+  studio:
+    mem_limit: 384m
+
+  realtime:
+    # Unused by this app (no supabase-js anywhere). It stays because the stack is deployed whole,
+    # but it is capped tightly: an idle BEAM VM will happily grow into whatever it is given.
+    mem_limit: 384m
+
+  storage:
+    # The one optional service with a real future here: it is the marketing site's media origin,
+    # backed by STORAGE_BACKEND=file at ./volumes/storage. That path is on the 92 GB root disk and
+    # is NOT in the Postgres dump — the runbook's backup step covers it separately.
+    mem_limit: 256m
+
+  auth:
+    mem_limit: 256m
+
+  rest:
+    # PostgREST is why scripts/supabase-lockdown.sql is load-bearing rather than belt-and-braces:
+    # it is a live HTTP reader of the `public` schema. Re-run the lockdown after every
+    # `prisma migrate deploy`, exactly as on hosted Supabase.
+    mem_limit: 256m
+
+  meta:
+    mem_limit: 192m
+
+  imgproxy:
+    mem_limit: 192m
+
+  functions:
+    mem_limit: 256m
+
+networks:
+  b2_data:
+    # Created once by hand, shared with the app's compose project:
+    #     docker network create b2_data
+    # `external` means neither project owns it, so `docker compose down` on either side cannot
+    # take the other's networking with it.
+    external: true

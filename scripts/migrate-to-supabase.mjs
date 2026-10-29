@@ -287,6 +287,23 @@ execFileSync(
   [
     toLibpqUrl(SOURCE_URL),
     "--data-only",
+    // ONLY `public`. This is not an optimisation - without it the migration cannot work in
+    // this direction at all.
+    //
+    // When the source was a plain local Postgres, `public` was effectively all there was. With
+    // a SUPABASE source, --data-only also dumps that project's own internal schemas - `auth`,
+    // `storage`, `realtime`, `supabase_migrations` - which are owned by `supabase_admin` and
+    // managed by the target stack's OWN migrations. Loading them produces:
+    //
+    //     ERROR: permission denied for table schema_migrations
+    //
+    // and the whole transaction rolls back. Even with permission it would be WRONG: those rows
+    // describe the source's gotrue/storage/realtime state, and overwriting a different stack's
+    // internal bookkeeping with it is how you get a Supabase install that no longer boots.
+    //
+    // The app lives entirely in `public` (Prisma connects with ?schema=public), so `public` is
+    // both necessary and sufficient. Auth is Better Auth in `public`, not gotrue's `auth`.
+    "--schema=public",
     "--no-owner",
     "--no-privileges",
     "--no-comments",

@@ -4,10 +4,26 @@
 #   app   → the Next standalone server, private, never published to the host
 #   cron  → ticks /api/cron/* over the private network (the app has no clock)
 #
-# THE DATABASE IS NOT HERE. It is Supabase (ap-southeast-1). Adding a `db` service
-# would silently create an EMPTY database while looking like it worked.
+# THE DATABASE IS NOT IN THIS FILE, BUT IT IS NOW ON THIS BOX.
+#
+# It used to be hosted Supabase in ap-southeast-1. It is now a SELF-HOSTED Supabase stack
+# living in its own compose project at /root/supabase/docker, reached over the shared
+# external network `b2_data`. See docs/SELFHOSTED_SUPABASE_MIGRATION.md.
+#
+# The old warning here said adding a `db` service would silently create an EMPTY database
+# while looking like it worked. That is STILL TRUE and still the reason there is no `db`
+# service below: the database is owned by the other compose project, and a second one
+# declared here would start a blank Postgres that the app would happily connect to and
+# report healthy against. If `db` ever appears in this file, something has gone wrong.
 #
 # Usage:  docker compose -f docker-compose.vps.yml --env-file .env.production up -d
+#
+# Order matters on a cold boot. This project does not (and cannot) `depends_on` a service in
+# another project, so bring the database up first:
+#     cd /root/supabase/docker && docker compose up -d
+#     cd /root/b2            && docker compose -f docker-compose.vps.yml --env-file .env.production up -d
+# Out of order is survivable — `app` fails its healthcheck, caddy withholds traffic, and it
+# recovers once the database answers — but it will look like an outage for a minute.
 #
 # ---------------------------------------------------------------------------
 # WHY THERE IS NO `migrate` SERVICE HERE
@@ -87,16 +103,69 @@ services:
       timeout: 10s
       start_period: 40s
       retries: 3
+    networks:
+      # `default` keeps caddy and cron able to reach this container by the name `app`.
+      # `b2_data` is how it reaches the self-hosted database.
+      #
+      # Both must be listed. Compose REPLACES this list rather than merging it, so naming only
+      # b2_data would silently cut caddy off from the app — a 502 that looks like the app
+      # crashed when in fact it is healthy and simply unreachable.
+      - default
+      - b2_data
+
     environment:
       # --- Required. The container refuses to boot without these (src/lib/env.ts) ---
-      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL to the :5432 session pooler URL}
-      DIRECT_URL: ${DIRECT_URL:?set DIRECT_URL to the :5432 pooler URL}
+      #
+      # Both now point at the self-hosted Postgres over `b2_data`, by CONTAINER name.
+      #
+      # Why `supabase-db` and not `db`: `db` is the service name in the other project and does
+      # resolve, but it is generic enough to collide with anything else that ever joins this
+      # network. The container name is unambiguous.
+      #
+      # Why DIRECT_URL is now IDENTICAL to DATABASE_URL: the whole point of the split was that
+      # PgBouncer could not hold the session-level advisory lock `prisma migrate deploy` takes,
+      # so migrations needed a non-pooled route. Connecting straight to Postgres, every
+      # connection is already a session. The two stay as separate variables because the Prisma
+      # schema declares both and env.ts requires both — not because they differ.
+      #
+      # Note this does NOT go through supavisor, which is running. Prisma maintains its own
+      # pool, the app is the only consumer, and the hop would add latency and a second place
+      # for connections to be lost without buying anything.
+      DATABASE_URL: ${DATABASE_URL:?postgresql://postgres:<pw>@supabase-db:5432/postgres?schema=public&connection_limit=15}
+      DIRECT_URL: ${DIRECT_URL:?same as DATABASE_URL now that Postgres is local — see above}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:?must be https://<your-domain>, no trailing slash}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?openssl rand -base64 32}
       CRON_SECRET: ${CRON_SECRET:?openssl rand -base64 32}
 
       # --- Optional. Every one fails CLOSED: the feature is simply off when unset ---
       FX_API_URL: ${FX_API_URL:-https://api.frankfurter.app}
+
+      # Supabase Storage — the marketing site's media origin (lib/supabase-storage.ts).
+      #
+      # These were NEVER set on hosted Supabase, so storageConfig() returned null and
+      # /api/media/upload + /api/form-upload answered 503. Self-hosting finally gives this a
+      # home: STORAGE_BACKEND=file on the 92 GB root disk. Leave them unset to keep the old
+      # behaviour — the seam fails closed by design, and OFF is the recommended default until
+      # someone actually wants the marketing site's media on this box.
+      #
+      # ⚠ SUPABASE_URL MUST BE A PUBLIC, BROWSER-REACHABLE ORIGIN. Not `http://api-gw:8000`.
+      # publicUrl() does not merely fetch — its output is written to `MediaAsset.url` and
+      # handed to browsers for next/image. An internal docker name there yields rows full of
+      # URLs that resolve for nothing outside the compose network, and the upload still
+      # reports success. Worse, it is a one-way mistake: the value is BAKED INTO EVERY ROW at
+      # upload time, so changing it later orphans every image already stored. Choose the
+      # hostname once, before the first upload.
+      #
+      # Turning this on therefore means publishing the gateway. Do NOT simply point a domain
+      # at api-gw:8000 — that publishes PostgREST at /rest/v1 alongside the images. The
+      # runbook has a Caddy block that allows ONLY /storage/v1/object/public/*.
+      #
+      # ⚠ SUPABASE_SERVICE_ROLE_KEY is BYPASSRLS. It may never appear in a NEXT_PUBLIC_* var,
+      # a client component, or a response body. lib/supabase-storage.ts is `server-only` to
+      # enforce that; keep it the single place this value is read.
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET:-site-media}
 
       EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
@@ -154,3 +223,21 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+
+networks:
+  # The app's own network: caddy ↔ app ↔ cron. Compose creates it as `b2_default`.
+  default:
+
+  # Shared with the self-hosted Supabase project so `app` can reach `supabase-db`.
+  #
+  # `external: true` means neither compose project creates or owns it, so `docker compose down`
+  # on either side cannot take the other's networking with it. Create it once, by hand:
+  #
+  #     docker network create b2_data
+  #
+  # If it does not exist, `up -d` fails immediately with "network b2_data declared as external,
+  # but could not be found" — which is the correct behaviour. A missing network that failed
+  # loudly is a thirty-second fix; one that was auto-created empty would mean the app and the
+  # database each sit on their own isolated network and never see each other.
+  b2_data:
+    external: true

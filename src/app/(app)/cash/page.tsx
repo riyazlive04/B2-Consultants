@@ -31,6 +31,7 @@ import { CashPeriodSwitch } from "./_components/CashPeriodSwitch";
 import { EquitySection } from "./_components/EquitySection";
 import { CashPositionForm, CashPositionHistory, GrowthOverrideForm, PayablesSection } from "./_components/CashClient";
 import { TopReceivablesTable, ReceivablesTable } from "./_components/CashTables";
+import { consoleHref } from "@/lib/guide/manual-types";
 
 /** Names itself in the browser tab, rather than sharing one title with every other page
  *  (issue 28). The root layout supplies the "· B2 Consultants" suffix. */
@@ -281,7 +282,7 @@ export default async function CashPage({ searchParams }: { searchParams?: { peri
             <p className="mt-2 text-xs text-muted">
               Green ≥ {targets.runwayGreenMonths} mo · Amber {targets.runwayAmberMonths}-
               {targets.runwayGreenMonths} mo · Red &lt; {targets.runwayAmberMonths} mo ·{" "}
-              <a className="underline hover:text-ink" href="/console" title="Console → Money → Cash targets">change</a>
+              <a className="underline hover:text-ink" href={consoleHref("money", "cash-targets")} title="Console → Money → Cash targets">change</a>
             </p>
           </div>
         </div>

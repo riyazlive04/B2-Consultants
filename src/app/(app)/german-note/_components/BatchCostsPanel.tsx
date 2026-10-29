@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PagedTable } from "@/components/ui/pager";
 import { Users } from "lucide-react";
 import type { BatchCostRow } from "@/server/batch-costs-metrics";
+import { consoleHref } from "@/lib/guide/manual-types";
 
 /**
  * What each active batch costs in tutor fees (spec Part 2 §5; test cases FIN-004/005).
@@ -21,7 +22,7 @@ export function BatchCostsPanel({ rows }: { rows: BatchCostRow[] }) {
         <Users size={20} className="mx-auto text-ink-3" />
         <p className="mt-2 text-sm text-muted">
           No active batches at a priced level yet. Rates live in{" "}
-          <Link href="/console" className="font-semibold text-accent hover:underline">
+          <Link href={consoleHref("money", "tutor-fee")} className="font-semibold text-accent hover:underline">
             Founder Console → Tutor Fee
           </Link>
           .
@@ -39,7 +40,7 @@ export function BatchCostsPanel({ rows }: { rows: BatchCostRow[] }) {
         What we owe tutors for the batches running now. The per-head rate is set by{" "}
         <strong>batch size</strong>, not level - a batch at or above the threshold earns the
         volume rate. Edit the bands in{" "}
-        <Link href="/console" className="font-semibold text-accent hover:underline">
+        <Link href={consoleHref("money", "tutor-fee")} className="font-semibold text-accent hover:underline">
           Founder Console → Tutor Fee
         </Link>
         .

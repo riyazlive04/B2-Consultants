@@ -29,6 +29,7 @@ import { listSlotReleases, releasesBySlotForWeek } from "@/server/slot-release";
 import { BookingsTable } from "./_components/BookingsTable";
 import { CancelledSlotsTable } from "./_components/CancelledSlotsTable";
 import { SssCalendar } from "./_components/SssCalendar";
+import { consoleHref } from "@/lib/guide/manual-types";
 
 /** Its own name in the browser tab, rather than sharing one title with every other page
  *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
@@ -267,7 +268,7 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
                 ? "Discovery slots are generated hourly from named weekly calendars, one per person. Until you add one, /book and every funnel booking page show prospects an empty calendar."
                 : "Every calendar you have is switched off, so the hourly top-up creates nothing."}{" "}
             Set the weekdays, hours and owner at{" "}
-            <Link href="/console" className="font-semibold underline">
+            <Link href={consoleHref("sales", "availability")} className="font-semibold underline">
               Console → Availability
             </Link>
             .
@@ -521,7 +522,7 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
                 {availabilityOff ? (
                   <>
                     No slots exist at all - no availability pattern is configured. Set one at{" "}
-                    <Link href="/console" className="font-semibold text-accent underline">
+                    <Link href={consoleHref("sales", "availability")} className="font-semibold text-accent underline">
                       Console → Availability
                     </Link>
                     .

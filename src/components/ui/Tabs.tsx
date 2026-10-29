@@ -23,8 +23,15 @@ export function Tabs({
   variant = "pill",
   initial = 0,
   urlKey,
+  resetKeys,
 }: {
-  tabs: { label: string; content: ReactNode }[];
+  /**
+   * `id` is a stable slug for the URL. Without one the address holds the tab's INDEX, which a
+   * reorder silently re-points; with one, `/console?area=money&panel=payment-types` keeps opening
+   * the same panel however the strip is rearranged - which is what lets the App Guide link
+   * straight to the setting it is describing.
+   */
+  tabs: { label: string; content: ReactNode; id?: string }[];
   variant?: TabsVariant;
   /** Which tab is open on first render (e.g. a deep-link landing on "Expenses"). */
   initial?: number;
@@ -40,6 +47,12 @@ export function Tabs({
    * of them writing the same parameter would fight.
    */
   urlKey?: string;
+  /**
+   * Query keys to DROP when this strip changes tab - the parameters of the strips nested inside
+   * it. Otherwise moving from Money to System would carry `panel=payment-types` along to a strip
+   * that has no such panel.
+   */
+  resetKeys?: string[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -49,7 +62,9 @@ export function Tabs({
    * strip that does not want to be addressable. Reading it on every render (rather than syncing
    * it into state) is what makes Back and Forward move the tabs.
    */
-  const fromUrl = urlKey ? Number(searchParams.get(urlKey)) : NaN;
+  const raw = urlKey ? searchParams.get(urlKey) : null;
+  const byId = raw === null ? -1 : tabs.findIndex((t) => t.id === raw);
+  const fromUrl = byId >= 0 ? byId : raw === null ? NaN : Number(raw);
   const [localActive, setLocalActive] = useState(initial);
   const active =
     urlKey && Number.isInteger(fromUrl) && fromUrl >= 0 && fromUrl < tabs.length
@@ -64,7 +79,8 @@ export function Tabs({
       // Tab 0 is the default, so it is left OUT of the address rather than written as "=0" -
       // the common case keeps a clean URL, and a shared link means what it looks like.
       if (i === 0) params.delete(urlKey);
-      else params.set(urlKey, String(i));
+      else params.set(urlKey, tabs[i]?.id ?? String(i));
+      for (const k of resetKeys ?? []) params.delete(k);
       const q = params.toString();
       /**
        * `scroll: false` because switching tab must not jump the page to the top - the strip is
@@ -73,7 +89,7 @@ export function Tabs({
        */
       router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
     },
-    [pathname, router, searchParams, urlKey],
+    [pathname, router, searchParams, urlKey, tabs, resetKeys],
   );
   const baseId = useId();
   const listRef = useRef<HTMLDivElement>(null);

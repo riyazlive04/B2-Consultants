@@ -84,6 +84,7 @@ import { getDeliveryFailureReport } from "@/server/delivery-health";
 import { LeadWebhookPanel } from "./_components/LeadWebhookPanel";
 import { getLeadWebhookConfig, LEAD_WEBHOOK_NAME, LEAD_WEBHOOK_PATH } from "@/server/lead-webhook";
 import { readDeliveryStatuses } from "@/server/intake-route";
+import { CONSOLE_PANELS as P } from "@/lib/guide/manual-types";
 
 /** Its own name in the browser tab, rather than sharing one title with every other page
  *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
@@ -338,20 +339,32 @@ export default async function ConsolePage() {
             Delivery    students, tutors, agreements
             System      the plumbing: crons, alerts, health
       */}
+      {/*
+        Addressable, so the App Guide can link to the exact panel a rule lives on:
+        `/console?area=money&panel=payment-types`. The ids come from CONSOLE_PANELS, the same list
+        the guide builds its links from. The inner strips share one `panel` key - only the open
+        area's strip is mounted, and the slugs are unique across areas - and the outer strip
+        clears it on an area change so a stale panel never follows you into another area.
+      */}
       <Tabs
+        urlKey="area"
+        resetKeys={["panel"]}
         tabs={[
           {
+            id: "access",
             label: "Access",
             content: (
               <Tabs
                 variant="underline"
+                urlKey="panel"
                 tabs={[
-                  { label: "Sections", content: <SectionsPanel sections={sections} /> },
+                  { id: P.access[0], label: "Sections", content: <SectionsPanel sections={sections} /> },
                   // Read-only companion to Sections: the same access rules, checked against spec 3 (O3).
-                  { label: "Access Matrix", content: <AccessMatrixPanel sections={sections} /> },
+                  { id: P.access[1], label: "Access Matrix", content: <AccessMatrixPanel sections={sections} /> },
                   {
                     // The per-person half of the commission question, and of every other
                     // capability. Lives under Access because that is what it is.
+                    id: P.access[2],
                     label: "Per-person rules",
                     content: <PerPersonPanel people={perPersonRows} />,
                   },
@@ -360,37 +373,42 @@ export default async function ConsolePage() {
             ),
           },
           {
+            id: "money",
             label: "Money",
             content: (
               <Tabs
                 variant="underline"
+                urlKey="panel"
                 tabs={[
-                  { label: "Commission", content: <CommissionPanel rules={commissionRules} /> },
+                  { id: P.money[0], label: "Commission", content: <CommissionPanel rules={commissionRules} /> },
                   // Next to Commission because it is the same kind of rule: a money figure the
                   // founder sets that Finance then applies to every new deal.
-                  { label: "Instalment Plans", content: <InstalmentPlanPanel config={instalmentPlans} /> },
+                  { id: P.money[1], label: "Instalment Plans", content: <InstalmentPlanPanel config={instalmentPlans} /> },
                   // Beside it because the two answer one question between them: what kinds of
                   // payment can be recorded, and what each kind costs.
-                  { label: "Payment Types", content: <PaymentTypesPanel config={paymentTypes} /> },
+                  { id: P.money[2], label: "Payment Types", content: <PaymentTypesPanel config={paymentTypes} /> },
                   {
                     // The other half of the same question: what kinds of COST can be recorded.
                     // Beside Payment Types because they are the two lists every money form on
                     // /finance is built out of, and both were Prisma enums until they weren't.
+                    id: P.money[3],
                     label: "Expense categories",
                     content: (
                       <ExpenseCategoriesPanel config={expenseCategories} accounts={expenseAccounts} />
                     ),
                   },
-                  { label: "Invoicing", content: <InvoicingPanel config={invoiceSettings} /> },
+                  { id: P.money[4], label: "Invoicing", content: <InvoicingPanel config={invoiceSettings} /> },
                   {
                     // The bars Cash Health judges against. Under Money because every one of
                     // them is a rupee figure or a verdict about rupees - and because the four
                     // numbers behind them used to be literals in cash-metrics.ts and signals.ts.
+                    id: P.money[5],
                     label: "Cash targets",
                     content: <CashTargetsPanel config={cashTargets} />,
                   },
-                  { label: "Tutor Fee", content: <TutorFeePanel config={tutorFee} /> },
+                  { id: P.money[6], label: "Tutor Fee", content: <TutorFeePanel config={tutorFee} /> },
                   {
+                    id: P.money[7],
                     label: `Tutor Fees${tutorFeeRows.filter((f) => f.status === "DRAFT").length ? ` (${tutorFeeRows.filter((f) => f.status === "DRAFT").length})` : ""}`,
                     content: (
                       <TutorFeeLedgerPanel
@@ -404,12 +422,15 @@ export default async function ConsolePage() {
             ),
           },
           {
+            id: "sales",
             label: "Sales ops",
             content: (
               <Tabs
                 variant="underline"
+                urlKey="panel"
                 tabs={[
                   {
+                    id: P.sales[0],
                     label: "Qualification",
                     content: (
                       <QualificationPanel
@@ -421,6 +442,7 @@ export default async function ConsolePage() {
                     ),
                   },
                   {
+                    id: P.sales[1],
                     label: "Call Distribution",
                     content: (
                       <CallDistributionPanel
@@ -438,6 +460,7 @@ export default async function ConsolePage() {
                   {
                     // The only tab here whose absence had a visible OUTWARD symptom: an empty
                     // public /book page, which is what "the booking section feels broken" was.
+                    id: P.sales[2],
                     label: "Availability",
                     content: (
                       <AvailabilityPanel
@@ -457,6 +480,7 @@ export default async function ConsolePage() {
                      * account that hosts its calls are one decision, and splitting them across
                      * two tabs is how a new calendar ends up with no host mapped.
                      */
+                    id: P.sales[3],
                     label: "Zoom links",
                     content: (
                       <ZoomPanel
@@ -475,14 +499,17 @@ export default async function ConsolePage() {
                      * the WhatsApp settings tab. Same stored rule, same parser - see
                      * server/confirm-loop-config.ts.
                      */
+                    id: P.sales[4],
                     label: "Confirm-or-cancel",
                     content: <ConfirmLoopPanel rules={bookingRules} releases={slotReleases} />,
                   },
                   {
+                    id: P.sales[5],
                     label: "Operations",
                     content: <OperationsPanel bookOrders={bookOrders} pipeline={pipelineConfig} />,
                   },
                   {
+                    id: P.sales[6],
                     label: "Lead Webhook",
                     content: (
                       <LeadWebhookPanel
@@ -498,17 +525,21 @@ export default async function ConsolePage() {
             ),
           },
           {
+            id: "delivery",
             label: "Delivery & team",
             content: (
               <Tabs
                 variant="underline"
+                urlKey="panel"
                 tabs={[
-                  { label: "Agreements", content: <AgreementWorkflowPanel config={agreementWorkflow} /> },
+                  { id: P.delivery[0], label: "Agreements", content: <AgreementWorkflowPanel config={agreementWorkflow} /> },
                   {
+                    id: P.delivery[1],
                     label: "Delivery defaults",
                     content: <DeliveryDefaultsPanel config={deliveryDefaults} />,
                   },
                   {
+                    id: P.delivery[2],
                     label: "Daily Targets",
                     content: (
                       <div className="space-y-6">
@@ -517,9 +548,10 @@ export default async function ConsolePage() {
                       </div>
                     ),
                   },
-                  { label: "Gamification", content: <GamificationPanel config={config} /> },
-                  { label: `Goals${goals.length ? ` (${goals.length})` : ""}`, content: <GoalsPanel goals={goals} people={people} /> },
+                  { id: P.delivery[3], label: "Gamification", content: <GamificationPanel config={config} /> },
+                  { id: P.delivery[4], label: `Goals${goals.length ? ` (${goals.length})` : ""}`, content: <GoalsPanel goals={goals} people={people} /> },
                   {
+                    id: P.delivery[5],
                     label: `Rewards${pendingCount ? ` (${pendingCount})` : ""}`,
                     content: (
                       <RewardsPanel
@@ -536,16 +568,19 @@ export default async function ConsolePage() {
             ),
           },
           {
+            id: "system",
             label: "System",
             content: (
               <Tabs
                 variant="underline"
+                urlKey="panel"
                 tabs={[
                   {
                     // FIRST in System, deliberately: it answers "what is built but switched off",
                     // which is the question behind most of what looks broken in this app.
                     // One count for both lists: a channel that is armed and failing belongs on
                     // the same badge as one nobody switched on - both mean "not working".
+                    id: P.system[0],
                     label: `Not armed${
                       notArmed.filter((i) => !i.armed).length + deliveryFailures.length
                         ? ` (${notArmed.filter((i) => !i.armed).length + deliveryFailures.length})`
@@ -557,6 +592,7 @@ export default async function ConsolePage() {
                     // Its own tab rather than a section of Maintenance: these are the rules that
                     // decide when the app TALKS TO SOMEBODY, which is a different kind of
                     // decision from housekeeping and deserves to be found without scrolling.
+                    id: P.system[1],
                     label: "Alerts & Chasing",
                     content: (
                       <AlertsPanel
@@ -573,6 +609,7 @@ export default async function ConsolePage() {
                     // sets about students, but one decides when the app speaks and this one
                     // decides how a student is RANKED against their classmates. Burying the
                     // scoring in a chasing tab would hide the most consequential numbers here.
+                    id: P.system[2],
                     label: "Leaderboard",
                     content: <LeaderboardPanel config={leaderboardConfig} />,
                   },
@@ -581,6 +618,7 @@ export default async function ConsolePage() {
                     // founder sets about a student's standing, and this one decides what a
                     // coach may record about a student leaving - which is the other end of the
                     // same story the board tells.
+                    id: P.system[3],
                     label: "Why students stop",
                     content: <StudentLifecyclePanel config={studentLifecycleConfig} />,
                   },
@@ -588,12 +626,14 @@ export default async function ConsolePage() {
                     // Beside Alerts & Chasing: both answer "who does the app tell, and when".
                     // The difference is the direction - those rules talk to customers, this one
                     // tells us what a customer or a colleague could not get done.
+                    id: P.system[4],
                     label: "Improvements",
                     content: (
                       <ImprovementsPanel config={improvementsConfig} emailArmed={emailArmed} />
                     ),
                   },
                   {
+                    id: P.system[5],
                     label: "Maintenance",
                     content: (
                       <MaintenancePanel

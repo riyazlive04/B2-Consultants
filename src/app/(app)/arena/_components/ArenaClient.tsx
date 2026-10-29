@@ -13,6 +13,7 @@ import { Card, CardTitle, EmptyState, SectionHeading } from "@/components/ui/kit
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Tabs } from "@/components/ui/Tabs";
 import { formatDate } from "@/lib/format";
+import { consoleHref } from "@/lib/guide/manual-types";
 
 /**
  * The Arena.
@@ -227,7 +228,7 @@ export function ArenaClient({
               action={
                 canConfigure ? (
                   <Link
-                    href="/console"
+                    href={consoleHref("delivery", "gamification")}
                     className="inline-flex h-10 items-center rounded-btn bg-primary px-4 text-sm font-semibold text-on-accent hover:bg-primary-strong"
                   >
                     Add quests in Console → Gamification

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, PowerOff } from "lucide-react";
+import { consoleHref } from "@/lib/guide/manual-types";
 
 /**
  * The app's presentational vocabulary, extracted from the Users & access screen.
@@ -439,7 +440,7 @@ export function EngineOffNotice({
       </ul>
       {canOpenConsole && (
         <Link
-          href="/console"
+          href={consoleHref("system", "not-armed")}
           className="mt-2 inline-block text-caption font-semibold text-primary hover:underline"
         >
           Open the founder console

@@ -18,6 +18,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { NavClock } from "./NavClock";
 import { RecordButton } from "./RecordButton";
 import { SuggestImprovementButton } from "./SuggestImprovementButton";
+import { ScreenGuideButton } from "./ScreenGuideButton";
 import { SectionAccessProvider } from "./SectionAccess";
 import { BrandLogo } from "./BrandLogo";
 import { AppFooter } from "./AppFooter";
@@ -456,6 +457,8 @@ export function AppShell({
             </span>
             {/* Report sits beside the bell rather than next to Record: Record is a primary CTA
                 gated on Finance, this is a quiet tool offered to every role on every screen. */}
+            {/* Help for THIS screen, beside the report button: the two quiet tools for "I am stuck". */}
+            <ScreenGuideButton accessibleHrefs={accessibleHrefs} />
             <SuggestImprovementButton />
             <span className="flex-none">{bellSlot}</span>
             <Link href="/profile" title="Your profile" className="flex flex-none items-center gap-2 rounded-full py-1 md:pr-2">

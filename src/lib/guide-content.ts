@@ -122,7 +122,7 @@ export const GUIDES: GuideEntry[] = [
       "Anyone can file one. The Suggest-an-improvement button sits in the top bar on every screen, for every role - telecallers, coaches, tutors and students included. It opens where they are, so nobody has to describe which page they were on.",
       "The reporter picks what kind of thing it is first, and the questions change to match. “A number looks wrong” asks what it shows and what it should show; “the rule should work differently” asks what the rule is now and why it is wrong. That is what stops a report arriving as “doesn't work”.",
       "Each report carries its own context, captured by the app rather than typed: the screen, the person's role and grants, the running build, and - the useful one - whether the engine behind that screen was switched OFF at the time. Most “this section does nothing” reports are answered by that line alone, before you read a word.",
-      "Work the queue top to bottom: New → Triaged → Accepted → In progress → Fixed → Closed. “Fixed” means you shipped something; “Closed” means the person who reported it agrees. Anything you type as a resolution is shown to them.",
+      "Work the queue top to bottom: New → Triaged → Accepted → In progress → Fixed → Closed. “Fixed” means you shipped something; “Closed” means the person who reported it agrees. What you type as a resolution is kept on the report, but nothing shows it to the person who filed it - tell them yourself.",
       "The numbers above the queue say how many are waiting, how many are blocking somebody's work, and how many were filed against a screen whose engine was off.",
     ],
     tip: "Set the developer's address in Console → System → Improvements. Without it the queue still works and the bell still counts, but nobody is emailed - which is a working setup, not a broken one.",
@@ -153,10 +153,10 @@ export const GUIDES: GuideEntry[] = [
     ],
     steps: [
       "Enter every payment received under the Income tab (INR, EUR, or both - FX is stamped automatically).",
-      "Enter expenses daily; tick “Is this COGS?” for direct delivery costs like Karthick's salary or Skool.",
+      "Enter expenses daily; tick “Is this COGS?” only for a cost you would avoid if nobody enrolled - a tutor's salary, books, delivery tools. A platform subscription is paid either way, so Skool and WATI are Tools & Software, not COGS.",
       "For instalment students, add a Pending Payment with the agreed total - “paid so far” sums itself from income entries.",
-      "Overdue rows turn red on their own. Metric cards at the top are always this-month, auto-calculated.",
-      "Commission tab: each student-linked payment splits automatically - 5% when one person did both calls, 3% each when first call and discovery were split.",
+      "Overdue rows turn red on their own. The metric cards are calculated for whatever period the bar at the top is set to, not always this month.",
+      "Commission tab: each student-linked payment splits automatically. The shipped defaults are 5% when one person did both calls and 3% each when the first call and the discovery call were split, plus a closer’s share on an SSS call and 20% to a stand-in who covered a leg. All four are yours to change at Console → Money → Commission.",
     ],
     tip: "Link income entries to a student (optional dropdown) - that powers total paid and the commission report.",
   },
@@ -175,7 +175,7 @@ export const GUIDES: GuideEntry[] = [
       "Stages now cover the whole Synamate flow: workshop branch, offer follow-up, deposit follow-up and confirmed deposit; from deposit onward pick Split or Full pay.",
       "After every discovery call, record the outcome and tick Highly Qualified + BANT boxes honestly.",
       "Speed-to-lead pills: green = contacted within 5 minutes, amber within an hour, grey slower - “Mark contacted” stamps the clock.",
-      "Admin: new leads auto-assign per the first-call split (People → profile shares, Saturday rule respected); reassign any lead inline.",
+      "Admin: new leads auto-assign per the first-call split, set at Console → Sales ops → Call Distribution (the Saturday rule is respected); reassign any lead inline.",
     ],
     tip: "The target bar defaults to ₹8,00,000 - Admin can change it per month right on the bar.",
   },
@@ -189,7 +189,7 @@ export const GUIDES: GuideEntry[] = [
       "Delivery Coach: sessions delivered counts every enrollment whose last session date is today, at-risk flags counts the students you turned red today. Check-ins and assignments reviewed have no source at all - always type those.",
       "One log per day. With the end-of-day rules on, the day closes at the cutoff Admin sets in Console (9:00 PM by default) and no new log can be started after it; the page always shows the deadline you're working to. Corrections go through Admin.",
       "Miss that cutoff and the end-of-day job saves what your activity showed, stamped auto-saved rather than submitted by you. It is incomplete by construction - anything it couldn't see is left blank, never zeroed - so it stays open for you to amend (until the next day by default); fill in the rest and it becomes your own log and locks like any other.",
-      "Update your OKR progress right below the form - takes ten seconds, keeps your circles green.",
+      "Update your OKR progress just above the form - takes ten seconds, keeps your circles green.",
     ],
     tip: "Submit daily to grow your 🔥 streak - 7, 14 and 30-day milestones are tracked.",
   },
@@ -198,7 +198,7 @@ export const GUIDES: GuideEntry[] = [
     what: "XP, levels, weekly quests and badges - earned automatically from work you already log.",
     steps: [
       "Every daily log, pipeline move, call outcome, student milestone and OKR pays XP - the ledger is your audited history, so nothing extra to enter.",
-      "Weekly quests reset each Monday and track themselves from your daily-log numbers; finish them for bonus XP.",
+      "Weekly quests reset each Monday and track themselves from the work the app already records - your calls, stage moves and outcomes; finish them for bonus XP. A quest written against daily-log figures will not move for a telecaller, because telecallers no longer keep a daily log.",
       "Streaks pay bonuses at 7/14/30/60/90 days - the same streak you see on your daily-log page.",
       "The leaderboard has week / month / all-time views; badges live in the gallery with the exact unlock rules.",
     ],
@@ -252,7 +252,7 @@ export const GUIDES: GuideEntry[] = [
     section: "dashboard", icon: "🏠", title: "Dashboard", href: "/dashboard",
     what: "Your home page: what is on next, what you still owe, how you are doing, and where everything lives.",
     steps: [
-      "“Next class” is the first thing on the page, with the Join button. It appears an hour before the class starts.",
+      "“Next class” is the first thing on the page, and it always shows whatever is next - not only when the class is about to start. The Join button appears as soon as the class has a link on it.",
       "“To do” gathers every piece of coursework you have not ticked off, from every class - so you do not have to go hunting through the timetable for them.",
       "“Your progress” shows your attendance, your coursework and your applications side by side. The bars only appear once there is something real to count.",
       "If your coach has set a sprint target for this week, it shows here with the deadline for your check-in.",
@@ -264,14 +264,14 @@ export const GUIDES: GuideEntry[] = [
     section: "classroom", icon: "📅", title: "My Classroom", href: "/classroom",
     what: "Your timetable: every class, when it runs, the link to join it, the recording afterwards and the coursework you were set.",
     steps: [
-      "“Next up” at the top is the one thing you need before a class - the topic, the time and the Join button. It appears an hour before the class starts.",
+      "“Next up” at the top is the one thing you need before a class - the topic, the time and the Join button. It always shows the next class, and Join appears as soon as that class has a link on it.",
       "Below it your programme is laid out week by week, exactly as your agreement describes it. Each card shows the day, the time in IST and how long it runs.",
       "Sessions marked “Video (pre-rec)” have no fixed time. Watch them whenever you like from the date shown - they are part of the programme, not an extra.",
       "After a live class, the recording appears on its card. Tick off the coursework under each session as you do it; your coach sees it the moment you do.",
       "Your attendance and coursework bars only appear once there is something to count - an empty bar on day one would be telling you off for nothing.",
       "If your coach opens attendance during a class, an “I'm here” card appears here and on your dashboard with a countdown. Tap it while you are in the class - once the countdown runs out, your coach marks the register by hand.",
       "“Attendance pending” on a class means your coach has taken the register but not shared it yet. It is not an absence, and it does not count against you until it is shown.",
-      "If you miss a class, watch its recording - you will get a nudge here and on your dashboard if you have not. Some recordings have a time limit set by your coach; the card shows how long is left, and says so plainly once it has gone.",
+      "If you miss a class, watch its recording - you get a notification on the bell if you have not. Some recordings have a time limit set by your coach; the card shows how long is left, and says so plainly once it has gone.",
     ],
     tip: "Missed a class? Open its card - the recording is the make-up, any coursework set in it is still waiting for you, and the resources for that class are on the same card.",
   },
@@ -293,7 +293,7 @@ export const GUIDES: GuideEntry[] = [
       "“My students” is your own caseload - attendance, outstanding coursework and whose sprint check-in has gone past its week. It is sorted worst-first, so the top of the list is where to look.",
       "Resources: open a batch and use the Resources tab to post material - a link for the whole cohort, or one for a single class. Untick “Students can see this” to write it now and release it after the class.",
     ],
-    tip: "The desk only ever shows cohorts you run and students assigned to you. If a batch is missing, ask the founder to put you on it as the coach.",
+    tip: "As a coach or tutor the desk shows only the cohorts you run and the students assigned to you - if a batch is missing, ask the founder to put you on it. The founder and head coach see every cohort here.",
   },
   {
     section: "attendance", icon: "✅", title: "Attendance", href: "/attendance",
@@ -337,7 +337,7 @@ export const GUIDES: GuideEntry[] = [
     section: "german-note", icon: "🇩🇪", title: "German Note", href: "/german-note",
     what: "German language batches: a Classroom of Fathom recordings, a class schedule, a Skool-style community, members and a leaderboard.",
     steps: [
-      "Open a batch → Classroom: lessons grouped into modules with a course-progress bar. Mark each class Watched to track completion. Recordings are yours for LIFETIME.",
+      "Open a batch → Classroom: lessons grouped into modules with a course-progress bar. Where viewing is tracked, a class counts as watched once you reach 90% of it and the button follows that; elsewhere you tick it yourself. Recordings are yours for LIFETIME.",
       "Schedule tab: upcoming live classes with a Join link; tutors schedule them, students see what's next (also surfaced on the main page).",
       "Tutors: classes are recorded by fathom.ai - hit Copy share link in Fathom and paste it into the batch; use Manage modules to build the curriculum.",
       "Community feed (main page + each batch's Discussion): post with a title/category/image, @mention people, comment and like. Likes are community points that raise your level.",
@@ -351,7 +351,7 @@ export const GUIDES: GuideEntry[] = [
     what: "Awareness → enrolled, weekly snapshots, drop-off alert, source attribution. Admin-only.",
     steps: [
       "Every Monday, save the weekly snapshot - awareness and GB downloads are manual, the rest is pre-filled from Pipeline/Students.",
-      "The red box always names your biggest drop-off stage this month.",
+      "The red box is not your biggest drop-off. It names the stage costing you the most PEOPLE against what was expected of it - measured against an agreed target first, and only then against the last three months. A stage can leak heavily and not be named, if that is simply how it always performs.",
       "The attribution table shows which lead source actually produces students and revenue.",
       "Ghosted Blueprint has its own tracker - tag GB students at enrollment for it to be accurate.",
     ],
@@ -382,8 +382,8 @@ export const GUIDES: GuideEntry[] = [
     steps: [
       "“Add contact” needs a name and a phone number. Everything else can be filled in later - do not hold up entry for a city or an industry.",
       "Typing somebody who already exists is refused, not duplicated: the phone number and the email are both checked, and you are told whose record it clashes with. Open that record instead.",
-      "Every new contact is handed to a telecaller automatically, by the same rotation the website uses, so nobody lands as “Unassigned”.",
-      "Open a contact to log a call, read their history, and see their onboarding journey - the strip that says which step they are on and what to do next.",
+      "Every new contact is handed to a telecaller automatically, by the same rotation the website uses. When the rotation cannot place somebody - nobody is on shift for that day, or no shares are set - they do land as “Unassigned”, so it is worth filtering for those.",
+      "Open a contact to read their history and see their onboarding journey - the strip that says which step they are on and what to do next. Calls are logged from My Desk, not from here.",
       "Companies, Tasks and Custom fields are the other tabs. Custom fields add your own questions (visa type, target country, budget) to every contact.",
     ],
     tip: "Deleting a contact archives it rather than erasing it, and re-entering the same person later restores the original record with its history intact.",
@@ -420,9 +420,9 @@ export const GUIDES: GuideEntry[] = [
       },
     ],
     steps: [
-      "Drag a card to move the deal. The person's own stage moves with it, so Pipeline and this board always agree - they are two views of one thing, not two records.",
+      "Out of the box the board is rules-driven, which means cards move when the work moves and dragging is refused. Switch to drag mode at Console → Sales ops → Operations if you want to move them by hand. Either way the person's own stage moves with the card, so Pipeline and this board always agree - they are two views of one thing, not two records.",
       "This is the same set of people as Pipeline. Pipeline is the funnel with its numbers, targets and call outcomes; Deals is the board you push cards across.",
-      "A card only appears here if a deal exists for that person. New leads are put on the board automatically only when that engine is armed (Console → Sales ops → Operations) - until then, work from Pipeline and Contacts.",
+      "A card only appears here if a deal exists for that person. New leads are put on the board automatically, and that is on by default (Console → Sales ops → Operations); a lead you add by hand always gets a card either way.",
       "Archived cards are under their own heading at the bottom, and can be restored.",
     ],
     tip: "Called “Opportunities” in older notes and still gated on that name internally. Only the label changed.",
@@ -460,10 +460,10 @@ export const GUIDES: GuideEntry[] = [
     ],
     steps: [
       "“New agreement” starts from a template, picks the contact, and fills in the programme, the fee and the batch. A guessed value is flagged rather than silently used - you confirm it before anything goes out.",
-      "Send it and the client gets a link and a signing code on WhatsApp. They sign on their phone; you see the status change here.",
-      "The list is grouped by where each agreement actually is: sent but not opened, opened but not signed, signed, declined, voided. That status is worked out from the document itself, so it is never stale.",
+      "Send it and the client gets the link by WhatsApp and email. They sign on their phone; you see the status change here. The signing code is sent separately, when they ask for it.",
+      "Every agreement is in one table, each row showing where it actually is: sent but not opened, opened but not signed, signed, declined, voided. That status is worked out from the document itself, so it is never stale - the cards above the table count the same states.",
       "A signed agreement does NOT create a student by itself - that is deliberate, because the programme level and coach are not known at signing. The signed agreement carries the button that creates them, and Onboarding → Needs completing lists anybody who was missed.",
-      "Chasing an unsigned agreement is an engine you switch on at Console → Delivery & team → Agreements. Until you do, nobody is chased and a quiet contract stays quiet until its link expires.",
+      "An unsigned agreement is chased for you, on day 3, day 7 and day 12 by default. Those days are yours to change - or to clear altogether, which is what switches the chasing off - at Console → Delivery & team → Agreements.",
     ],
     tip: "An expired link cannot be re-opened. Void the agreement and issue a fresh one - the history of both is kept.",
   },
@@ -480,7 +480,7 @@ export const GUIDES: GuideEntry[] = [
       },
     ],
     steps: [
-      "Three tabs: coaching cohorts, German Note cohorts, and the plans. A cohort belongs to exactly one business and can only seat the levels that business teaches.",
+      "Coaching cohorts and German Note cohorts, plus a third tab for the plans that only the founder sees. A cohort belongs to exactly one business and can only seat the levels that business teaches.",
       "A new cohort reads “Draft” until it has a plan, a teacher and at least one learner. Open it and the setup checklist names what is missing, with a link to each remedy - and “Start cohort” stays disabled, with the reason on it, until all three are in place.",
       "Open a cohort to work on it: Timetable builds every dated class from a plan in one go, and Roster adds learners - as many at once as you like, from the cohort itself.",
       "Plans are written once and reused. Week number, topic, duration, day and time - the same sheet the founders already kept, with the dates worked out per cohort.",
@@ -493,12 +493,12 @@ export const GUIDES: GuideEntry[] = [
     path: ["Sidebar", "Admin", "Programs"],
     what: "The catalogue: which programmes and levels exist, what each costs, and the plans they are taught from.",
     steps: [
-      "Programmes is the price list. A level with no price cannot be invoiced - the invoice form's programme picker reads this list, and an empty list is an empty picker.",
-      "Each programme carries a rupee and a euro price. The euro one is what German Note quotes; they are two stored figures, never a conversion.",
+      "Programmes is the price list, and the invoice form's programme picker reads it. A programme with no price is still offered, marked “No price set” - picking it names the line and leaves you to type the amount.",
+      "Each programme carries a rupee and a euro price, and the euro one is what German Note quotes. Type one and the other follows at today's rate as a convenience; “Enter each currency separately” unlocks the two boxes when the euro price is not a conversion of the rupee one.",
       "Curriculum is where a plan is written: one row per session, with week number, topic, duration, day and time. A cohort's timetable is built from one of these.",
       "Switching a level off keeps every student and cohort already on it - it only stops new ones being created.",
     ],
-    tip: "Adding a brand-new level (C1, C2) is more than a toggle: the code has to learn it too. Ask before promising one.",
+    tip: "German levels and bundles are yours to add here - C1 and C2 need no code change. The three B2 coaching tiers (Solo, Guided, Elite) are fixed, and a new German level is not yet offered on the Students enrolment form.",
   },
 
   // ─────────────────────── Money ───────────────────────
@@ -518,19 +518,19 @@ export const GUIDES: GuideEntry[] = [
       "Pick the currency per invoice. Rupees and euros are separate prices, not a conversion, and tax is set per currency.",
       "Products is the programme price list. Nothing can be invoiced until the programme has a price - if the picker is empty, that is why.",
       "Receipts are issued against money actually received, and carry their own numbering.",
-      "Chasing overdue instalments is an engine (Console → System → Alerts & Chasing). While it is off, an overdue balance ages here in silence and nobody is nudged.",
+      "Nothing on this screen chases an unpaid invoice. The chasing engine (Console → System → Alerts & Chasing) works on Finance instalment plans only, so an overdue invoice ages here in silence whether that engine is on or off - follow it up yourself.",
     ],
     tip: "The issuer block and tax ID on the invoice come from Console → Money → Invoicing. A German invoice is not valid without them.",
   },
   {
     section: "telecaller", icon: "🎖️", title: "Bonus & Commission", href: "/telecaller",
     path: ["Sidebar", "Finance", "Bonus & Commission"],
-    what: "What each telecaller has earned - bonuses from targets, commission from payments they closed.",
+    what: "What each telecaller has earned: commission worked out from the payments they closed, plus any bonus you assign them by hand.",
     steps: [
       "Commission is worked out from payments that name a student: one rate when the same person took both calls, a split rate when the first call and the discovery call were different people.",
-      "The rates are yours to set, at Console → Money → Commission. Changing a rate does not rewrite what has already been earned.",
-      "Bonuses come from the monthly target on the telecaller board. The figure here is derived from work already recorded, so it cannot drift from the pipeline.",
-      "Commission is reported here whether or not it has been posted to the books. Posting it to the ledger is a separate engine at Console → System → Maintenance.",
+      "The rates are yours to set, at Console → Money → Commission. Commission here is RECALCULATED from the current rates every time the board is opened, so changing a rate also changes what past months report. Only a payout you have already recorded keeps the figure it was recorded at.",
+      "A bonus is not derived from anything - you assign it to whoever you choose, for their calls or any other reason, and type the amount. That is what the Assign button on this board is for.",
+      "Commission is reported here whether or not it has been posted to the books. Marking a payout Paid, though, writes its expense to the books there and then - that one does not wait for an engine.",
     ],
     tip: "A payment with no student linked earns nobody commission. Linking the student on the income entry is what makes it count.",
   },
@@ -542,7 +542,7 @@ export const GUIDES: GuideEntry[] = [
     what: "Capture forms you can put anywhere. A submission lands straight in Contacts as a new enquiry.",
     steps: [
       "Build the form, then use its public link - or embed it. Every submission becomes a contact, assigned to a telecaller by the usual rotation.",
-      "A submission with no phone number is refused, because every later step (the call, the WhatsApp, the duplicate check) needs one.",
+      "A submission with no phone number is only refused if you marked the phone field required. Leave it optional and the answers are still stored, but no contact is created from them - every later step (the call, the WhatsApp, the duplicate check) needs a number.",
       "Submissions are deduplicated against existing contacts, so somebody filling the form twice does not become two people.",
       "Fields you add show up on the contact record alongside the standard ones.",
     ],
@@ -551,7 +551,7 @@ export const GUIDES: GuideEntry[] = [
   {
     section: "funnels", icon: "🧲", title: "Funnels", href: "/funnels",
     path: ["Sidebar", "Marketing", "Funnels"],
-    what: "Landing pages and multi-step funnels, hosted publicly, each one with its own booking page.",
+    what: "Landing pages and multi-step funnels, hosted publicly. Add a booking block and the funnel gets its own booking page.",
     steps: [
       "Build the pages, publish, and share the public link. Nothing here is visible until you publish it.",
       "A funnel's booking step shows the same discovery-call calendar as /book - so if no availability pattern has been saved, the funnel shows an empty calendar too.",
@@ -585,19 +585,19 @@ export const GUIDES: GuideEntry[] = [
     ],
     steps: [
       "The top of the screen says whether sending is actually live. If it is off, nothing reaches anybody - the engines still run, they just talk to nobody.",
-      "Every message the app has sent is listed with its delivery state. “Sent” means WhatsApp accepted it; delivered and read are reported back separately.",
+      "The 300 most recent messages are listed with their delivery state. “Sent” means WhatsApp accepted it; delivered and read are reported back separately.",
       "Settings is where the automatic messages are switched on one at a time: the enrolment welcome, class reminders, confirm-or-cancel. Each needs its template approved first.",
       "A reminder can be set to rehearse rather than send. That is doing its job perfectly and still nobody is being reminded - the screen says when it is in that state.",
       "Stage messages is the editor for what goes out at each pipeline stage. It is reached from the link at the top of this screen.",
     ],
-    tip: "Messages go to real numbers. There is no test mode switched on, so a message you send to try it out arrives on somebody's phone.",
+    tip: "There IS a test mode - “Send everything to this number”, on the Settings tab - and it is blank, so nothing is diverted. Until you fill it in, a message you send to try something out arrives on the client's real phone.",
   },
   {
     section: "conversations", icon: "📨", title: "Conversations", href: "/conversations",
     path: ["Sidebar", "Marketing", "Conversations"],
     what: "Email and SMS threads in one inbox, with reusable templates. Admin-only.",
     steps: [
-      "Inbox holds every thread, WhatsApp included. A thread starts when you write to somebody from their contact record.",
+      "Inbox lists the 60 most recent threads, WhatsApp included. A thread starts with any message linked to a contact - including the ones the app sends on its own, not only what you type.",
       "Templates are reusable messages with {{name}} tokens filled in per person.",
       "Settings holds the email connection and the From address. Email is off until both are set, and until then every send is accepted and discarded.",
       "“Sent” means the email service accepted it. Delivery is reported separately, and only if the delivery webhook is configured.",
@@ -632,15 +632,15 @@ export const GUIDES: GuideEntry[] = [
     steps: [
       "Choose what you are counting - contacts, deals or invoices - then how to group it and over what period.",
       "Every choice is in the address bar, so the link IS the saved report. Bookmark it, or paste it to somebody and they see exactly what you see.",
-      "Click a number to see the records behind it rather than taking the total on trust.",
-      "Campaign attribution shows which funnel or form each enquiry came through.",
+      "The contact counts grouped by stage, source or owner click through to the records behind them. The other totals on this screen do not drill down.",
+      "Campaign attribution is about money, not routing: spend, cost per lead, cost to acquire a customer and return on ad spend. Nothing in the app tags a lead with a campaign yet, so expect it to be empty.",
     ],
     tip: "There is no “save report” button because there does not need to be one - the URL is the report. Keep the ones you use in your bookmarks.",
   },
   {
     section: "guide", icon: "📖", title: "App Guide", href: "/guide",
     path: ["Sidebar", "My Work", "App Guide"],
-    what: "This page: a short how-to for every screen you can open, plus full walkthroughs of the jobs that cross several.",
+    what: "This page: a searchable index of every screen you can open, a full manual behind each one, and walkthroughs of the jobs that cross several screens.",
     shots: [
       {
         src: "/guide/guide.png",
@@ -650,9 +650,9 @@ export const GUIDES: GuideEntry[] = [
     ],
     steps: [
       "You only see guides for the sections your account can actually open, so nothing here describes a screen you cannot reach.",
-      "The walkthroughs at the top are the ones to read first - “Onboard a new student, start to finish” is the whole journey in order, with the click path for every step.",
-      "Each entry starts with where the screen is, written as a breadcrumb, so you can find it without already knowing the app.",
-      "Where there is a screenshot, the thing to click is boxed on it.",
+      "The index comes first, grouped the same way as your sidebar. “Read the manual” on any card opens the full one for that screen: every tab, how to use it, the logic behind it, and where to change that logic.",
+      "Below the index are the walkthroughs - “Onboard a new student, start to finish” is the whole journey in order, with the click path for every step. Read one of those first if the app is new to you.",
+      "Search the box at the top to go straight to a part of a screen: type “subscriptions”, “commission” or “cutoff” and it finds the manual that explains it. Where there is a screenshot, the thing to click is boxed on it. The “?” in the top bar opens the manual for whatever screen you are on.",
     ],
     tip: "If a screen has no entry here, that is a gap in the guide rather than a feature you are missing. Say so and it gets written.",
   },
@@ -726,7 +726,7 @@ export const GUIDE_JOURNEYS: GuideJourney[] = [
         title: "They sign",
         where: ["Nothing to do"],
         does:
-          "You will see it on Onboarding the moment they do. If the link expires unsigned, Onboarding says so and offers to re-issue - the deal is not lost.",
+          "You will see it on Onboarding the moment they do. A link that expires unsigned is NOT flagged there, so check Agreements itself for anything sent and never signed - the deal is not lost, but nothing will chase it for you once the link has gone.",
       },
       {
         n: 7,
@@ -846,16 +846,16 @@ export const GUIDE_JOURNEYS: GuideJourney[] = [
       {
         n: 6,
         title: "Invoice if they need one",
-        where: ["Sidebar", "Finance", "Payments", "Invoices & estimates"],
+        where: ["Sidebar", "Finance", "Payments", "Invoices"],
         does:
-          "Draft it, check it, then issue it. Issuing draws the real invoice number and locks the document. A programme with no price cannot be invoiced, so the price list has to be filled in first.",
+          "Draft it, check it, then issue it. Issuing draws the real invoice number and locks the document. A programme with no price can still be invoiced - you type the amount on the line.",
       },
       {
         n: 7,
         title: "Know which of the books are switched on",
         where: ["Sidebar", "Admin", "Console", "System", "Not armed"],
         does:
-          "Commission, tutor fees and invoice receivables each post to the ledger only when their engine is armed. While they are off, the figures on the Finance screen are right and the ledger behind them is incomplete. The Finance screen says so at the top when that is the case.",
+          "Posting to the ledger is switched on at Console → System → Maintenance, which offers two switches: invoice issuance, and commission payout runs as money owed. There is no switch for tutor fees - that one cannot be armed from inside the app at all. While any of this is off, the figures on the Finance screen are right and the ledger behind them is incomplete, and the Finance screen says so at the top.",
       },
     ],
   },
@@ -892,14 +892,14 @@ export const GUIDE_JOURNEYS: GuideJourney[] = [
         title: "Put the recording up",
         where: ["The class", "Resources"],
         does:
-          "Add the recording link against the class. Tick that students may see it, or it stays internal. Access can be time-limited, which is how a catch-up window is enforced rather than trusted.",
+          "Add the recording link against the class. What students may open is decided by the viewing window on it, not by a tick - set that window and the catch-up period is enforced rather than trusted.",
       },
       {
         n: 5,
         title: "Check who is drifting",
         where: ["Sidebar", "Classroom", "My Teaching", "My students"],
         does:
-          "Each student shows their sprint progress and whether they are concerning. Record the week's actual on their record - that is what the 90/120-day tracker reads.",
+          "Each student shows their sprint progress and whether they are concerning. The week's actual figure is recorded on their record by the founder or head coach - that is what the 90/120-day tracker reads, and a coach cannot enter it themselves.",
       },
       {
         n: 6,
@@ -936,7 +936,7 @@ export const GUIDE_JOURNEYS: GuideJourney[] = [
         title: "Book the discovery call",
         where: ["Sidebar", "Sales", "Bookings"],
         does:
-          "Pick a free slot. If the calendar is empty, no availability pattern has been saved yet - that is a founder setting, not something you can fix from here.",
+          "There is no staff booking form: a discovery call is booked through the public booking page, which you can send to the prospect or fill in with them. If its calendar is empty, no availability pattern has been saved yet - that is a founder setting, not something you can fix from here.",
       },
       {
         n: 4,
@@ -1008,7 +1008,7 @@ export const GUIDE_JOURNEYS: GuideJourney[] = [
         title: "Last, the ones that touch money",
         where: ["Console", "System", "Maintenance"],
         does:
-          "Commission, tutor fees and invoice receivables post to the ledger only when armed, and chasing only chases when armed. Leave these until the figures on screen look right to you, because arming them starts writing to the books.",
+          "Invoice issuance and commission payout runs post to the ledger only once armed here, and chasing only chases when armed. Leave these until the figures on screen look right to you, because arming them starts writing to the books. Tutor-fee posting has no switch in the app, so it stays off whatever you do here.",
       },
       {
         n: 7,

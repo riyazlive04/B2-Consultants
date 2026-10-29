@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Workflow } from "lucide-react";
 import { PIPELINE_MODE_EFFECT, STAGE_RULES } from "@/lib/stage-rules";
 import { Card, CardTitle, Pill } from "@/components/ui/kit";
+import { consoleHref } from "@/lib/guide/manual-types";
 
 /**
  * "What moves a card without me touching it?"
@@ -42,7 +43,7 @@ export function StageRulesCard({
       {canConfigure && (
         <p className="mt-1 text-caption text-ink-3">
           Change this at{" "}
-          <Link href="/console" className="font-semibold text-accent underline">
+          <Link href={consoleHref("sales", "operations")} className="font-semibold text-accent underline">
             Console → Sales ops → Operations
           </Link>
           .

@@ -15,7 +15,14 @@ import type { GuideShot } from "@/lib/guide-content";
  * The box is `aria-hidden` and its label is read from the caption instead - a screen reader
  * cannot see where a rectangle is, so the caption has to carry the instruction in words anyway.
  */
-export function GuideShotFigure({ shot }: { shot: GuideShot }) {
+export function GuideShotFigure({
+  shot,
+  size = { width: 1280, height: 800 },
+}: {
+  shot: GuideShot;
+  /** The capture's real pixel size, so the box keeps its aspect ratio before the image loads. */
+  size?: { width: number; height: number };
+}) {
   return (
     <figure className="space-y-1.5">
       <div className="relative overflow-hidden rounded-field border border-line bg-surface-2">
@@ -27,8 +34,8 @@ export function GuideShotFigure({ shot }: { shot: GuideShot }) {
         <Image
           src={shot.src}
           alt={shot.caption}
-          width={1280}
-          height={800}
+          width={size.width}
+          height={size.height}
           unoptimized
           sizes="(max-width: 1024px) 100vw, 50vw"
           className="h-auto w-full"

@@ -1,8 +1,10 @@
 import Link from "next/link";
-import { BookOpen, Route } from "lucide-react";
+import { BookOpen, Map as MapIcon, Route } from "lucide-react";
 import { GUIDES, GUIDE_JOURNEYS } from "@/lib/guide-content";
+import { manualFor } from "@/lib/guide/manual";
 import { PageHeader, SectionHeading } from "@/components/ui/kit";
 import { requireSection, visibleSections } from "@/lib/rbac";
+import { GuideDirectory, type DirectoryGroup } from "./_components/GuideDirectory";
 import { GuidePath } from "./_components/GuidePath";
 import { GuideShotFigure } from "./_components/GuideShotFigure";
 
@@ -25,23 +27,74 @@ export const dynamic = "force-dynamic";
  * Walkthroughs are filtered by ROLE rather than by section, because they span sections - a
  * telecaller should read the onboarding journey even though several of its steps happen on
  * screens they cannot open, since knowing where their part ends is the point.
+ *
+ * ── The manuals sit ABOVE the walkthroughs now ───────────────────────────────────────────
+ * Each section has a full manual at /guide/<section>: every tab, the logic behind it, and where
+ * that logic is changed. The thirty-second cards that used to fill the bottom of this page moved
+ * onto the top of each manual, so this page is an index - grouped like the sidebar, with one
+ * search across every manual - and it is short enough that the walkthroughs below it are still
+ * one scroll away. The index comes first because it is what a returning reader came for; a new
+ * starter is pointed at the walkthroughs by the line under the search box.
  */
 export default async function GuidePage() {
   const session = await requireSection("guide");
-  const accessible = new Set((await visibleSections(session.role, session.overrides)).map((s) => s.key));
-  const visible = GUIDES.filter((g) => g.section === "general" || accessible.has(g.section));
+  const general = GUIDES.filter((g) => g.section === "general");
   const journeys = GUIDE_JOURNEYS.filter((j) => j.forRoles.includes(session.role));
+
+  // The directory, grouped and ordered exactly as this person's sidebar is. Off-rail sections
+  // (Outreach) are included: they are reachable, so they need a manual as much as anything listed.
+  const groups: DirectoryGroup[] = [];
+  for (const s of await visibleSections(session.role, session.overrides)) {
+    if (s.key === "my-journey" && session.role !== "STUDENT") continue;
+    const manual = manualFor(s.key);
+    if (!manual) continue;
+    const quick = GUIDES.find((g) => g.section === s.key);
+    let g = groups.find((x) => x.group === s.group);
+    if (!g) groups.push((g = { group: s.group, sections: [] }));
+    g.sections.push({
+      key: s.key,
+      label: s.label,
+      icon: s.icon,
+      what: quick?.what ?? manual.overview,
+      features: manual.features.map((f) => ({
+        id: f.id,
+        name: f.name,
+        text: [f.what, ...f.use, ...f.logic, ...(f.controls ?? []).map((c) => c.setting)].join(" "),
+      })),
+    });
+  }
 
   return (
     <div className="w-full space-y-8">
       <PageHeader
         icon={<BookOpen size={20} />}
         title="App Guide"
-        subtitle="How to get things done, step by step. You only see guides for features you have access to."
+        subtitle="Every screen you can open: how to use each part of it, the logic behind it, and where to change that logic. Grouped the same way as your sidebar."
+        actions={
+          session.role === "ADMIN" ? (
+            <Link
+              href="/guide/rules"
+              className="inline-flex h-10 items-center gap-1.5 rounded-btn border border-line px-3 text-sm font-medium text-ink-2 hover:bg-surface-2"
+            >
+              <MapIcon size={15} aria-hidden /> Rules map
+            </Link>
+          ) : undefined
+        }
       />
 
+      <GuideDirectory groups={groups} />
       {journeys.length > 0 && (
-        <section className="space-y-4">
+        <p className="text-sm text-muted">
+          New here? Start with the{" "}
+          <a href="#start-to-finish" className="font-medium text-accent hover:underline">
+            start-to-finish walkthroughs
+          </a>{" "}
+          below - they show how the screens fit together before you read any one of them.
+        </p>
+      )}
+
+      {journeys.length > 0 && (
+        <section id="start-to-finish" className="scroll-mt-24 space-y-4">
           <SectionHeading
             icon={<Route size={18} />}
             title="Start to finish"
@@ -79,54 +132,36 @@ export default async function GuidePage() {
         </section>
       )}
 
-      <section className="space-y-4">
-        <SectionHeading
-          icon={<BookOpen size={18} />}
-          title="Screen by screen"
-          description="What each part of the app is for, in thirty seconds."
-        />
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {visible.map((g) => (
-            <section key={g.title} className="flex flex-col rounded-card border border-line bg-surface p-5 shadow-card">
-              <div className="flex items-start justify-between gap-2">
+      {general.length > 0 && (
+        <section className="space-y-4">
+          <SectionHeading
+            icon={<BookOpen size={18} />}
+            title="Everywhere in the app"
+            description="Things that are not one screen, so they have no manual of their own."
+          />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {general.map((g) => (
+              <section key={g.title} className="flex flex-col rounded-card border border-line bg-surface p-5 shadow-card">
                 <h3 className="font-display text-xl font-semibold">
                   <span aria-hidden className="mr-1.5">{g.icon}</span>
                   {g.title}
                 </h3>
-                <Link
-                  href={g.href}
-                  className="whitespace-nowrap rounded-field border border-line px-3 py-1 text-sm font-medium text-accent hover:bg-surface-2"
-                >
-                  Open →
-                </Link>
-              </div>
-              <p className="mt-1 text-sm text-muted">{g.what}</p>
-              {g.path && (
-                <div className="mt-2">
-                  <GuidePath path={g.path} />
-                </div>
-              )}
-              <ol className="mt-3 flex-1 list-decimal space-y-1.5 pl-5 text-sm">
-                {g.steps.map((s) => (
-                  <li key={s}>{s}</li>
-                ))}
-              </ol>
-              {g.shots && g.shots.length > 0 && (
-                <div className="mt-3 space-y-3">
-                  {g.shots.map((shot) => (
-                    <GuideShotFigure key={shot.src} shot={shot} />
+                <p className="mt-1 text-sm text-muted">{g.what}</p>
+                <ol className="mt-3 flex-1 list-decimal space-y-1.5 pl-5 text-sm">
+                  {g.steps.map((s) => (
+                    <li key={s}>{s}</li>
                   ))}
-                </div>
-              )}
-              {g.tip && (
-                <p className="mt-3 rounded-field bg-accent-soft px-3 py-2 text-xs text-accent">
-                  <strong>Tip:</strong> {g.tip}
-                </p>
-              )}
-            </section>
-          ))}
-        </div>
-      </section>
+                </ol>
+                {g.tip && (
+                  <p className="mt-3 rounded-field bg-accent-soft px-3 py-2 text-xs text-accent">
+                    <strong>Tip:</strong> {g.tip}
+                  </p>
+                )}
+              </section>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

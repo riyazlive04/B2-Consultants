@@ -148,59 +148,31 @@ const catColor = (c: Category) => (c === "UTILITY" ? UTILITY : c === "AUTHENTICA
  * `TEMPLATES`, so a typo or a rename fails the suite instead of quietly shrinking the batch.
  */
 export const PENDING_SUBMISSION: { name: string; why: string }[] = [
-  // ── The seven `_u` rewrites are GONE (26/10/2026) ───────────────────────────────────────────
-  // They were here for a week while B2 decided whether to keep the SOP's promotional bodies or
-  // the stripped UTILITY ones. The approval sheet settled every case: four were "template ok"
-  // (keep the original, stays MARKETING) and three were rewritten by the reviewer under their
-  // ORIGINAL names (so those templates are now UTILITY in the SOP pack, and a `_u` twin would
-  // just duplicate them). See the removal note at the bottom of TEMPLATES.
-
-  // ── Seventeen pipeline stage messages (issue W2) ────────────────────────────────────────────
-  // The WhatsApp half of Stage Messages has NEVER had a template. Every stage change sends its
-  // email and logs the WhatsApp attempt as skipped, so the feature has been half-armed since it
-  // was built. Five of these overlap an engine that already covers the same moment - each says so
-  // in its own note, because getting them approved and binding them are separate decisions.
-  { name: "b2_stage_new_lead", why: "no template has ever existed for this stage" },
-  { name: "b2_stage_whatsapp_sent", why: "no template has ever existed for this stage" },
-  { name: "b2_stage_strategy_call_booked", why: "no template has ever existed for this stage" },
-  { name: "b2_stage_disco_booked", why: "no template has ever existed for this stage" },
-  { name: "b2_stage_disco_not_booked", why: "no template has ever existed for this stage" },
-  // b2_stage_disco_completed WAS HERE and was PULLED on 26/10/2026 - the reviewer stopped it:
-  // "next steps are manual so triggering the message doesnot make any sense, we need a tree with
-  // 2 branches here". Submitting a body that promises next steps nobody has decided yet would
-  // buy an approval for the wrong message, so it moves to NEEDS_ACTION as a DECIDE instead. Its
-  // page stays in the inventory (it is still a touchpoint the app can send); it is just not work
-  // anybody should be doing this round.
-  { name: "b2_stage_sss_booked", why: "no template has ever existed for this stage" },
-  { name: "b2_stage_sss_completed", why: "no template has ever existed for this stage" },
-  { name: "b2_stage_proposal_sent", why: "no template has ever existed for this stage" },
-  { name: "b2_stage_sent_to_workshop", why: "no template has ever existed for this stage" },
-  { name: "b2_stage_workshop_followup", why: "no template has ever existed for this stage" },
-  { name: "b2_stage_offer_followup", why: "no template has ever existed for this stage" },
-  { name: "b2_stage_deposit_followup", why: "no template has ever existed for this stage" },
-  { name: "b2_stage_deposit_paid", why: "no template has ever existed for this stage" },
-  { name: "b2_stage_won", why: "no template has ever existed for this stage" },
-  { name: "b2_stage_lost", why: "no template has ever existed for this stage" },
-  // ── A NAME COLLISION, AND THE CONVENTION FOR ONE ────────────────────────────────────────────
-  // Submitted as `b2_stage_no_show_1` on 26/10/2026: `b2_stage_no_show` was ALREADY TAKEN in WATI,
-  // which this list had recorded as "no template has ever existed for this stage". That is the
-  // assumption this file warns about in its own header - nothing here reads the live catalogue, so
-  // every "never submitted" is written by hand and can be wrong. One was.
+  // ════════════════════════════════════════════════════════════════════════════════════════
+  //  EMPTY SINCE 29/10/2026 - EVERY TEMPLATE ON THIS LIST CLEARED META REVIEW
+  // ════════════════════════════════════════════════════════════════════════════════════════
   //
-  // A `_1` suffix therefore means exactly one thing: THE UNSUFFIXED NAME WAS TAKEN. It is not a
-  // version number and there is no `_2` convention. Suffixing is the right move rather than
-  // reusing the existing name - Meta holds one body per (name, language), so submitting this body
-  // under the taken name would have replaced whatever is already there, in review, and taken that
-  // template out of service for however long the queue runs.
+  // All 17 entries were approved in one round: the 15 `b2_stage_*` messages, `b2_password_reset_otp`,
+  // and (outside this list, in NEEDS_ACTION) `b2_sop_not_qualified` and `b2_sop_sss_confirm_3`.
+  // Verified against the tenant, not against anybody's memory: `fetchWatiTemplates()` reports 214
+  // templates, 142 APPROVED, and each of those names among them.
   //
-  // ⚠ The touchpoint binding must name `b2_stage_no_show_1`, not `b2_stage_no_show` - WhatsApp →
-  // Settings, STAGE_NO_SHOW. Binding the unsuffixed name points at somebody else's template.
-  { name: "b2_stage_no_show_1", why: "never submitted; `b2_stage_no_show` was already taken in WATI, so it carries the _1 suffix" },
-
-  // ── One new touchpoint (issue C4) ───────────────────────────────────────────────────────────
-  // This is the BLOCKING item for the WhatsApp password-reset route: the screens are worth
-  // nothing until the template exists, because a send through an unapproved template is silent.
-  { name: "b2_password_reset_otp", why: "new touchpoint - blocks the WhatsApp password-reset route entirely" },
+  // ── `b2_stage_no_show_1` NEVER EXISTED, AND THAT IS THE ONE TO READ TWICE ───────────────────
+  // This list used to carry `b2_stage_no_show_1`, on the recorded belief that `b2_stage_no_show`
+  // "was already taken in WATI". **The live account says otherwise**: `b2_stage_no_show` is
+  // APPROVED with params `[name, apply_url]` - exactly the vars this pack declares for the
+  // STAGE_NO_SHOW template - and `b2_stage_no_show_1` does not exist at all. Whatever was holding
+  // the unsuffixed name is gone (the tenant carries 72 DELETED templates).
+  //
+  // So the `_1` suffix convention described in the git history was never actually used, and the
+  // binding must name **`b2_stage_no_show`**. Binding `b2_stage_no_show_1` points at nothing and
+  // the touchpoint skips every send, silently, forever - which is the failure this whole file
+  // exists to prevent. Confirm the body in WATI before binding: the list API returns an empty
+  // body string, so the params match is the strongest check available from here.
+  //
+  // ⚠ APPROVAL IS NOT DELIVERY. Every name above is approved and **none of them is bound to its
+  // touchpoint** - see the binding note on NEEDS_ACTION below. Nothing changed for a single
+  // customer when these cleared review.
 ];
 
 /**
@@ -215,6 +187,14 @@ export const PENDING_SUBMISSION: { name: string; why: string }[] = [
  * edited template is a REPLACEMENT in review, and its touchpoint sends nothing at all until the
  * new body clears. Nobody notices, because the app logs a skip rather than failing.
  *
+ * ── APPROVAL IS NOT THE LAST STEP, AND 29/10/2026 PROVED IT ────────────────────────────────
+ * Eighteen templates cleared Meta review that day and NOTHING changed for a single customer,
+ * because a template only sends once it is BOUND to its touchpoint in WhatsApp → Settings. At
+ * the time of writing every `b2_stage_*` touchpoint is either unbound or bound to an unrelated
+ * older template (STAGE_NEW_LEAD → `b2_sop_intro`, STAGE_DISCO_COMPLETED → `170526_attended`),
+ * so the purpose-written messages sit approved and unused while substitutes go out in their
+ * place. This list tracks approvals; it cannot see bindings. Check both.
+ *
  * So this is the work list: everything awaiting a first approval, everything whose approved body
  * has since changed, and everything carrying a wording decision that is cheaper to take now than
  * after the next approval. Run `npm run docs:whatsapp:action` for it on its own.
@@ -228,20 +208,22 @@ export const PENDING_SUBMISSION: { name: string; why: string }[] = [
  * generated document is to open WATI's template list and tick off anything already APPROVED with
  * the same body. Delete a line here as it clears.
  */
-type Action = "APPROVE" | "RESUBMIT" | "DECIDE";
+type Action = "APPROVE" | "BIND" | "RESUBMIT" | "DECIDE";
 
 /** The heading each group gets in the action document, and the order the groups appear in. */
 const ACTION_GROUP: Record<Action, string> = {
   APPROVE: "1 · Never submitted — needs a first approval",
-  RESUBMIT: "2 · Approved once, the body has changed — re-submit",
-  DECIDE: "3 · Blocked on a decision — do not submit yet",
+  BIND: "2 · Approved but NOT BOUND — the touchpoint still sends nothing",
+  RESUBMIT: "3 · Approved once, the body has changed — re-submit",
+  DECIDE: "4 · Blocked on a decision — do not submit yet",
 };
 const ACTION_LABEL: Record<Action, string> = {
   APPROVE: "Submit for approval",
+  BIND: "Bind it in WhatsApp → Settings — approval alone sends nothing",
   RESUBMIT: "Re-submit — replaces the approved body",
   DECIDE: "Take the decision before submitting anything",
 };
-const ACTION_ORDER: Action[] = ["APPROVE", "RESUBMIT", "DECIDE"];
+const ACTION_ORDER: Action[] = ["APPROVE", "BIND", "RESUBMIT", "DECIDE"];
 
 export const NEEDS_ACTION: {
   name: string;
@@ -273,26 +255,49 @@ export const NEEDS_ACTION: {
 
   // Two SOP templates sit outside `PENDING_SUBMISSION` because that list only covers THIS pack's
   // inventory. They are just as unapproved, and the SOP pack says so on each one's own page.
-  {
-    name: "b2_sop_not_qualified",
-    action: "APPROVE",
-    why:
-      "never submitted - written for the founder's flow of 25/08/2026, after the last submission round. " +
-      "Until it clears, DISCO_REJECT_MSG has no bound template and every rejection waits in the queue for a human.",
-  },
-  {
-    name: "b2_sop_sss_confirm_3",
-    action: "APPROVE",
-    why:
-      "never submitted, and it carries a wording question: the SOP's text ends on {{zoom_link}}, and Meta commonly " +
-      "rejects a body that ends with a variable, so the body below adds a short closing line after the link. " +
-      "Confirm that line before submitting. Meanwhile SOP_SSS_CONFIRM_3 is bound to b2_sop_sss_confirm_2, whose text is the same.",
-  },
+    
+  // ── Approved on 29/10/2026, and BOUND TO NOTHING ──────────────────────────────────────────
+  // Read against the live tenant, not from memory: all of these are APPROVED in WATI, and not one
+  // of them is bound to its touchpoint. Eight touchpoints have no template at all and skip every
+  // send; the rest point at an older, unrelated template that happens to be approved, so a
+  // substitute message goes out in place of the one written for the moment.
+  //
+  // Binding is in the app: WhatsApp → Settings. Nothing here can do it, and nothing here can see
+  // whether it has been done - which is exactly why this group exists rather than the names being
+  // deleted as "done" when review cleared them.
+  ...([
+    ["b2_stage_new_lead", "STAGE_NEW_LEAD currently sends `b2_sop_intro` instead"],
+    ["b2_stage_whatsapp_sent", "STAGE_WHATSAPP_SENT is unbound - every send skips"],
+    ["b2_stage_strategy_call_booked", "STAGE_STRATEGY_CALL_BOOKED currently sends `b2_sop_disco_welcome`"],
+    ["b2_stage_disco_booked", "STAGE_DISCO_BOOKED currently sends `b2_booking_confirmation`"],
+    ["b2_stage_disco_not_booked", "STAGE_DISCO_NOT_BOOKED currently sends `b2_booking_auto_cancelled`"],
+    ["b2_stage_sss_booked", "STAGE_SSS_BOOKED currently sends `b2_sop_sss_confirm_1`"],
+    ["b2_stage_sss_completed", "STAGE_SSS_COMPLETED currently sends `b2_booking_confirmation`"],
+    ["b2_stage_proposal_sent", "STAGE_PROPOSAL_SENT is unbound - every send skips"],
+    ["b2_stage_sent_to_workshop", "STAGE_SENT_TO_WORKSHOP is unbound - every send skips"],
+    ["b2_stage_workshop_followup", "STAGE_WORKSHOP_FOLLOWUP is unbound - every send skips"],
+    ["b2_stage_offer_followup", "STAGE_OFFER_FOLLOWUP is unbound - every send skips"],
+    ["b2_stage_deposit_followup", "STAGE_DEPOSIT_FOLLOWUP is unbound - every send skips"],
+    ["b2_stage_deposit_paid", "STAGE_DEPOSIT_PAID is unbound - every send skips"],
+    ["b2_stage_won", "STAGE_WON is unbound - every send skips"],
+    ["b2_stage_lost", "STAGE_LOST currently sends `b2_booking_auto_cancelled`"],
+    // ⚠ The approved name has NO `_1` suffix - see the note on PENDING_SUBMISSION above.
+    // STAGE_NO_SHOW is currently bound to `b2_sss_rescheduled`, which WATI has DELETED, so the
+    // touchpoint is broken twice over: wrong template, and that template no longer exists.
+    ["b2_stage_no_show_1", "bind the touchpoint to `b2_stage_no_show` (no suffix); it currently points at the DELETED `b2_sss_rescheduled`"],
+    ["b2_password_reset_otp", "PASSWORD_RESET_OTP is unbound - the WhatsApp password-reset route sends nothing"],
+    ["b2_sop_not_qualified", "SOP_NOT_QUALIFIED currently sends `b2_booking_auto_cancelled`"],
+    ["b2_sop_sss_confirm_3", "SOP_SSS_CONFIRM_3 currently sends `b2_sop_sss_confirm_2` - the third confirmation has its own approved body now"],
+  ] as const).map(([name, why]) => ({ name, action: "BIND" as Action, why })),
 
   // ── Approved once, body has changed since ──
   // The group that no other list catches, and the only group where doing nothing BREAKS something
   // that used to work.
   {
+    // ⚠ 29/10/2026: WATI reports this template **DELETED**, not merely superseded - and the app's
+    // cached catalogue still had it as APPROVED, so `sendWhatsApp` let every attempt through to
+    // WATI to fail there rather than skipping with a reason. TWO touchpoints point at it:
+    // SSS_RESCHEDULED and (wrongly) STAGE_NO_SHOW. Both send nothing today.
     name: "b2_sss_rescheduled",
     action: "RESUBMIT",
     categoryChanged: true,

@@ -138,6 +138,28 @@ const callSchema = z.object({
 const CALL_OUTCOME_TEXT: Record<string, string> = { YES: "yes", NO: "no", NO_ANSWER: "no answer" };
 
 /**
+ * The SOP answer, as a dial outcome for the lead's call history.
+ *
+ * ── WHY THIS MAPPING EXISTS ──────────────────────────────────────────────────────────────────
+ * This action recorded the answer on the `OutreachStepLog` and nowhere else. `CallLog` is the
+ * app's record of dials - it feeds the lead's call history on the contact record, the connect
+ * rates and 5-minute speed-to-lead on the L1 desk, the "calls made" the daily log captures for
+ * the caller, and the commission attribution that reads who spoke to whom. So a telecaller who
+ * worked the outreach queue all morning had made, as far as every one of those was concerned,
+ * no calls at all: the work was invisible on their own desk and uncredited in their numbers.
+ *
+ * YES and NO both mean the prospect ANSWERED - the dial connected and they gave a reply, which
+ * is `SPOKE`. A "no" at Step 8 is not `NOT_INTERESTED`: that outcome moves the lead's stage
+ * through `resolveStageAfterCall`, and what a "no" means to the SOP is the engine's decision
+ * (`nextPhase` reads the step outcome), not this row's. NO_ANSWER is a dial that never connected.
+ */
+const CALL_LOG_OUTCOME: Record<"YES" | "NO" | "NO_ANSWER", "SPOKE" | "NO_ANSWER"> = {
+  YES: "SPOKE",
+  NO: "SPOKE",
+  NO_ANSWER: "NO_ANSWER",
+};
+
+/**
  * Log a call attempt and its Yes/No outcome (Steps 4, 8, 16).
  *
  * Checklist §H: a "NO" at Step 8 must end this lead's active follow-up cycle - that is the engine's
@@ -162,15 +184,47 @@ export async function logCallOutcome(form: FormData): Promise<ActionResult> {
   if (!log) return fail("Step not found");
   if (log.status !== "DUE") return fail(`This step is already ${log.status.toLowerCase()}`);
 
-  await prisma.outreachStepLog.update({
-    where: { id: log.id },
-    data: {
-      status: "SENT",
-      actedAt: new Date(),
-      actedById: session.user.id,
-      outcome: parsed.data.outcome,
-      note: parsed.data.note ?? null,
-    },
+  const calledAt = new Date();
+  /**
+   * The step log AND the call log, in one transaction.
+   *
+   * Together because a dial recorded in one place and not the other is the state this fixes -
+   * and because the SOP step is the only evidence the call happened, so the two must not be able
+   * to disagree about whether it did.
+   */
+  await prisma.$transaction(async (tx) => {
+    await tx.outreachStepLog.update({
+      where: { id: log.id },
+      data: {
+        status: "SENT",
+        actedAt: calledAt,
+        actedById: session.user.id,
+        outcome: parsed.data.outcome,
+        note: parsed.data.note ?? null,
+      },
+    });
+    await tx.callLog.create({
+      data: {
+        leadId: log.journey.leadId,
+        userId: session.user.id,
+        outcome: CALL_LOG_OUTCOME[parsed.data.outcome],
+        // The step is named in the note so the contact record says WHICH call this was - "Step 8
+        // follow-up" and "confirmation call before the SSS" read very differently in a history.
+        notes: [STEP_BY_KEY[log.step].label, parsed.data.note].filter(Boolean).join(" - ") || null,
+        calledAt,
+      },
+    });
+    /**
+     * Speed-to-lead counts the first CONNECTED conversation as first contact, whichever screen
+     * it was logged from - the same `contactedAt: null` guard `logCall` uses, so a later call
+     * cannot reset the clock and flatter the metric.
+     */
+    if (CALL_LOG_OUTCOME[parsed.data.outcome] === "SPOKE") {
+      await tx.lead.updateMany({
+        where: { id: log.journey.leadId, contactedAt: null },
+        data: { contactedAt: calledAt },
+      });
+    }
   });
 
   // A verbal YES at a Step 16 confirmation call is a confirmation - it stops the cancellation
@@ -200,6 +254,11 @@ export async function logCallOutcome(form: FormData): Promise<ActionResult> {
   });
 
   revalidatePath(PATH);
+  // The screens that read `CallLog` now have something new to read - the caller's own desk above
+  // all, which is where they go looking for the morning's work.
+  revalidatePath("/my-desk");
+  revalidatePath("/pipeline");
+  revalidatePath(`/contacts/${log.journey.leadId}`);
   return { ok: true };
 }
 

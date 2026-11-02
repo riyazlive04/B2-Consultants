@@ -81,16 +81,14 @@ export function HeadCoachStudents({ snapshot }: { snapshot: HeadCoachSnapshot })
         <MetricCard
           label="Active students"
           value={String(snapshot.activeStudents)}
-          secondary={`${snapshot.activeGuided} guided · ${snapshot.activeElite} elite · ${snapshot.activeSolo} solo`}
+          /* Tiers come from the catalogue, labelled on the server - not three named fields.
+             These rows sum to the figure on the card, whatever the founders have configured. */
+          secondary={snapshot.activeByLevel
+            .map((r) => `${r.value} ${r.label.toLowerCase()}`)
+            .join(" · ")}
           icon={<GraduationCap size={18} />}
           href="/students"
-          detail={{
-            rows: [
-              { label: "Guided", value: snapshot.activeGuided },
-              { label: "Elite", value: snapshot.activeElite },
-              { label: "Solo", value: snapshot.activeSolo },
-            ],
-          }}
+          detail={{ rows: snapshot.activeByLevel.map((r) => ({ label: r.label, value: r.value })) }}
         />
         <MetricCard
           label="Needing attention"

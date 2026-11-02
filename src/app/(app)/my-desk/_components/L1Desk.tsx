@@ -384,7 +384,15 @@ export function L1Desk({ desk }: { desk: L1DeskData }) {
         <SectionHeading
           icon={<CalendarClock size={18} />}
           title="Tomorrow's discovery calls"
-          description="Confirm these today - bookings inside 8 hours are blocked, so an unconfirmed call must be cancelled early to free the slot."
+          /* The founder's `minNoticeHours`, not a figure typed into a sentence. This said
+             "inside 8 hours" against a setting that ships at 2, so the only instruction on the
+             section was wrong by four times - and would have stayed wrong if the founder changed
+             it. */
+          description={
+            desk.bookingRule.minNoticeHours > 0
+              ? `Confirm these today - the public page blocks a booking inside ${desk.bookingRule.minNoticeHours} hour${desk.bookingRule.minNoticeHours === 1 ? "" : "s"} of the slot, so an unconfirmed call has to be cancelled early enough for somebody else to take it.`
+              : "Confirm these today - an unconfirmed call has to be cancelled early enough for somebody else to take the slot."
+          }
         />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <MetricCard

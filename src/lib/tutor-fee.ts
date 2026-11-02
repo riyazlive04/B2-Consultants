@@ -1,4 +1,5 @@
 import {
+  DEFAULT_TUTOR_FEE_BAND,
   DEFAULT_TUTOR_FEE_CONFIG,
   type TutorFeeConfig,
   type TutorFeeLevel,
@@ -28,15 +29,23 @@ const RUPEES_TO_PAISE = 100;
 /**
  * The per-head rate for one level at a given batch size, in WHOLE RUPEES.
  *
- * An unknown level falls back to the shipped band rather than throwing: this is called
- * from finance read paths, and a config missing a level should not blank a P&L page.
+ * An unknown level falls back to the shipped BAND rather than throwing: this is called from
+ * finance read paths, and a config missing a level should not blank a P&L page.
+ *
+ * ⚠ The fallback is a single shipped band, not `DEFAULT_TUTOR_FEE_CONFIG.ratesByLevel[level]` as
+ * it was until 1 Nov 2026. That lookup was safe only while the card had exactly three fixed keys;
+ * once levels are the founder's, a level absent from BOTH configs indexed to `undefined` and this
+ * threw on `band.atOrAbove` - turning a newly added level into a crashed German Note P&L.
+ *
+ * Reaching the fallback at all means the caller skipped `tutorFeeLevelFromCode`, which is the gate
+ * that decides whether a level is priced. Callers in this codebase go through it.
  */
 export function tutorRatePerHeadRupees(
   level: TutorFeeLevel,
   headcount: number,
   config: TutorFeeConfig = DEFAULT_TUTOR_FEE_CONFIG,
 ): number {
-  const band = config.ratesByLevel[level] ?? DEFAULT_TUTOR_FEE_CONFIG.ratesByLevel[level];
+  const band = config.ratesByLevel[level] ?? DEFAULT_TUTOR_FEE_BAND;
   return headcount >= config.thresholdStudents ? band.atOrAbove : band.below;
 }
 

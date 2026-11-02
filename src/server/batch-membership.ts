@@ -92,6 +92,46 @@ export async function batchRoster(batchId: string): Promise<BatchSeat[]> {
 }
 
 /**
+ * The rosters of SEVERAL cohorts, in one query.
+ *
+ * Added for the weekly report dashboard, which asks "who is slipping" across every cohort the
+ * viewer runs at once. Calling `batchRoster` in a loop would be one round trip per cohort on a
+ * page that opens with a dozen of them - the same mistake, and the same fix, as the teaching
+ * desk's shell. A cohort with no seats is absent from the map rather than present and empty, so
+ * a caller must treat a miss as "no roster".
+ */
+export async function batchRosters(batchIds: string[]): Promise<Map<string, BatchSeat[]>> {
+  if (batchIds.length === 0) return new Map();
+  const rows = await prisma.batch.findMany({
+    where: { id: { in: batchIds } },
+    select: { id: true, ...BATCH_MEMBERSHIP_SELECT },
+  });
+  return new Map(rows.map((r) => [r.id, mergeBatchSeats(r)]));
+}
+
+/**
+ * The cohorts one student sits in, by either mechanism.
+ *
+ * The mirror image of `batchRoster`: same fork, asked from the student's side. A caller that
+ * wrote the `OR` itself would be a fourth place that knows German Note seats arrive through
+ * `BatchMember` and B2 seats through `Enrollment.batchId` - and the first to be missed when
+ * that changes. Returns ids only, because the question is "which cohorts", not "who else".
+ */
+export async function batchIdsForStudent(studentId: string): Promise<string[]> {
+  if (!studentId) return [];
+  const rows = await prisma.batch.findMany({
+    where: {
+      OR: [
+        { members: { some: { studentId } } },
+        { enrollments: { some: { studentId } } },
+      ],
+    },
+    select: { id: true },
+  });
+  return rows.map((r) => r.id);
+}
+
+/**
  * How many seats are TAKEN in each of these cohorts - the capacity question, not the roster one.
  *
  * Counts members plus enrolments whose status still occupies a seat (`SEATED_STATUSES`), summed

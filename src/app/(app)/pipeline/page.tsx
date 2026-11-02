@@ -9,7 +9,8 @@ import { formatDate, formatInrMinor, formatPct } from "@/lib/format";
 import { hasCapability, requireSection } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { getActiveLevels } from "@/server/levels";
-import { levelOptions } from "@/lib/levels";
+import { B2_LEVEL_KINDS, levelOptions } from "@/lib/levels";
+import { levelTallyRows, levelTallyTotal } from "@/lib/level-tally";
 import { Card, CardTitle, EngineOffNotice, PageHeader, Pill } from "@/components/ui/kit";
 import { enginesOff } from "@/server/engine-status";
 import { LEAD_SOURCE_LABELS } from "@/lib/labels";
@@ -106,15 +107,26 @@ export default async function PipelinePage({
     getWhatsAppStatusMap("leadId", leads.map((l) => l.id)),
     pipelineMode === "drag_drop"
       ? getKanbanLeads(session.role, session.user.id)
-      : Promise.resolve([] as Awaited<ReturnType<typeof getKanbanLeads>>),
+      // Shaped like a real empty page rather than a bare array, so the board's "showing N of M"
+      // header has something truthful to read when the board is not the chosen mode.
+      : Promise.resolve({ leads: [], total: 0, limit: 0 } as Awaited<ReturnType<typeof getKanbanLeads>>),
     // Only the people who can assign need the figure, and it is a count over a growth table.
     canConfigure ? countAssignableLeads() : Promise.resolve(0),
   ]);
   const showLeads = isAdmin || viewerVariant === null || viewerVariant === "APPOINTMENT_SETTER";
   const showOutcomes = isAdmin || viewerVariant === null || viewerVariant === "DISCOVERY_SPECIALIST";
 
-  const conv = metrics.conversionsByLevel;
-  const wonCount = conv.SOLO + conv.GUIDED + conv.ELITE;
+  /**
+   * Wins by level, against the live catalogue.
+   *
+   * The headline below used to be `conv.SOLO + conv.GUIDED + conv.ELITE`, and the tally it added
+   * had a fourth "OTHER" bucket that this sum ignored - so a deal won at any tier the founders
+   * added after launch, or at a German level, was not merely unnamed on the card: it was NOT
+   * COUNTED in the number of wins. `levelTallyTotal` is the tally's own total, so the headline
+   * and the rows can no longer disagree.
+   */
+  const convRows = levelTallyRows(metrics.conversionsByLevel, activeLevels, B2_LEVEL_KINDS);
+  const wonCount = levelTallyTotal(metrics.conversionsByLevel);
 
   // % of target the calendar expects by today - the TargetBar judges pace with it
   const now = istToday();
@@ -278,7 +290,7 @@ export default async function PipelinePage({
                     className="ml-1"
                     text="Deals won ÷ discovery calls conducted in the selected window - the share of completed calls that turned into paying students."
                   />
-                  {" · "}Solo {conv.SOLO} · Guided {conv.GUIDED} · Elite {conv.ELITE}
+                  {" · "}{convRows.map((r) => `${r.label} ${r.value}`).join(" · ")}
                 </p>
                 <p className="tnum mt-1 text-caption text-ink-3">typical 2026 month ≈ 4 wins (range 2-7)</p>
               </div>
@@ -430,21 +442,10 @@ export default async function PipelinePage({
             />
             <MetricCard
               label="Conversions by level"
-              value={
-                <span className="text-2xl">
-                  {conv.SOLO} · {conv.GUIDED} · {conv.ELITE}
-                </span>
-              }
-              secondary={`Won · ${period.label}: Solo · Guided · Elite`}
+              value={<span className="text-2xl">{convRows.map((r) => r.value).join(" · ")}</span>}
+              secondary={`Won · ${period.label}: ${convRows.map((r) => r.label).join(" · ")}`}
               icon={<Trophy size={18} />}
-              detail={{
-                rows: [
-                  { label: "Solo", value: conv.SOLO },
-                  { label: "Guided", value: conv.GUIDED },
-                  { label: "Elite", value: conv.ELITE },
-                  { label: "Other", value: conv.OTHER },
-                ],
-              }}
+              detail={{ rows: convRows.map((r) => ({ label: r.label, value: r.value })) }}
             />
           </div>
 
@@ -519,7 +520,14 @@ export default async function PipelinePage({
           ...(pipelineMode === "drag_drop"
             ? [{
                 label: "Board",
-                content: <KanbanBoard leads={kanbanLeads} stages={[...KANBAN_STAGES]} />,
+                content: (
+                  <KanbanBoard
+                    leads={kanbanLeads.leads}
+                    total={kanbanLeads.total}
+                    limit={kanbanLeads.limit}
+                    stages={[...KANBAN_STAGES]}
+                  />
+                ),
               }]
             : []),
           ...(showLeads

@@ -14,6 +14,13 @@ import { SectionHeading, ViewAll } from "@/components/ui/kit";
  * so an empty week never leaves a hollow heading on the page.
  */
 
+/**
+ * The three seeded tiers, for the celebratory line only.
+ *
+ * Levels are founder-editable, so this cannot be the whole list - every use below falls back to
+ * the stored code so a win at a new tier still reads as a win at that tier rather than blank.
+ * A catalogue read would be a second query for three words on a decorative card.
+ */
 const LEVEL_LABEL: Record<string, string> = {
   SOLO: "Solo",
   GUIDED: "Guided",

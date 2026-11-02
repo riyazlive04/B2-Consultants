@@ -140,6 +140,13 @@ export const CAPABILITIES = [
    *
    * Creating and archiving BATCHES stays `requireAdmin()` - this key buys the right to move
    * people between existing cohorts, never to invent one.
+   *
+   * DEFAULTS TO ADMIN ON PURPOSE, and `batch-membership.test.ts` holds it there: handing it to
+   * HEAD as a role default would give every head coach seating at once, which is a product call
+   * nobody has made. It is a trust decision about one person, taken in the Access dialog.
+   *
+   * The section is hidden from a head coach who does not hold it (`needsCapability` on the
+   * `batches` catalogue entry) rather than shown and then bounced - see that entry.
    */
   {
     key: "batches.manage",

@@ -3,6 +3,9 @@ import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { istToday } from "@/lib/dates";
 import { getStudentsOverview } from "@/server/students-metrics";
+import { getActiveLevels } from "@/server/levels";
+import { B2_LEVEL_KINDS } from "@/lib/levels";
+import { levelTallyRows } from "@/lib/level-tally";
 
 /**
  * The Head Coach dashboard's own numbers (rebuild spec §5) - "which students need me, and how is
@@ -31,9 +34,16 @@ export type AtRiskStudent = {
 
 export type HeadCoachSnapshot = {
   readonly activeStudents: number;
-  readonly activeGuided: number;
-  readonly activeElite: number;
-  readonly activeSolo: number;
+  /**
+   * Active enrolments per coaching tier, ALREADY LABELLED against the live catalogue.
+   *
+   * Resolved here rather than at the component because the component is a client one and the
+   * catalogue is a database read. It used to be three named fields - `activeGuided`,
+   * `activeElite`, `activeSolo` - which is a promise that there are exactly three tiers, and
+   * levels have been founder-editable since the `Level` table replaced the enum. These rows
+   * sum to `activeStudents`.
+   */
+  readonly activeByLevel: readonly { key: string; label: string; value: number }[];
   readonly completedThisMonth: number;
   readonly droppedThisMonth: number;
   readonly avgSatisfaction: number | null;
@@ -90,9 +100,7 @@ export const getHeadCoachSnapshot = cache(async (): Promise<HeadCoachSnapshot> =
 
   return {
     activeStudents: overview.counts.totalActive,
-    activeGuided: overview.counts.activeGuided,
-    activeElite: overview.counts.activeElite,
-    activeSolo: overview.counts.activeSolo,
+    activeByLevel: levelTallyRows(overview.counts.activeByLevel, await getActiveLevels(), B2_LEVEL_KINDS),
     completedThisMonth: overview.counts.completedThisMonth,
     droppedThisMonth: overview.counts.droppedThisMonth,
     avgSatisfaction: overview.avgSatisfaction,

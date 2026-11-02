@@ -159,7 +159,16 @@ function batchSummary(c: GnConversionRow): string {
   return parts.length ? parts.join(" · ") : "-";
 }
 
-export function ConversionsPanel({ workshopId, conversions }: { workshopId: string; conversions: GnConversionRow[] }) {
+export function ConversionsPanel({
+  workshopId,
+  conversions,
+  canManage,
+}: {
+  workshopId: string;
+  conversions: GnConversionRow[];
+  /** Admin - see the same prop on `AdSetsPanel`. Every writer here requires it; the page does not. */
+  canManage: boolean;
+}) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [creating, setCreating] = useState(false);
@@ -176,14 +185,16 @@ export function ConversionsPanel({ workshopId, conversions }: { workshopId: stri
           <h2 className="font-display text-xl font-semibold">Conversions</h2>
           <p className="text-xs text-muted">{conversions.length} client{conversions.length === 1 ? "" : "s"} converted from this workshop.</p>
         </div>
-        <Btn variant="soft" icon={<Plus size={15} />} onClick={() => { setCreating(true); setError(null); }}>
-          Add conversion
-        </Btn>
+        {canManage && (
+          <Btn variant="soft" icon={<Plus size={15} />} onClick={() => { setCreating(true); setError(null); }}>
+            Add conversion
+          </Btn>
+        )}
       </div>
 
       {conversions.length === 0 ? (
         <p className="rounded-card border border-dashed border-line bg-surface-2 px-4 py-8 text-center text-sm text-muted">
-          No conversions yet - add the first client above.
+          {canManage ? "No conversions yet - add the first client above." : "No conversions recorded for this workshop."}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-card border border-line bg-surface shadow-card">
@@ -197,7 +208,7 @@ export function ConversionsPanel({ workshopId, conversions }: { workshopId: stri
                 <th className="px-3 py-2.5 text-right font-semibold">Paid</th>
                 <th className="px-3 py-2.5 text-right font-semibold">Balance</th>
                 <th className="px-3 py-2.5 text-right font-semibold">Net · NP%</th>
-                <th className="px-3 py-2.5" />
+                {canManage && <th className="px-3 py-2.5" />}
               </tr>
             </thead>
             <tbody>
@@ -226,6 +237,7 @@ export function ConversionsPanel({ workshopId, conversions }: { workshopId: stri
                     <Signed minor={c.pnl.netProfit} />
                     <p className="text-caption text-muted">{pct(c.pnl.npMargin)}</p>
                   </td>
+                  {canManage && (
                   <td className="px-3 py-2.5">
                     <div className="flex items-center justify-end gap-1">
                       <IconButton label={`Edit ${c.fullName}`} size="sm" onClick={() => { setEditing(c); setError(null); }}>
@@ -253,6 +265,7 @@ export function ConversionsPanel({ workshopId, conversions }: { workshopId: stri
                       </IconButton>
                     </div>
                   </td>
+                  )}
                 </tr>
               ))}
             </tbody>

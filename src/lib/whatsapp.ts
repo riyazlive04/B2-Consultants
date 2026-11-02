@@ -51,6 +51,9 @@ export const WHATSAPP_KINDS = [
   "CLASS_REMINDER_COACH",
   "CLASS_ABSENCE",
   "CLASS_CATCH_UP",
+  "WEEKLY_REPORT_LINK",
+  "WEEKLY_REPORT_REMINDER",
+  "WEEKLY_REPORT_MISSING",
   // One per pipeline stage - see lib/stage-messages.ts.
   ...STAGE_WHATSAPP_KINDS,
 ] as const satisfies readonly WhatsAppKind[];
@@ -94,6 +97,9 @@ export const WHATSAPP_KIND_LABELS: Record<WhatsAppKind, string> = {
   CLASS_REMINDER_COACH: "Class reminder (coach)",
   CLASS_ABSENCE: "Marked absent from a class",
   CLASS_CATCH_UP: "Recording not watched yet",
+  WEEKLY_REPORT_LINK: "Weekly report - this week's link",
+  WEEKLY_REPORT_REMINDER: "Weekly report - not filled in yet",
+  WEEKLY_REPORT_MISSING: "Weekly report - missed",
   ...STAGE_KIND_LABELS,
 };
 
@@ -144,7 +150,13 @@ export const WHATSAPP_KIND_HINTS: Record<WhatsAppKind, string> = {
   CLASS_ABSENCE:
     "To a student marked ABSENT, once the coach PUBLISHES that register - not when it is marked. Late and excused are never messaged: one was there, and the other told somebody.",
   CLASS_CATCH_UP:
-    "To a student who missed a class and still has not watched the recording once the catch-up grace (Console → Attendance, default 24h) has run out. Never sent once the recording's own access window has closed.",
+    "To a student who missed a class and still has not watched the recording once the catch-up grace (Console → System → Alerts & Chasing, default 24h) has run out. Never sent once the recording's own access window has closed.",
+  WEEKLY_REPORT_LINK:
+    "To every student on a cohort's roster when that week's report opens, pointing them at their own dashboard. One send per student per week.",
+  WEEKLY_REPORT_REMINDER:
+    "To the students on that cohort who have not submitted yet, part-way through the week's window. Same destination.",
+  WEEKLY_REPORT_MISSING:
+    "To a student whose week closed with no submission - the Red Flag System's 'missed 1 form' rung. Sent once, after the window, not during it.",
   ...STAGE_KIND_HINTS,
 };
 
@@ -322,6 +334,14 @@ const BASE_AVAILABLE_VARS: Record<WhatsAppKind, readonly string[]> = {
    */
   CLASS_ABSENCE: ["name", "class_title", "class_date", "recording_url", "watch_deadline"],
   CLASS_CATCH_UP: ["name", "class_title", "class_date", "recording_url", "watch_deadline"],
+  /**
+   * `week` is the human label ("Week 4, 26/10 - 01/11"), not the ISO key: the key is for the
+   * database, and "2026-W44" in a WhatsApp message tells a student nothing. `report_url` is the
+   * cohort's link for that week, so the same approved template serves every cohort.
+   */
+  WEEKLY_REPORT_LINK: ["name", "cohort", "week", "report_url"],
+  WEEKLY_REPORT_REMINDER: ["name", "cohort", "week", "report_url"],
+  WEEKLY_REPORT_MISSING: ["name", "cohort", "week", "report_url"],
   ...STAGE_KIND_VARS,
 };
 
@@ -368,6 +388,25 @@ const POSITIONAL_ALT_ORDERS: Partial<Record<WhatsAppKind, readonly (readonly str
   CLASS_CATCH_UP: [
     ["name", "class_title", "class_date", "watch_deadline"],
     ["name", "class_title", "class_date"],
+  ],
+
+  /**
+   * The weekly report's link is the whole point of the message, so every layout keeps it. The
+   * shorter one drops the cohort name, which a student already knows, rather than the week or
+   * the URL - a positional template whose arity matches no layout here is refused outright by
+   * `positionalVarMap`, and the fallback has to stay a message worth sending.
+   */
+  WEEKLY_REPORT_LINK: [
+    ["name", "cohort", "week", "report_url"],
+    ["name", "week", "report_url"],
+  ],
+  WEEKLY_REPORT_REMINDER: [
+    ["name", "cohort", "week", "report_url"],
+    ["name", "week", "report_url"],
+  ],
+  WEEKLY_REPORT_MISSING: [
+    ["name", "cohort", "week", "report_url"],
+    ["name", "week", "report_url"],
   ],
 
   /**

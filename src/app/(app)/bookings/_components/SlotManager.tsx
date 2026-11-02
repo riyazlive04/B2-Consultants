@@ -18,6 +18,7 @@ import type { BookingRulesConfig } from "@/lib/config-schema";
 import { toDateInputValue } from "@/lib/dates";
 import { formatDuration } from "@/lib/duration";
 import { safeAction } from "@/lib/action-guard";
+import { SharedSettingNotice } from "@/components/ui/SharedSettingNotice";
 
 const WEEKDAY_OPTIONS: { value: string; label: string; defaultOn: boolean }[] = [
   { value: "MON", label: "Mon", defaultOn: true },
@@ -76,6 +77,9 @@ function BookingRulesForm({ rules }: { rules: BookingRulesConfig }) {
           never confirm, the slot is released and the next call for the same caller that day is moved up into it.
           A WhatsApp &ldquo;yes&rdquo; confirms automatically; you can also confirm by hand from the Bookings tab.
         </p>
+        <div className="mt-3">
+          <SharedSettingNotice setting="confirmLoop" self="bookings" />
+        </div>
         <div className="mt-3 grid grid-cols-1 gap-x-4 sm:grid-cols-2">
           <CheckboxField
             name="autoCancelEnabled"
@@ -308,11 +312,12 @@ function SlotChip({
  * thing the old modal could not have - a URL per section, so "set the auto-cancel window" can be
  * linked to directly.
  */
-const SECTIONS: { id: string; label: string }[] = [
+/** Everything on this page. The three rule sections drop out for a non-Admin - see `canEditRules`. */
+const SECTIONS: { id: string; label: string; adminOnly?: boolean }[] = [
   { id: "add-slots", label: "Add availability" },
-  { id: "booking-rules", label: "Booking rules" },
-  { id: "confirm-loop", label: "Confirm-or-cancel" },
-  { id: "disqualify", label: "Turning applicants away" },
+  { id: "booking-rules", label: "Booking rules", adminOnly: true },
+  { id: "confirm-loop", label: "Confirm-or-cancel", adminOnly: true },
+  { id: "disqualify", label: "Turning applicants away", adminOnly: true },
   { id: "upcoming", label: "Upcoming slots" },
 ];
 
@@ -320,10 +325,16 @@ export function SlotManager({
   slots,
   teamMembers,
   rules,
+  canEditRules,
 }: {
   slots: SlotRow[];
   teamMembers: TeamMemberOption[];
   rules: BookingRulesConfig;
+  /**
+   * Admin. The rule writers behind `BookingRulesForm` all require Admin, so the form is not drawn
+   * for anyone else - and neither are the jump-nav links that would scroll to it.
+   */
+  canEditRules: boolean;
 }) {
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -333,7 +344,15 @@ export function SlotManager({
     setError(null);
     const res = await safeAction(() => generateSlots(form));
     if (!res.ok) return setError(res.error);
-    toast("Slots added");
+    /**
+     * The count, not "Slots added".
+     *
+     * Re-running a range the calendar already covers is the normal way to use this form, and it
+     * legitimately writes nothing. A fixed success message made that case look identical to
+     * forty new slots, so the one time it mattered - "I generated availability and the funnel
+     * still shows no times" - the screen had already said everything was fine.
+     */
+    toast(res.summary ?? "Slots added");
     formRef.current?.reset();
   };
 
@@ -380,7 +399,7 @@ export function SlotManager({
       {/* Jump-nav. The screen is five concerns tall; without this you scroll past four of them
           hunting the one you came for - which is most of what made the old dialog unusable. */}
       <nav aria-label="Sections on this page" className="flex flex-wrap gap-2">
-        {SECTIONS.map((sec) => (
+        {SECTIONS.filter((sec) => canEditRules || !sec.adminOnly).map((sec) => (
           <a
             key={sec.id}
             href={`#${sec.id}`}
@@ -442,7 +461,7 @@ export function SlotManager({
         </div>
       </form>
 
-      <BookingRulesForm rules={rules} />
+      {canEditRules && <BookingRulesForm rules={rules} />}
 
       <div id="upcoming" className="scroll-mt-24 rounded-card border border-line bg-surface p-5 shadow-card">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">

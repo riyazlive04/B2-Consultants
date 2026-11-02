@@ -7,6 +7,7 @@ import {
   tutorFeeLevelFromCode,
 } from "@/lib/tutor-fee-record";
 import { attendedHeadcount, type AttendanceStatus } from "@/lib/attendance";
+import { getTutorFeeConfig } from "./founder-config";
 import type { TutorFeeStatus } from "@prisma/client";
 
 /**
@@ -183,16 +184,21 @@ export const batchPnl = cache(async (batchId: string) => {
 
 /** Batches that would produce a tutor fee - i.e. German levels with a fee band. */
 export const feeEligibleBatches = cache(async () => {
-  const rows = await prisma.batch.findMany({
-    where: { status: "ACTIVE" },
-    select: {
-      id: true, name: true, code: true, level: true, tutorId: true,
-      tutor: { select: { name: true } },
-      _count: { select: { members: true, enrollments: true } },
-    },
-  });
+  // "Eligible" is whatever the founder's rate card prices, so the card has to be read here too -
+  // a level they have just added must become eligible without a deploy.
+  const [rows, config] = await Promise.all([
+    prisma.batch.findMany({
+      where: { status: "ACTIVE" },
+      select: {
+        id: true, name: true, code: true, level: true, tutorId: true,
+        tutor: { select: { name: true } },
+        _count: { select: { members: true, enrollments: true } },
+      },
+    }),
+    getTutorFeeConfig(),
+  ]);
   return rows
-    .filter((b) => tutorFeeLevelFromCode(b.level) !== null)
+    .filter((b) => tutorFeeLevelFromCode(b.level, config) !== null)
     .map((b) => ({
       id: b.id,
       name: b.name,

@@ -30,8 +30,18 @@ export default async function PaymentsPage({
   searchParams?: { period?: string; on?: string; from?: string; to?: string; range?: string };
 }) {
   const session = await requireSection("payments");
-  // With chasing off, the receivable ages in silence - which this screen cannot show by itself.
-  const enginesDown = await enginesOff(["dunning"]);
+  /**
+   * ── THE DUNNING NOTICE DOES NOT BELONG ON THIS SCREEN ────────────────────────────────────
+   *
+   * It used to say the chase ladder was off "so the receivable ages in silence", which read as a
+   * switch that would start chasing the invoices on this page. It would not: `runDunning`'s
+   * candidates are `Instalment` rows under a Finance plan, and an issued invoice is never one of
+   * them. Arming it changes nothing here.
+   *
+   * So the engine banner goes, and the fact it was hiding is stated below the board instead -
+   * where somebody looking at an overdue invoice will read it.
+   */
+  const enginesDown = await enginesOff([]);
   // Defaults to "all" rather than "month": an invoice board whose default hid every invoice
   // older than the 1st would be a surprising regression for anyone chasing an old debt.
   const periodSpec = parsePeriod(searchParams ?? {});
@@ -65,6 +75,14 @@ export default async function PaymentsPage({
       {/* Built, and switched off - said on the screen it affects rather than only on the
           Console, because an engine nobody armed is indistinguishable from a broken one. */}
       <EngineOffNotice engines={enginesDown} canOpenConsole={session.role === "ADMIN"} />
+
+      {/* The one thing nobody on this screen should have to discover: an unpaid invoice is not
+          chased by anything, armed or otherwise. */}
+      <p role="note" className="rounded-card border border-line bg-surface-2 px-4 py-3 text-caption text-muted">
+        Nothing chases an unpaid invoice automatically. The payment chase ladder in the Console
+        works on Finance instalment plans, so an overdue invoice here waits for somebody to follow
+        it up - the Overdue tile below is that list.
+      </p>
 
       <Grid cols={4}>
         <MetricCard

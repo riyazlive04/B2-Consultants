@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { ACTIVE } from "@/lib/soft-delete";
+import { BOOKED_CALL_STAGES } from "@/lib/labels";
 import type { LogVariant } from "@/lib/daily-log";
 
 /**
@@ -61,9 +62,28 @@ export async function computeAutoCapture(
   } else if (variant === "APPOINTMENT_SETTER") {
     const [leadsAdded, appointments, contacted] = await Promise.all([
       prisma.lead.count({ where: { ...ACTIVE, enteredById: userId, createdAt: tsRange } }),
-      prisma.leadStageHistory.count({
-        where: { changedById: userId, toStage: "DISCO_BOOKED", changedAt: tsRange },
-      }),
+      /**
+       * Appointments this setter booked today.
+       *
+       * `BOOKED_CALL_STAGES`, not `DISCO_BOOKED` alone: `submitBooking` writes
+       * `STRATEGY_CALL_BOOKED`, so a setter who booked a call the normal way had it counted as
+       * zero on their own daily log - the one number on that form that is supposed to be
+       * captured for them rather than typed.
+       *
+       * `findMany` + `distinct` rather than `count`, because a lead moved through both stages in
+       * one day is one appointment. `count` cannot be made distinct in Prisma.
+       */
+      prisma.leadStageHistory
+        .findMany({
+          where: {
+            changedById: userId,
+            toStage: { in: BOOKED_CALL_STAGES as unknown as never[] },
+            changedAt: tsRange,
+          },
+          select: { leadId: true },
+          distinct: ["leadId"],
+        })
+        .then((rows) => rows.length),
       // new leads contacted today = leads this setter owns whose first-contact was stamped
       // today (speed-to-lead: markLeadContacted). Follow-up MESSAGES have no source until
       // the Wave-2 WhatsApp channel - that field stays manual.

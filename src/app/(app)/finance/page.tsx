@@ -32,7 +32,9 @@ import { getWhatsAppStatusMap } from "@/server/whatsapp";
 import { getCommissionReport } from "@/server/commission-metrics";
 import { getActiveLevels } from "@/server/levels";
 import { resolveBusinessLine } from "@/server/business-line-view";
-import { levelOptions } from "@/lib/levels";
+import { B2_LEVEL_KINDS, levelOptions } from "@/lib/levels";
+import { seriesColor } from "@/lib/chart";
+import { GERMAN_NOTE_BUCKET, levelBreakdownRows } from "@/lib/level-tally";
 import { CommissionSection } from "./_components/CommissionSection";
 import { ExpenseSection } from "./_components/ExpenseSection";
 import { IncomeSection } from "./_components/IncomeSection";
@@ -69,8 +71,21 @@ export default async function FinancePage({
   searchParams?: { record?: string; line?: string; period?: string; on?: string; from?: string; to?: string };
 }) {
   const session = await requireSection("finance");
-  /* The three postings that make the P&L on this very screen incomplete when they are off:
-     commission owed, German Note's cost of delivery, and receivables at issue. */
+  /**
+   * ── WHAT ARMING THESE THREE ACTUALLY CHANGES, AND WHAT IT DOES NOT ──────────────────────────
+   *
+   * The note used to say these three "make the P&L on this very screen incomplete when they are
+   * off", which was not true and set up a worse surprise than silence would have. Every figure on
+   * this page is computed from the `Income`, `Expense` and `PendingPayment` records - not from the
+   * double-entry ledger - so arming commission accrual, tutor-fee accrual or invoice-issuance
+   * posting moves nothing here. A founder who armed all three to "fix the numbers" would watch
+   * the screen not move and conclude the switches were broken.
+   *
+   * What they change is the BOOKS, which is a real thing to care about and currently has no
+   * screen: `/ledger` was removed at the founder's instruction, so the journal and trial balance
+   * are reachable only from a script (see `server/ledger.ts`). The engine copy in `lib/engines.ts`
+   * now says ledger rather than P&L, for the same reason.
+   */
   const enginesDown = await enginesOff(["commissionAccrual", "tutorFeeAccrual", "invoicePosting"]);
   // Deep-link from the top-bar "+ Record" CTA lands on Income (0) or Expenses (1).
   const initialTab = searchParams?.record === "expense" ? 1 : 0;
@@ -136,7 +151,14 @@ export default async function FinancePage({
   const canPurge = session.role === "ADMIN";
   const isAdmin = session.role === "ADMIN";
   const today = toDateInputValue(istToday());
-  const monthKey = today.slice(0, 7);
+  /*
+   * `monthKey` - TODAY's calendar month - used to be derived here and used to re-filter the rows
+   * behind three of the popups (expenses by category, COGS by category, top 5 payments). Those
+   * rows arrive from `getFinanceOverview(period)` ALREADY bounded to the selected window, so the
+   * extra filter did not merely ignore the period bar: on any window that is not the current
+   * month it matched nothing, and the popups behind the cards came up empty while the cards
+   * themselves showed real figures. Removed - the rows are the period's, so the aggregates are.
+   */
   // Follows the SELECTED window, not today - a page showing June that says "July" is worse
   // than one with no label at all.
   const monthLabel = period.label;
@@ -313,37 +335,63 @@ export default async function FinancePage({
   // for Guided is the same violet as the Guided chip everywhere else.
   // Raw dual-currency rows: the ₹/€ formatting happens in FinanceBento, which can read the
   // toggle. Pre-formatting here is what used to pin this card to INR.
+  /**
+   * One bar per programme, from the live catalogue - plus German Note as one bar.
+   *
+   * This named Solo, Guided and Elite in source and swept everything else into a neutral "Other"
+   * bar. Levels are founder-editable, so a tier added in Programs sold, invoiced and earned money
+   * that showed up on the P&L as a residue bucket the comment itself calls "not a programme".
+   * Keyed by code now (`byLevel`), so a new tier is a named bar the day it takes money.
+   *
+   * Programme COLOURS stay fixed for the three the design system names (§1.3) so the eye learns
+   * them - the Guided bar is the same violet as the Guided chip everywhere else. A tier the
+   * palette has no variable for takes a series colour, by catalogue position, so it is at least
+   * stable between renders.
+   */
+  const FIXED_LEVEL_COLORS: Record<string, string> = {
+    SOLO: "var(--lvl-solo)",
+    GUIDED: "var(--lvl-guided)",
+    ELITE: "var(--lvl-elite)",
+  };
+  const zero = { inr: 0, eur: 0 };
+  const b2Bars = levelBreakdownRows(
+    Object.entries(metrics.byLevel)
+      .filter(([key, m]) => key !== GERMAN_NOTE_BUCKET && m.inr > 0)
+      .map(([key]) => key),
+    activeLevels,
+    B2_LEVEL_KINDS,
+  ).map((r, i) => ({
+    key: r.key || "none",
+    label: r.label,
+    amount: metrics.byLevel[r.key] ?? zero,
+    compare: metrics.prevByLevel[r.key] ?? zero,
+    color: FIXED_LEVEL_COLORS[r.key] ?? seriesColor(i + Object.keys(FIXED_LEVEL_COLORS).length),
+  }));
+  const gnBar = {
+    key: "German Note",
+    label: "German Note",
+    amount: metrics.byLevel[GERMAN_NOTE_BUCKET] ?? zero,
+    compare: metrics.prevByLevel[GERMAN_NOTE_BUCKET] ?? zero,
+    color: "var(--lvl-gn)",
+  };
+  // A German-Note view has no coaching-tier bars, and vice versa.
   const levelItems = (
-    [
-      ["Solo", metrics.byLevel.SOLO, metrics.prevByLevel.SOLO, "var(--lvl-solo)"],
-      ["Guided", metrics.byLevel.GUIDED, metrics.prevByLevel.GUIDED, "var(--lvl-guided)"],
-      ["Elite", metrics.byLevel.ELITE, metrics.prevByLevel.ELITE, "var(--lvl-elite)"],
-      ["German Note", metrics.byLevel.GERMAN_NOTE, metrics.prevByLevel.GERMAN_NOTE, "var(--lvl-gn)"],
-      // "Other" is a residue bucket, not a programme - it gets the neutral, so it can never be
-      // mistaken for a fifth product line.
-      ["Other", metrics.byLevel.OTHER, metrics.prevByLevel.OTHER, "var(--ink-3)"],
-    ] as const
-  )
-    // A German-Note view has no Solo/Guided/Elite rows, and vice versa.
-    .filter(([label]) =>
-      line === "ALL" ? true : line === "GERMAN_NOTE" ? label === "German Note" : label !== "German Note",
-    )
-    .filter(([label, m]) => label !== "Other" || m.inr > 0)
-    .map(([label, m, prev, color]) => ({
-      key: label,
-      label,
-      amount: { inr: m.inr, eur: m.eur },
-      compare: { inr: prev.inr, eur: prev.eur },
-      color,
-    }));
+    line === "GERMAN_NOTE" ? [gnBar] : line === "B2" ? b2Bars : [...b2Bars, gnBar]
+  ).map(({ key, label, amount, compare, color }) => ({
+    key,
+    label,
+    amount: { inr: amount.inr, eur: amount.eur },
+    compare: { inr: compare.inr, eur: compare.eur },
+    color,
+  }));
 
-  // Expenses by category (this month) - top 5 + Other tail
+  // Expenses by category, over the selected period - top 5 + Other tail
   // The founder's own name for the category, trimmed of its parenthetical for a donut legend.
   const shortCat = (c: string) =>
     expenseCategoryLabel(expenseCategories, c).split(" (")[0].split(" - ")[0];
   // Both aggregates are carried through so the donut can flip currency with the toggle.
   const catTotals = new Map<string, { inr: number; eur: number }>();
-  for (const e of expenses.filter((e) => e.date.slice(0, 7) === monthKey)) {
+  for (const e of expenses) {
     const cur = catTotals.get(e.category) ?? { inr: 0, eur: 0 };
     catTotals.set(e.category, { inr: cur.inr + e.agg.inr, eur: cur.eur + e.agg.eur });
   }
@@ -368,10 +416,10 @@ export default async function FinancePage({
       : []),
   ];
 
-  // COGS by category (this month) - same shape as catSlices, restricted to isCogs expenses,
-  // so the "COGS this month" card's popup breaks the figure down instead of repeating it.
+  // COGS by category over the same period - same shape as catSlices, restricted to isCogs
+  // expenses, so the COGS card's popup breaks the figure down instead of repeating it.
   const cogsCatTotals = new Map<string, { inr: number; eur: number }>();
-  for (const e of expenses.filter((e) => e.isCogs && e.date.slice(0, 7) === monthKey)) {
+  for (const e of expenses.filter((e) => e.isCogs)) {
     const cur = cogsCatTotals.get(e.category) ?? { inr: 0, eur: 0 };
     cogsCatTotals.set(e.category, { inr: cur.inr + e.agg.inr, eur: cur.eur + e.agg.eur });
   }
@@ -387,9 +435,8 @@ export default async function FinancePage({
       ? ((metrics.revenue.inr - metrics.prevSameDay.revenueInr) / metrics.prevSameDay.revenueInr) * 100
       : null;
 
-  // Top 5 payments this month by aggregated INR value
+  // Top 5 payments in the selected period, by aggregated INR value
   const topPayments = incomes
-    .filter((i) => i.date.slice(0, 7) === monthKey)
     .filter((i) => (line === "ALL" ? true : lineOfLevel(i.programLevel) === line))
     .sort((a, b) => b.agg.inr - a.agg.inr)
     .slice(0, 5);
@@ -415,7 +462,7 @@ export default async function FinancePage({
       signal: view.net.inr < 0 ? "risk" : "ok",
       signedValue: view.net.inr,
       tooltip: "Net Profit = Revenue minus all costs including marketing and tools.",
-      detailTitle: "Net profit - this month",
+      detailTitle: `Net profit - ${monthLabel.toLowerCase()}`,
       detailNote: "Net = revenue - all costs (COGS, marketing, tools, ops).",
       detailRows: [
         { label: "Revenue (money in)", inrMinor: view.revenue.inr, eurMinor: view.revenue.eur },
@@ -443,7 +490,7 @@ export default async function FinancePage({
       signal: view.gross.inr < 0 ? "risk" : "ok",
       signedValue: view.gross.inr,
       tooltip: "Gross Profit = Revenue minus only delivery costs (COGS).",
-      detailTitle: "Gross profit - this month",
+      detailTitle: `Gross profit - ${monthLabel.toLowerCase()}`,
       detailNote: "Gross = revenue - COGS (direct delivery).",
       detailRows: [
         { label: "Revenue", inrMinor: metrics.revenue.inr, eurMinor: metrics.revenue.eur },
@@ -451,22 +498,22 @@ export default async function FinancePage({
       ],
     },
     {
-      key: "cogs", label: "COGS this month", iconName: "package",
+      key: "cogs", label: "COGS", iconName: "package",
       inrMinor: view.cogs.inr, eurMinor: view.cogs.eur,
-      detailTitle: "Cost of delivery - this month",
+      detailTitle: `Cost of delivery - ${monthLabel.toLowerCase()}`,
       detailNote: "By category, largest first.",
       detailRows: cogsCatSlices.length
         ? cogsCatSlices.map((c) => ({ label: c.label, inrMinor: c.amount.inr, eurMinor: c.amount.eur }))
-        : [{ label: "No COGS-tagged expenses yet this month", text: "-" }],
+        : [{ label: `No COGS-tagged expenses in ${monthLabel.toLowerCase()}`, text: "-" }],
     },
     {
-      key: "expenses", label: "Expenses this month", iconName: "card",
+      key: "expenses", label: "Expenses", iconName: "card",
       inrMinor: view.expenses.inr, eurMinor: view.expenses.eur,
-      detailTitle: "Expenses - this month",
+      detailTitle: `Expenses - ${monthLabel.toLowerCase()}`,
       detailNote: "By category, largest first.",
       detailRows: catSlices.length
         ? catSlices.map((c) => ({ label: c.label, inrMinor: c.amount.inr, eurMinor: c.amount.eur }))
-        : [{ label: "No expenses yet this month", text: "-" }],
+        : [{ label: `No expenses in ${monthLabel.toLowerCase()}`, text: "-" }],
     },
     {
       key: "receivables", label: "Pending receivables", iconName: "clock",
@@ -688,6 +735,7 @@ export default async function FinancePage({
             daysOverdue: p.daysOverdue,
             wa: waByPending[p.id] ?? null,
           }))}
+          periodLabel={monthLabel}
         />
 
       {/* §3.2/§3.3 - the year view the dashboard never had: cumulative target vs

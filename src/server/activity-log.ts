@@ -160,6 +160,7 @@ export const SYSTEM_ACTORS = {
   dunning: "Dunning engine",
   alerts: "Alert engine",
   intake: "Lead intake",
+  weeklyReport: "Weekly report engine",
 } as const;
 
 export type SystemActor = (typeof SYSTEM_ACTORS)[keyof typeof SYSTEM_ACTORS];

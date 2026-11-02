@@ -35,7 +35,7 @@ import { getMyCatchUp } from "./catch-up";
 import { getAttendanceConfig } from "./founder-config";
 import { getAgreementTaskCounts } from "./agreement-state";
 import { deliveryNotifications } from "./delivery-health";
-import { getImprovementBellCounts } from "./improvements";
+import { getImprovementBellCounts, getRepliesForReporter } from "./improvements";
 import { MILESTONE_LABELS } from "@/lib/labels";
 import { SEATED_STATUSES } from "@/lib/enrollment-lifecycle";
 import { activationBlockers, seatCount } from "@/lib/batch";
@@ -838,6 +838,36 @@ async function _computeNotifications(role: AppRole, userId: string): Promise<Not
    * exists for "a person deliberately raised this for attention", and somebody saying they cannot
    * do their job is the purest case of it in the app.
    */
+  /**
+   * ── EVERY ROLE: the answer to something YOU reported ──
+   *
+   * The other half of the improvement loop, and the half that was missing. Filing a report is
+   * open to all six roles; the queue that holds it is Admin and Head only. So a coach who
+   * reported a broken screen, or a student who reported a missing recording, had nowhere their
+   * report existed - and `visibleToReporter`, the flag whose whole purpose is to address a reply
+   * to them, was read by nothing. The founder typed a resolution, ticked "the reporter sees
+   * this", and the reporter never saw it.
+   *
+   * The reply's own words are carried in the body rather than a link to it, because for most of
+   * these people there is no page to link to. `href` goes to the screen the report was about
+   * where the queue is closed to them, so "we fixed it" lands next to the thing that was fixed.
+   *
+   * Before the role branches below on purpose: this is personal mail, not a management alert.
+   */
+  for (const reply of await getRepliesForReporter(userId)) {
+    items.push({
+      id: `improvement-reply-${reply.id}`,
+      severity: reply.closed ? "win" : "info",
+      title: reply.closed
+        ? `Closed: ${reply.title}`
+        : `Reply on what you reported: ${reply.title}`,
+      body: reply.body,
+      // Admin and Head can open the report itself; nobody else can, so they are sent to the
+      // screen they reported about instead of being bounced off a queue.
+      href: role === "ADMIN" || role === "HEAD" ? `/improvements?ref=${reply.ref}` : "/",
+    });
+  }
+
   if (role === "ADMIN") {
     const counts = await getImprovementBellCounts();
     if (counts.blocking > 0) {

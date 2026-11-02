@@ -6,7 +6,7 @@ import { Card, Hint } from "@/components/ui/kit";
 import { SelectMenu } from "@/components/ui/SelectMenu";
 import { toast } from "@/components/ui/feedback";
 import { DIMENSION_LABELS, type QuestionOption } from "@/lib/qualification";
-import { BANT_MAX } from "@/lib/booking-intake";
+import { BANT_MAX, type BantThresholds } from "@/lib/booking-intake";
 import type { IntakeMappingReport } from "@/server/intake-inspection";
 import type { BantDimension, QuestionKind } from "@prisma/client";
 import { safeAction } from "@/lib/action-guard";
@@ -15,6 +15,7 @@ import {
   updateQualificationQuestion,
   setQualificationQuestionActive,
   setQualificationScorer,
+  setQualificationThresholds,
 } from "@/server/qualification-actions";
 
 /**
@@ -257,15 +258,123 @@ function InboundReport({ report }: { report: IntakeMappingReport }) {
   );
 }
 
+/**
+ * The three lines drawn through the scores - the verdict cutoffs.
+ *
+ * These were constants in `lib/booking-intake.ts` until 1 Nov 2026. Moving them last time (the
+ * 0-5 to 0-4 rescale) took a code change, a deploy and a data migration, which is the wrong cost
+ * for a number the sales team wants to try at 2.2 for a fortnight.
+ *
+ * Three things this panel has to say out loud, because each one has bitten somebody:
+ *  · the bottom line REJECTS people while auto-disqualify is armed;
+ *  · a change applies to the next score, not to verdicts already acted on;
+ *  · the 0-`BANT_MAX` scale is NOT one of the knobs, because changing it would reinterpret every
+ *    stored score against a scale it was never measured on.
+ */
+function CutoffEditor({ thresholds }: { thresholds: BantThresholds }) {
+  const router = useRouter();
+  const [busy, start] = useTransition();
+  const [draft, setDraft] = useState(thresholds);
+
+  const dirty =
+    draft.confirmAbove !== thresholds.confirmAbove ||
+    draft.doubtFrom !== thresholds.doubtFrom ||
+    draft.dimensionMetAt !== thresholds.dimensionMetAt;
+  // Mirrors the server refine, so the reason appears before the round trip rather than after it.
+  const ordered = draft.confirmAbove >= draft.doubtFrom;
+
+  const save = () =>
+    start(async () => {
+      const res = await safeAction(() => setQualificationThresholds(draft));
+      if (!res.ok) return toast(res.error, "error");
+      toast("Cutoffs saved - they apply to the next score");
+      router.refresh();
+    });
+
+  const field = (
+    key: keyof BantThresholds,
+    label: string,
+    help: string,
+  ) => (
+    <label className="flex-1 min-w-[12rem] space-y-1">
+      <span className="block text-caption font-semibold uppercase text-ink-3">{label}</span>
+      <input
+        type="number"
+        inputMode="decimal"
+        step="0.1"
+        min={0}
+        max={BANT_MAX}
+        value={draft[key]}
+        onChange={(e) => {
+          const n = Number(e.target.value);
+          setDraft((d) => ({ ...d, [key]: Number.isFinite(n) ? n : d[key] }));
+        }}
+        className="w-full rounded-field border border-line bg-surface px-3 py-1.5 text-sm tnum"
+      />
+      <span className="block text-caption text-ink-3">{help}</span>
+    </label>
+  );
+
+  return (
+    <Card>
+      <p className="text-caption font-semibold uppercase text-ink-3">Verdict cutoffs</p>
+      <p className="mt-1 text-sm text-ink-2">
+        Where the lines fall on the 0-{BANT_MAX} average. <strong>Below the Doubt cutoff is a
+        Cancel</strong>, and while auto-disqualify is armed that is what turns an applicant away
+        with an email - so the lower number is the one with teeth.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-4">
+        {field("confirmAbove", "Confirm above", "Strictly above this scores Confirm.")}
+        {field("doubtFrom", "Doubt from", "At or above this, and not above Confirm, scores Doubt. Below it, Cancel.")}
+        {field("dimensionMetAt", "Dimension met at", "When one BANT dimension counts as evidenced - drives the pipeline's call-these-first ranking.")}
+      </div>
+      {!ordered && (
+        <p className="mt-3 text-sm text-risk">
+          The Confirm cutoff must be at or above the Doubt cutoff, or nobody can score Doubt.
+        </p>
+      )}
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          disabled={busy || !dirty || !ordered}
+          onClick={save}
+          className="rounded-btn border border-current px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+        >
+          {busy ? "Saving…" : "Save cutoffs"}
+        </button>
+        {dirty && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setDraft(thresholds)}
+            className="text-sm text-ink-3 underline disabled:opacity-50"
+          >
+            Discard
+          </button>
+        )}
+      </div>
+      <Hint>
+        A change takes effect on the <strong>next</strong> score. Verdicts already stored on leads
+        and bookings are left alone - they record what the business acted on, so moving a line
+        re-interprets future answers rather than rewriting past decisions. The 0-{BANT_MAX} scale
+        itself is fixed: changing it would reinterpret every score ever stored, so it stays a
+        migration rather than a setting.
+      </Hint>
+    </Card>
+  );
+}
+
 export function QualificationPanel({
   questions,
   shadow,
   scorer,
+  thresholds,
   inbound,
 }: {
   questions: AdminQuestion[];
   shadow: ShadowStatus;
   scorer: ScorerMode;
+  thresholds: BantThresholds;
   inbound: IntakeMappingReport;
 }) {
   const router = useRouter();
@@ -312,6 +421,10 @@ export function QualificationPanel({
       {/* The gate, and the switch it guards. Deliberately loud: an admin editing scores below
           needs to know in one glance whether those edits decide anything. */}
       <ScorerSwitch shadow={shadow} scorer={scorer} />
+
+      {/* Above the question table on purpose: the cutoffs decide what a score MEANS, so reading
+          them first is what makes the scores below legible. */}
+      <CutoffEditor thresholds={thresholds} />
 
       <InboundReport report={inbound} />
 

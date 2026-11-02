@@ -15,6 +15,10 @@
 import { z } from "zod";
 // One-directional: lib/leaderboard.ts is pure and imports nothing, so there is no cycle. The
 // catalogue has to be reachable here because the coercer below fills gaps from its defaults.
+// Same one-directional rule: lib/weekly-flags.ts is pure and imports nothing. The thresholds
+// are defined there because that is where the rules reading them live, and are reached here so
+// there is one set of defaults rather than a copy that can drift from the engine.
+import { WEEKLY_THRESHOLD_DEFAULTS, WEEKLY_THRESHOLD_LEVEL_DEFAULTS } from "./weekly-flags";
 import {
   DEFAULT_LEADERBOARD_CONFIG,
   LEADERBOARD_METRICS,
@@ -39,7 +43,14 @@ import {
   SECTION_ICON_NAMES,
   type SectionsConfig,
 } from "./sections";
+// lib/soft-delete.ts imports nothing either, so the shipped archive window is reachable here
+// without a cycle - and the purge reads the SAME constant as its default.
+import { RETENTION_DAYS } from "./soft-delete";
 import { DEFAULT_DISCONTINUE_REASONS } from "./enrollment-lifecycle";
+// Same one-directional rule again: lib/booking-intake.ts imports nothing at all, so the BANT
+// scale and the shipped cutoffs are reachable here without a cycle. The defaults live beside the
+// scorer that applies them, and are read here so there is one set rather than a copy.
+import { BANT_MAX, DEFAULT_BANT_THRESHOLDS, type BantThresholds } from "./booking-intake";
 import { GOAL_METRICS } from "./goals";
 import { REWARD_WINDOWS, type RewardTrigger } from "./rewards";
 import { DEFAULT_CALLBACK_CHASE } from "./callback-chase";
@@ -219,7 +230,27 @@ const sectionSettingSchema = z.object({
   group: z.enum(SECTION_GROUPS),
   order: z.number().int().min(0).max(10_000),
   enabled: z.boolean(),
-  roles: z.array(z.enum(APP_ROLES as [string, ...string[]])).max(APP_ROLES.length),
+  /**
+   * ON THE SIDEBAR - the founder's explicit answer, or absent for the code default.
+   *
+   * ── Why this field had to exist ─────────────────────────────────────────────────────────
+   * `offRail` sections (Outreach) are meant to be puttable back on the rail "with one toggle in
+   * Console → Sections", and `resolveSections` implemented that as `enabled === true` - on the
+   * reasoning that an explicit "on" should mean what it says. But the Sections panel saves EVERY
+   * row on every save, and an off-rail section is enabled (it is reachable, just not listed), so
+   * every save wrote `enabled: true` for Outreach and put it back on the sidebar. Changing the
+   * label of an unrelated section re-added a nav item, repeatedly, and the only way to remove it
+   * again was to disable the section outright - which breaks the route.
+   *
+   * `enabled` answers "can this be reached"; this answers "is it listed". They were one field
+   * doing two jobs, and the second job was being done by accident.
+   *
+   * Optional on purpose: an existing saved config carries no `onRail`, so it falls back to the
+   * catalogue's own answer - which is the state the founder actually wanted, and is therefore
+   * also the repair for any config a stray save has already modified.
+   */
+  onRail: z.boolean().optional(),
+  roles: z.array(z.enum(APP_ROLES)).max(APP_ROLES.length),
 });
 
 export const sectionsConfigSchema = z.object({
@@ -662,32 +693,88 @@ export function coerceCommissionRulesConfig(value: unknown): CommissionRulesConf
  * batch". They are kept apart until §18.2 is settled - merging them would silently restate
  * historical workshop P&L.
  */
+/**
+ * The levels the rate card SHIPS with. Not a closed list any more - see `ratesByLevel`.
+ *
+ * Kept as a named constant because the default config is built from it and the Console panel
+ * seeds a new install from it. A founder who teaches B2 adds a row; they do not edit this.
+ */
 export const TUTOR_FEE_LEVELS = ["A1", "A2", "B1"] as const;
-export type TutorFeeLevel = (typeof TUTOR_FEE_LEVELS)[number];
+
+/**
+ * A German level code as the rate card keys it - "A1", not "GN_A1".
+ *
+ * A bare `string` rather than a union, because the card is founder-editable and the whole point
+ * of FLEX-074 was that a union made a new level unpriceable without a deploy. The narrowing that
+ * matters happens in `tutorFeeLevelFromCode`, which returns null for a level the card does not
+ * price - so an unconfigured level is OMITTED from costs exactly as it was before, rather than
+ * being charged at a guessed rate.
+ */
+export type TutorFeeLevel = string;
 
 const tutorFeeBandSchema = z.object({
   atOrAbove: z.number().int().min(0).max(10_000_000),
   below: z.number().int().min(0).max(10_000_000),
 });
 
+/** The band used when a level is priced but its row is unreadable. Never a guessed rate. */
+export const DEFAULT_TUTOR_FEE_BAND = { atOrAbove: 7000, below: 8000 } as const;
+
 export const tutorFeeConfigSchema = z.object({
   thresholdStudents: z.number().int().min(1).max(100),
-  ratesByLevel: z.object({
-    A1: tutorFeeBandSchema,
-    A2: tutorFeeBandSchema,
-    B1: tutorFeeBandSchema,
-  }),
+  /**
+   * One band per level the business actually pays a trainer for, keyed by level code.
+   *
+   * ── Why this stopped being a fixed {A1, A2, B1} object (1 Nov 2026) ─────────────────────────
+   * Levels have been founder-editable for months, but this card was not: it had three keys in its
+   * schema, and `tutorFeeLevelFromCode` hardcoded the same three. So a GN_B2 batch was dropped
+   * from the tutor-cost table silently - the German Note P&L simply did not count the trainer, and
+   * nothing on screen said a level was being skipped.
+   *
+   * A missing key still means "this level carries no trainer fee", which is the behaviour that
+   * kept B2 out of the table and is correct for the coaching tiers. What changes is that it is now
+   * a FOUNDER'S statement rather than a developer's.
+   *
+   * Keys are validated as level codes without the `GN_` prefix, which is the form the fee row and
+   * the batch P&L both look up.
+   */
+  ratesByLevel: z
+    .record(
+      z
+        .string()
+        .trim()
+        .min(1)
+        .max(16)
+        // Uppercase alphanumerics with optional underscores: "A1", "B2", "A1_A2".
+        .regex(/^[A-Z0-9][A-Z0-9_]*$/, "A level code looks like A1 or B2 - capitals and digits")
+        /**
+         * ⚠ A `GN_` PREFIX HAS TO BE REFUSED, not tolerated.
+         *
+         * Every lookup strips the prefix before reading this card (`stripLevelPrefix`), so a row
+         * keyed "GN_A1" is never found: the founder would add a rate, save it, see it listed, and
+         * the level would still be omitted from every cost table. A key that cannot match is
+         * worse than a rejected one, and the panel normalises it away before saving - this is the
+         * last line of defence against a hand-edited settings row.
+         */
+        .refine((k) => !k.startsWith("GN_"), {
+          message: "Use the level code without the GN_ prefix - A1, not GN_A1",
+        }),
+      tutorFeeBandSchema,
+    )
+    .refine((r) => Object.keys(r).length <= 40, {
+      message: "That is more levels than the catalogue can hold",
+    }),
 });
 
 export type TutorFeeConfig = z.infer<typeof tutorFeeConfigSchema>;
 
 export const DEFAULT_TUTOR_FEE_CONFIG: TutorFeeConfig = {
   thresholdStudents: 5,
-  ratesByLevel: {
-    A1: { atOrAbove: 7000, below: 8000 },
-    A2: { atOrAbove: 7000, below: 8000 },
-    B1: { atOrAbove: 7000, below: 8000 },
-  },
+  // Exactly the three levels and the two rates this shipped with, built from the list above so
+  // the default and the panel's "add the shipped levels" seed cannot drift apart.
+  ratesByLevel: Object.fromEntries(
+    TUTOR_FEE_LEVELS.map((level) => [level, { ...DEFAULT_TUTOR_FEE_BAND }]),
+  ),
 };
 
 export function coerceTutorFeeConfig(value: unknown): TutorFeeConfig {
@@ -710,7 +797,24 @@ export function coerceTutorFeeConfig(value: unknown): TutorFeeConfig {
  * currencies are configurable: a €-billed student's plan can't inherit a rupee surcharge.
  */
 export const INSTALMENT_COUNT_MIN = 2; // 1 instalment is a full payment
-export const INSTALMENT_COUNT_MAX = 24;
+/**
+ * The longest plan the table will hold.
+ *
+ * ── Why this was WIDENED rather than made configurable (1 Nov 2026) ─────────────────────────
+ * It sat on a register of hardcoded rules to turn into settings, and that was the wrong call. A
+ * bound on a config field is a guard rail against a typo - someone meaning 6 and typing 60 - not
+ * a statement of business policy, and a setting whose only job is to permit another setting is
+ * one no founder would ever think to go looking for. Worse, it could only ever be lowered into
+ * invalidating tiers that were already saved.
+ *
+ * So the fix is for the rail to stop being in the way. 24 was arbitrary; 60 is five years of
+ * monthly instalments, comfortably past anything this business would agree to, and still tight
+ * enough to catch the missed decimal point the bound exists for.
+ *
+ * `INSTALMENT_COUNT_MIN` genuinely is a rule and stays code: a one-part plan is a full payment,
+ * and that is a fact about what the word means rather than a preference.
+ */
+export const INSTALMENT_COUNT_MAX = 60;
 
 const instalmentTierSchema = z.object({
   count: z.number().int().min(INSTALMENT_COUNT_MIN).max(INSTALMENT_COUNT_MAX),
@@ -1041,15 +1145,30 @@ export function coerceInvoiceSettings(value: unknown): InvoiceSettings {
  */
 export const bookOrderConfigSchema = z.object({
   orderThresholdInrMinor: z.number().int().min(0),
-  /** Order A1's books first and re-quote before each later level (§19.3). */
-  requireFreshQuotePerLevel: z.boolean().default(true),
+  /*
+   * ── `requireFreshQuotePerLevel` WAS HERE, AND IT WAS A SWITCH FOR NOTHING ────────────────
+   *
+   * It stored "order A1's books first and re-quote before each later level (§19.3)", the Console
+   * drew a toggle for it, and no code anywhere read it - `decideBookOrder` takes the whole config
+   * and uses only the threshold, which the Console's own preview demonstrated by producing an
+   * identical table whichever way the toggle was set.
+   *
+   * It was not implementable as a toggle either, because the rule it describes is STRUCTURAL: a
+   * `BookOrder` is for a single level and never a bundle (see `BOOK_ORDER_LEVEL_KINDS`), and every
+   * order opens at QUOTE_REQUESTED. So each level is already quoted afresh, unconditionally, and
+   * the only thing the OFF position could have meant - one quote covering a 3-level set - has
+   * nowhere in the data model to live.
+   *
+   * Removed rather than implemented: inventing the OFF behaviour would be inventing a business
+   * rule about money with the publisher. Zod strips unknown keys, so an AppSetting row still
+   * carrying the old field parses fine and simply drops it.
+   */
 });
 
 export type BookOrderConfig = z.infer<typeof bookOrderConfigSchema>;
 
 export const DEFAULT_BOOK_ORDER_CONFIG: BookOrderConfig = {
   orderThresholdInrMinor: 3_000_000, // ₹30,000 - the spec's example, pending §18.3
-  requireFreshQuotePerLevel: true,
 };
 
 export function coerceBookOrderConfig(value: unknown): BookOrderConfig {
@@ -1079,12 +1198,33 @@ export const pipelineConfigSchema = z.object({
    * genuinely want the board to hold only hand-picked deals.
    */
   autoCreateOpportunity: z.boolean().default(true),
+  /**
+   * How many cards the kanban board loads.
+   *
+   * ── The cap was never the bug; the SILENCE was ──────────────────────────────────────────
+   * The board has always taken the newest 300 open-stage leads. Past that it simply showed 300,
+   * with nothing anywhere saying so - which means a business with 412 open leads was looking at a
+   * board it believed was its pipeline and was missing 112 of them. A limit a reader cannot see
+   * is worse than a smaller limit they can.
+   *
+   * Two things changed together, and the second matters more: the number is now the founder's,
+   * and `getKanbanLeads` returns the TOTAL alongside the page so the board can say "showing 300
+   * of 412". Raising the cap is now a choice rather than the only way to find out it existed.
+   *
+   * Floor of 50 because a board that shows almost nothing is not a board. Ceiling of 2000
+   * because every card renders at once - this is a render budget, not a storage one.
+   */
+  kanbanCardLimit: z.number().int().min(50).max(2000).default(300),
 });
 
 export type PipelineConfig = z.infer<typeof pipelineConfigSchema>;
 
 /** Rules is the shipped behaviour, so it stays the default - the mode toggle is opt-in. */
-export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = { mode: "rules", autoCreateOpportunity: true };
+export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
+  mode: "rules",
+  autoCreateOpportunity: true,
+  kanbanCardLimit: 300,
+};
 
 export function coercePipelineConfig(value: unknown): PipelineConfig {
   const parsed = pipelineConfigSchema.safeParse(value);
@@ -1451,6 +1591,26 @@ export const maintenanceConfigSchema = z.object({
     enabled: z.boolean(),
     whatsAppMessageDays: retentionDays,
     expiredInviteDays: retentionDays,
+    /**
+     * How long an ARCHIVED record survives before the purge deletes it permanently.
+     *
+     * ── Why this moved here (1 Nov 2026) ────────────────────────────────────────────────────
+     * This window lived in a bare `AppSetting("retentionDays")` row with its own hand-rolled
+     * `parseInt` reader in `server/retention.ts`, and no screen anywhere wrote it. So the single
+     * most destructive number in the app - the one that decides when archived leads, invoices,
+     * income and expenses are hard-deleted, cascades included - was editable only by hand-editing
+     * JSON in the database, while the two far gentler windows beside it had a Console field each.
+     *
+     * It belongs next to the switch that governs it. `retention.enabled` already gates this purge
+     * as well as the log sweep, so the toggle and the window a founder is weighing are now one
+     * decision in one place.
+     *
+     * ── The 0 case is NOT "keep forever" here ───────────────────────────────────────────────
+     * On the two fields above, 0 means "skip this line" and is safe. On this one it would mean a
+     * cutoff of `now`, which purges the ENTIRE archive on the next tick - the opposite of what a
+     * reader primed by the fields above would expect. So the floor is 1, and the panel says why.
+     */
+    archiveDays: z.number().int().min(1).max(3650).default(RETENTION_DAYS),
   }),
 });
 
@@ -1459,7 +1619,12 @@ export type MaintenanceConfig = z.infer<typeof maintenanceConfigSchema>;
 export const DEFAULT_MAINTENANCE_CONFIG: MaintenanceConfig = {
   fxPrewarm: { enabled: true },
   overdueSweep: { enabled: true },
-  retention: { enabled: false, whatsAppMessageDays: 365, expiredInviteDays: 30 },
+  retention: {
+    enabled: false,
+    whatsAppMessageDays: 365,
+    expiredInviteDays: 30,
+    archiveDays: RETENTION_DAYS,
+  },
 };
 
 export function coerceMaintenanceConfig(value: unknown): MaintenanceConfig {
@@ -1728,17 +1893,70 @@ export function coerceCallDistribution(value: unknown): CallDistributionConfig {
  * empty table, a question deactivated mid-flight - falls back to the shipped scorer rather than
  * scoring nobody. A prospect must never be rejected because a settings screen was mid-edit.
  */
+/**
+ * THE VERDICT CUTOFFS (added 1 Nov 2026).
+ *
+ * See `DEFAULT_BANT_THRESHOLDS` in lib/booking-intake.ts for why these became config and why
+ * `BANT_MAX` deliberately did not.
+ *
+ * The refine is load-bearing rather than tidy. `bantVerdictFor` tests `> confirmAbove` then
+ * `>= doubtFrom` in that order, so a config with `doubtFrom` ABOVE `confirmAbove` does not
+ * error - it silently makes DOUBT unreachable and turns the band into a two-way split. That is
+ * exactly the kind of edit a founder makes by typing into the wrong box, and the only honest
+ * place to catch it is here, before it is stored.
+ */
+const bantThresholdsSchema = z
+  .object({
+    confirmAbove: z.number().min(0).max(BANT_MAX).default(DEFAULT_BANT_THRESHOLDS.confirmAbove),
+    doubtFrom: z.number().min(0).max(BANT_MAX).default(DEFAULT_BANT_THRESHOLDS.doubtFrom),
+    dimensionMetAt: z.number().min(0).max(BANT_MAX).default(DEFAULT_BANT_THRESHOLDS.dimensionMetAt),
+  })
+  .refine((t) => t.confirmAbove >= t.doubtFrom, {
+    message: "The Confirm cutoff must be at or above the Doubt cutoff, or nobody can score Doubt.",
+    path: ["confirmAbove"],
+  });
+
+/**
+ * Compile-time guard: what this schema produces IS what the scorer consumes.
+ *
+ * Without it, adding a fourth cutoff to `BantThresholds` would leave the schema one field short,
+ * the panel unable to edit it, and the engine quietly reading the shipped default for a value the
+ * founder believes they have set - which is failure mode FLEX-046 in the test plan, arriving by
+ * the exact route that document predicts.
+ */
+const _thresholdsMatchTheScorer: BantThresholds = DEFAULT_BANT_THRESHOLDS satisfies z.infer<
+  typeof bantThresholdsSchema
+>;
+void _thresholdsMatchTheScorer;
+
 export const qualificationConfigSchema = z.object({
   scorer: z.enum(["shipped", "catalogue"]).default("shipped"),
+  thresholds: bantThresholdsSchema.default(DEFAULT_BANT_THRESHOLDS),
 });
 
 export type QualificationConfig = z.infer<typeof qualificationConfigSchema>;
 
-export const DEFAULT_QUALIFICATION_CONFIG: QualificationConfig = { scorer: "shipped" };
+export const DEFAULT_QUALIFICATION_CONFIG: QualificationConfig = {
+  scorer: "shipped",
+  thresholds: DEFAULT_BANT_THRESHOLDS,
+};
 
 export function coerceQualificationConfig(value: unknown): QualificationConfig {
   const parsed = qualificationConfigSchema.safeParse(value);
-  return parsed.success ? parsed.data : DEFAULT_QUALIFICATION_CONFIG;
+  if (parsed.success) return parsed.data;
+  /**
+   * A stored doc with a BAD thresholds block must not discard the scorer choice with it, and
+   * vice versa: the two are independent decisions that happen to share a row. Falling back
+   * wholesale would silently move a "catalogue" install back onto the shipped scorer, which is
+   * a change to who gets rejected - the most consequential thing in this file.
+   */
+  const partial = (value ?? {}) as Record<string, unknown>;
+  const scorer = z.enum(["shipped", "catalogue"]).safeParse(partial.scorer);
+  const thresholds = bantThresholdsSchema.safeParse(partial.thresholds);
+  return {
+    scorer: scorer.success ? scorer.data : DEFAULT_QUALIFICATION_CONFIG.scorer,
+    thresholds: thresholds.success ? thresholds.data : DEFAULT_BANT_THRESHOLDS,
+  };
 }
 
 // ───────────────────────── speed-to-lead alert ─────────────────────────
@@ -1936,15 +2154,23 @@ export const attendanceConfigSchema = z
      * a tutor who will never remember a second button.
      */
     publishRequired: z.boolean().default(true),
-    /**
-     * Publish automatically the moment a window closes?
+    /*
+     * ── `autoPublishOnClose` WAS HERE, AND NOTHING COULD EVER HAVE READ IT ───────────────
      *
-     * Ships FALSE. Auto-publishing on close would hand the cohort a register that is, at that
-     * instant, a list of everyone who did not press a button - before the tutor has excused
-     * the student who emailed in sick. The gap between those two states is the entire reason
+     * It stored "publish automatically the moment a window closes", had no screen and no reader,
+     * and its own comment argued against the behaviour: auto-publishing on close hands the cohort
+     * a register that is, at that instant, a list of everyone who did not press a button - before
+     * the tutor has excused the student who emailed in sick. That gap is the entire reason
      * publishing is a separate decision.
+     *
+     * There is also no moment to hang it on. A window does not CLOSE through code: closed is
+     * derived, `now > closesAt` (see `windowState` in lib/attendance-window.ts). Firing it would
+     * mean a new cron job whose only purpose is to do the thing the comment says not to do.
+     *
+     * So it is removed rather than implemented. `publishRequired` is the real switch for a tutor
+     * who will never remember a second button: off, a mark is visible as soon as it is written.
+     * Zod strips unknown keys, so a stored config still carrying the old field parses fine.
      */
-    autoPublishOnClose: z.boolean().default(false),
 
     /**
      * ── MISSING A CLASS, AND CATCHING UP ───────────────────────────────────────────────
@@ -2014,7 +2240,6 @@ export const DEFAULT_ATTENDANCE_CONFIG: AttendanceConfig = {
   checkInWindowMins: 15,
   checkInLateAfterMins: 10,
   publishRequired: true,
-  autoPublishOnClose: false,
   absenceAlertEnabled: true,
   catchUpHours: 24,
   catchUpAlertEnabled: true,
@@ -2064,6 +2289,69 @@ export const studentLifecycleConfigSchema = z.object({
    * the coach is the person who knows, and every press is logged and reversible.
    */
   coachMayDiscontinue: z.boolean().default(true),
+
+  /**
+   * ── THE EARLY-WARNING RADAR'S THRESHOLDS ────────────────────────────────────────────────
+   *
+   * Every one of these was a literal in `server/students-metrics.ts`, and the App Guide said so
+   * in as many words: "The radar's limits (14 days, day 10, half-way, 21 days) are fixed in the
+   * app and cannot be changed in the Console." That sentence is the problem it describes. These
+   * are not implementation constants - they are a delivery team's definition of "worrying", and
+   * the right number differs between a 90-day Guided programme and a 120-day Elite one, and
+   * between a team of two and a team of ten.
+   *
+   * They are thresholds for a SUGGESTION, not a decision: the radar taps a shoulder and the
+   * human sets the signal colour. So the blast radius of getting one wrong is a longer or
+   * shorter list to read, never an action taken against a student - which is why these ship
+   * editable with no confirmation step, unlike the money settings.
+   */
+  radarSilentDays: z
+    .number()
+    .int()
+    .min(1)
+    .max(120)
+    .default(14)
+    .describe("Flag a student this many days after their last coaching session"),
+  radarNoSessionByDay: z
+    .number()
+    .int()
+    .min(1)
+    .max(120)
+    .default(10)
+    .describe("Flag a student who has had no session at all by this day of their programme"),
+  /**
+   * The pace check, as a percentage of the programme elapsed. Paired with "still in the first
+   * two milestones" in the code - the percentage alone says nothing.
+   */
+  radarPaceElapsedPct: z
+    .number()
+    .int()
+    .min(5)
+    .max(95)
+    .default(50)
+    .describe("Flag a student this far through their programme who is still on onboarding or resume"),
+  radarEndgameDays: z
+    .number()
+    .int()
+    .min(1)
+    .max(120)
+    .default(21)
+    .describe("Flag a student with this many days left who has not reached interviews"),
+
+  /**
+   * ── HOW LONG IS "STUCK" ON ONBOARDING ───────────────────────────────────────────────────
+   *
+   * Also literal, also documented as immovable ("The limit is 10 days and is fixed in the app").
+   * Kept beside the radar because it is the same kind of judgement about the same people, and a
+   * founder who shortens one almost always means to shorten the other.
+   */
+  stuckAfterDays: z
+    .number()
+    .int()
+    .min(1)
+    .max(90)
+    .default(10)
+    .describe("Call an onboarding student stuck once their record has not moved for this many days"),
 });
 
 export type StudentLifecycleConfig = z.infer<typeof studentLifecycleConfigSchema>;
@@ -2072,6 +2360,11 @@ export const DEFAULT_STUDENT_LIFECYCLE_CONFIG: StudentLifecycleConfig = {
   discontinueReasons: [...DEFAULT_DISCONTINUE_REASONS],
   allowOtherReason: true,
   coachMayDiscontinue: true,
+  radarSilentDays: 14,
+  radarNoSessionByDay: 10,
+  radarPaceElapsedPct: 50,
+  radarEndgameDays: 21,
+  stuckAfterDays: 10,
 };
 
 export function coerceStudentLifecycleConfig(value: unknown): StudentLifecycleConfig {
@@ -2191,6 +2484,25 @@ export const cashTargetsConfigSchema = z
     payableBufferMultiple: z.number().min(0).max(10),
     /** How many complete calendar months of expenses the burn rate averages over. */
     burnWindowMonths: z.number().int().min(1).max(24),
+    /**
+     * LAST-RESORT euro rate, used only when the rate feed is unreachable AND no rate has ever
+     * been cached. Rupees per euro, whole units.
+     *
+     * ── Why this was worth making editable ──────────────────────────────────────────────────
+     * It was a hardcoded 90 in `lib/fx.ts`, and it has been wrong by roughly 20% for most of the
+     * app's life - the real rate has run near 110. It is reached rarely, which is precisely what
+     * makes it dangerous: on the one morning the feed is down and the cache is cold, every euro
+     * figure on every screen is quietly computed 20% light, and the only hint is a "may be
+     * stale" note beside the number.
+     *
+     * A realistic floor does not make the figure right. It makes it close enough that the stale
+     * marker is a warning rather than the only thing standing between a founder and a materially
+     * wrong number.
+     *
+     * The default stays 90 - the literal it replaces - so nothing moves on the day this ships.
+     * An install that opens the panel should raise it to roughly today's rate.
+     */
+    fxFallbackInrPerEur: z.number().min(1).max(1000).default(90),
   })
   .refine((c) => c.runwayGreenMonths >= c.runwayAmberMonths, {
     message: "The green threshold must be at or above the amber one",
@@ -2208,6 +2520,7 @@ export const DEFAULT_CASH_TARGETS_CONFIG: CashTargetsConfig = {
   runwayHorizonMonths: 12,
   payableBufferMultiple: 2,
   burnWindowMonths: 3,
+  fxFallbackInrPerEur: 90,
 };
 
 export function coerceCashTargetsConfig(value: unknown): CashTargetsConfig {
@@ -2340,4 +2653,98 @@ export const DEFAULT_EXPENSE_CATEGORIES_CONFIG: ExpenseCategoriesConfig = {
 export function coerceExpenseCategoriesConfig(value: unknown): ExpenseCategoriesConfig {
   const parsed = expenseCategoriesConfigSchema.safeParse(value);
   return parsed.success ? parsed.data : DEFAULT_EXPENSE_CATEGORIES_CONFIG;
+}
+
+// ───────────────────────── the weekly report ─────────────────────────
+
+/**
+ * THE WEEKLY REPORT - founder-editable via AppSetting("weeklyReport").
+ *
+ * ── Why Friday to Sunday ──────────────────────────────────────────────────────────────
+ * Not a guess. Every "Last Form Date" in the founders' live tracker - 03.07, 31.07, 14.08,
+ * 25.09 - is a FRIDAY, and the How To Use tab puts the delivery person's review on Monday
+ * morning. So the window the students already use is: opens Friday, students answer over
+ * the weekend about the week just finished, staff read it on Monday. The defaults below are
+ * that, written down.
+ *
+ * ── Why it ships off ──────────────────────────────────────────────────────────────────
+ * `enabled` false and `dryRun` true, like the class reminders beside it. The first thing
+ * this engine does when armed is message every student in every active cohort, and the WATI
+ * templates it needs are not approved yet. An engine that fans out to a room is one you
+ * rehearse before you fire.
+ *
+ * Every field carries `.default()` for the reason spelled out on the attendance config: a
+ * failed parse falls back to the WHOLE default object, so a newly-required key would throw
+ * away thresholds the founder had already set, silently.
+ */
+const weeklyThresholdFields = {
+  /** Applications a sprint student is expected to send each week. Below it is a yellow. */
+  appsTarget: z.number().int().min(0).max(500).default(WEEKLY_THRESHOLD_DEFAULTS.appsTarget),
+  networkingTarget: z.number().int().min(0).max(500).default(WEEKLY_THRESHOLD_DEFAULTS.networkingTarget),
+  linkedinTarget: z.number().int().min(0).max(200).default(WEEKLY_THRESHOLD_DEFAULTS.linkedinTarget),
+  /** The tracker's "below 5 on either metric" line - distinct from the target. */
+  lowThreshold: z.number().int().min(0).max(200).default(WEEKLY_THRESHOLD_DEFAULTS.lowThreshold),
+  /** Silent weeks before a student is a ghost. Guided 3, Elite 2. */
+  ghostWeeks: z.number().int().min(1).max(12).default(WEEKLY_THRESHOLD_DEFAULTS.ghostWeeks),
+  yellowToRedWeeks: z.number().int().min(1).max(12).default(WEEKLY_THRESHOLD_DEFAULTS.yellowToRedWeeks),
+  recoveryGreenWeeks: z.number().int().min(1).max(12).default(WEEKLY_THRESHOLD_DEFAULTS.recoveryGreenWeeks),
+  /** Elite only by default: "1 miss = Yellow + Ameen is CC'd". */
+  notifyAdminOnYellow: z.boolean().default(WEEKLY_THRESHOLD_DEFAULTS.notifyAdminOnYellow),
+} as const;
+
+export const weeklyReportConfigSchema = z
+  .object({
+    /** The master switch. Off, nothing opens and nothing sends; the screens still read. */
+    enabled: z.boolean().default(false),
+    /** On, the engine does everything except hand a message to WATI, and tallies what it would. */
+    dryRun: z.boolean().default(true),
+
+    /** ISO weekday, 1 = Monday. Friday by default - see the header. */
+    openWeekday: z.number().int().min(1).max(7).default(5),
+    /** Minutes past IST midnight. 10:00. */
+    openAtMinutes: z.number().int().min(0).max(1439).default(600),
+    closeWeekday: z.number().int().min(1).max(7).default(7),
+    /** 21:00 Sunday - late enough for a weekend answer, before the Monday review. */
+    closeAtMinutes: z.number().int().min(0).max(1439).default(1260),
+
+    /** A nudge to whoever has not answered yet, part-way through the window. */
+    reminderEnabled: z.boolean().default(true),
+    reminderWeekday: z.number().int().min(1).max(7).default(7),
+    reminderAtMinutes: z.number().int().min(0).max(1439).default(660),
+
+    /** After the window shuts with nothing in it - the "missed 1 form" rung. */
+    missedNoticeEnabled: z.boolean().default(true),
+
+    /**
+     * Messages per tick, shared across every cohort and every rung.
+     *
+     * A ceiling, not a target. It is what stops a first armed run - or a cron that was stuck
+     * and woke up with four weeks to catch up - from sending several hundred template messages
+     * in one minute, which is both a WATI bill and the fastest way to a Meta rate cap.
+     */
+    maxPerRun: z.number().int().min(1).max(500).default(60),
+
+    /** Whether a submission is also collected for cohorts on the German Note line. */
+    germanNoteEnabled: z.boolean().default(true),
+
+    thresholds: z.object(weeklyThresholdFields).default(WEEKLY_THRESHOLD_DEFAULTS),
+    /**
+     * Per-level overrides, keyed by `Level.code`. Partial on purpose: an entry says only what
+     * differs from `thresholds`, so raising the application target in one place still raises it
+     * for Elite too.
+     */
+    perLevel: z
+      .record(z.string(), z.object(weeklyThresholdFields).partial())
+      .default(WEEKLY_THRESHOLD_LEVEL_DEFAULTS),
+  })
+  .strip();
+
+export type WeeklyReportConfig = z.infer<typeof weeklyReportConfigSchema>;
+
+export const DEFAULT_WEEKLY_REPORT_CONFIG: WeeklyReportConfig =
+  weeklyReportConfigSchema.parse({});
+
+export function coerceWeeklyReportConfig(value: unknown): WeeklyReportConfig {
+  const parsed = weeklyReportConfigSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_WEEKLY_REPORT_CONFIG;
 }

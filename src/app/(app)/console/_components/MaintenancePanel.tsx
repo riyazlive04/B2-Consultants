@@ -96,6 +96,11 @@ function MaintenanceCard({ config }: { config: MaintenanceConfig }) {
       <Hint>
         Runs once a day (idempotent). FX prewarm and the overdue sweep are non-destructive and ship on;
         retention <strong>deletes</strong> aged rows, so it ships off and skips any line set to 0 days.
+        {/* The purge used to run whatever this said - see `runRetentionPurge`. Now that one switch
+            really does govern every delete, it has to say which deletes. */}
+        {" "}Pruning covers both the aged logs below <em>and</em> the permanent purge of records
+        left in the Archive past the retention window. Issued invoices are never purged - they are
+        tax records and stay archived for good.
       </Hint>
       <div className="mt-4 space-y-4">
         <Toggle
@@ -114,7 +119,7 @@ function MaintenanceCard({ config }: { config: MaintenanceConfig }) {
             checked={draft.retention.enabled}
             onChange={(b) => setDraft((d) => ({ ...d, retention: { ...d.retention, enabled: b } }))}
             label="Prune aged data (deletes)"
-            title="Hard-delete old WhatsApp messages and expired invites. Append-only audit tables are never touched."
+            title="Hard-delete old WhatsApp messages, expired invites, and records left in the Archive past the retention window. Issued invoices and append-only audit tables are never touched."
           />
           <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Keep WhatsApp messages (days)" hint="0 = keep forever.">
@@ -135,7 +140,35 @@ function MaintenanceCard({ config }: { config: MaintenanceConfig }) {
                 max={3650}
               />
             </Field>
+            {/* The archive window. Until 1 Nov 2026 this number lived in a database row no screen
+                wrote - the most destructive setting in the app, and the only one with no field.
+                Note the floor is 1, not 0: see `archiveDays` for why 0 cannot mean "forever" here. */}
+            <Field
+              label="Keep archived records (days)"
+              hint="The permanent purge. A record deleted anywhere in the app sits in the Archive this long, then is destroyed for good - cascades included. Minimum 1 day; there is no 'keep forever' on this line."
+            >
+              <NumInput
+                ariaLabel="Archive retention days"
+                value={draft.retention.archiveDays}
+                onChange={(n) => setDraft((d) => ({ ...d, retention: { ...d.retention, archiveDays: n } }))}
+                min={1}
+                max={3650}
+              />
+            </Field>
           </div>
+          {draft.retention.enabled && draft.retention.archiveDays < 30 && (
+            /**
+             * Under a month is legitimate and is also how somebody loses a record they meant to
+             * restore. The Archive is the only undo the app has for a delete, so shortening it
+             * shortens the window in which a mistake is recoverable - worth saying once, here,
+             * rather than discovering afterwards.
+             */
+            <p className="mt-3 rounded-field border border-warn bg-warn-soft px-4 py-3 text-sm text-warn-ink">
+              With pruning on and a {draft.retention.archiveDays}-day window, anything deleted is
+              unrecoverable after {draft.retention.archiveDays} day
+              {draft.retention.archiveDays === 1 ? "" : "s"}. The Archive is the only undo there is.
+            </p>
+          )}
         </div>
       </div>
       <SaveBar dirty={dirty} onSave={save} onReset={() => setDraft(DEFAULT_MAINTENANCE_CONFIG)} busy={busy} error={error} />
@@ -166,10 +199,12 @@ function PostingCard({ config }: { config: FinancePostingConfig }) {
     <Card>
       <h4 className="text-h3 text-ink">Ledger auto-posting</h4>
       <Hint>
-        Both write to the real double-entry ledger, so both ship <strong>off</strong>. Issuance posting
-        makes Accounts receivable two-sided (Dr AR / Cr Income when an invoice is issued). Recording
-        commission as owed books Dr Team-salaries / Cr Accounts-payable when you record a payout run -
-        it logs the cost as money owed, not as cash leaving the bank.
+        All three write to the real double-entry ledger, so all three ship <strong>off</strong>.
+        Issuance posting makes Accounts receivable two-sided (Dr AR / Cr Income when an invoice is
+        issued). Recording commission as owed books Dr Team-salaries / Cr Accounts-payable when you
+        record a payout run - it logs the cost as money owed, not as cash leaving the bank. Tutor-fee
+        accrual does the same for German Note delivery when a fee is approved: Dr COGS-Tutor-fees /
+        Cr Accounts-payable.
       </Hint>
       <div className="mt-4 space-y-4">
         <Toggle
@@ -181,6 +216,22 @@ function PostingCard({ config }: { config: FinancePostingConfig }) {
           checked={draft.commissionAccrual.enabled}
           onChange={(b) => setDraft((d) => ({ ...d, commissionAccrual: { enabled: b } }))}
           label="Record commission payout runs as money owed"
+        />
+        {/*
+          ── THE SWITCH THE APP HAD BEEN REPORTING FOR MONTHS WITHOUT HAVING ──────────────
+          `financePosting.tutorFeeAccrual` was stored, read by `setTutorFeeStatus` and listed by
+          `not-armed.ts` and `engine-status.ts` as an engine that was off - with "Console → System
+          → Maintenance" as the place to arm it. This card had two toggles. So three screens named
+          a control that did not exist, the Tutor Fees panel pointed at a path that did not exist
+          either, and the only way to post a tutor fee was to edit the AppSetting row by hand.
+
+          Nothing else changed: the posting is already written, idempotent per fee id
+          (`postEntryOnce`), and still ships off like its two neighbours.
+        */}
+        <Toggle
+          checked={draft.tutorFeeAccrual.enabled}
+          onChange={(b) => setDraft((d) => ({ ...d, tutorFeeAccrual: { enabled: b } }))}
+          label="Record approved tutor fees as money owed"
         />
       </div>
       <SaveBar dirty={dirty} onSave={save} onReset={() => setDraft(DEFAULT_FINANCE_POSTING_CONFIG)} busy={busy} error={error} />

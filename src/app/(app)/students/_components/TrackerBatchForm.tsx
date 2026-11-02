@@ -41,6 +41,9 @@ const SIGNALS = [
   { value: "RED", label: "Red - at risk" },
 ];
 
+/** An ISO instant as the `YYYY-MM-DD` a date input opens on; "" for no date. */
+const ymd = (iso: string | null): string => (iso ? iso.slice(0, 10) : "");
+
 const TASK_STATES = [
   { value: "", label: "-" },
   { value: "YES", label: "Done" },
@@ -57,6 +60,18 @@ export type TrackerBatchRow = {
   currentMilestone: string;
   signalColour: string | null;
   daysSinceLastSession: number | null;
+  /**
+   * The four values whose boxes used to render empty.
+   *
+   * A row's inputs ARE its submitted state (see the paging note below - that is why pages are
+   * hidden rather than unmounted), and `updateTracker` writes a blank box as null. So a box that
+   * opened empty over a stored value deleted it the moment the row was touched for any reason.
+   * Carried here so each box opens on what is stored.
+   */
+  lastSessionDate: string | null;
+  lastTaskAssigned: string | null;
+  lastTaskCompleted: string | null;
+  nextCheckInDate: string | null;
 };
 
 export function TrackerBatchForm({ rows }: { rows: TrackerBatchRow[] }) {
@@ -81,7 +96,7 @@ export function TrackerBatchForm({ rows }: { rows: TrackerBatchRow[] }) {
       <EmptyState
         icon={<ClipboardList size={20} />}
         title="No students on the 90/120-day tracker"
-        body="Guided and Elite enrollments appear here while they are active. Solo is self-paced and has no tracker."
+        body="Every active enrolment with a programme end date appears here. A lifetime enrolment is self-paced and has no tracker."
       />
     );
   }
@@ -167,7 +182,20 @@ export function TrackerBatchForm({ rows }: { rows: TrackerBatchRow[] }) {
                       </div>
                     </td>
                     <td className="px-3 py-2.5 align-top">
-                      <DatePicker size="sm" name={`${p}lastSessionDate`} aria-label={`Last session for ${r.studentName}`} />
+                      {/*
+                        ── EVERY BOX OPENS ON WHAT IS ALREADY STORED ────────────────────────
+                        These four used to render EMPTY while `updateTracker` writes a blank box
+                        as null, so touching a row to change a milestone or a signal silently
+                        wiped the student's last session date, the task their coach had set and
+                        whether it was done - across every row touched in the round. The counters
+                        beside them were already guarded; these were not.
+
+                        Fixed by showing the value rather than by making blank mean "leave it":
+                        a blank has to keep meaning blank (a coach must be able to clear a date
+                        they mistyped, and "not set" is a real answer for Task done), and a
+                        weekly round wants last week's task on screen anyway.
+                      */}
+                      <DatePicker size="sm" name={`${p}lastSessionDate`} defaultValue={ymd(r.lastSessionDate)} aria-label={`Last session for ${r.studentName}`} />
                     </td>
                     <td className="w-24 px-3 py-2.5 align-top">
                       {/* Blank = leave as it is. `updateTracker` treats an empty counter that
@@ -176,10 +204,10 @@ export function TrackerBatchForm({ rows }: { rows: TrackerBatchRow[] }) {
                       <TextInput kind="int" name={`${p}totalSessionsCompleted`} placeholder="-" maxLength={4} aria-label={`Sessions completed for ${r.studentName}`} />
                     </td>
                     <td className="px-3 py-2.5 align-top">
-                      <TextInput kind="text" name={`${p}lastTaskAssigned`} placeholder="Task set" maxLength={200} aria-label={`Task set for ${r.studentName}`} />
+                      <TextInput kind="text" name={`${p}lastTaskAssigned`} defaultValue={r.lastTaskAssigned ?? ""} placeholder="Task set" maxLength={200} aria-label={`Task set for ${r.studentName}`} />
                     </td>
                     <td className="w-28 px-3 py-2.5 align-top">
-                      <Select size="sm" name={`${p}lastTaskCompleted`} defaultValue="" options={TASK_STATES} aria-label={`Task done for ${r.studentName}`} />
+                      <Select size="sm" name={`${p}lastTaskCompleted`} defaultValue={r.lastTaskCompleted ?? ""} options={TASK_STATES} aria-label={`Task done for ${r.studentName}`} />
                     </td>
                     <td className="w-24 px-3 py-2.5 align-top">
                       <TextInput kind="int" name={`${p}applicationsSubmitted`} placeholder="-" maxLength={5} aria-label={`Applications for ${r.studentName}`} />
@@ -208,7 +236,7 @@ export function TrackerBatchForm({ rows }: { rows: TrackerBatchRow[] }) {
                       />
                     </td>
                     <td className="px-3 py-2.5 align-top">
-                      <DatePicker size="sm" name={`${p}nextCheckInDate`} aria-label={`Next check-in for ${r.studentName}`} />
+                      <DatePicker size="sm" name={`${p}nextCheckInDate`} defaultValue={ymd(r.nextCheckInDate)} aria-label={`Next check-in for ${r.studentName}`} />
                     </td>
                   </tr>
                 );

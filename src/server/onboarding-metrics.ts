@@ -3,6 +3,7 @@ import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { occupiesSeat, SEATED_STATUSES } from "@/lib/enrollment-lifecycle";
 import { batchReadiness, type BatchReadiness } from "@/lib/batch";
+import { getStudentLifecycleConfig } from "./founder-config";
 import {
   JOURNEY_STEPS,
   daysInStep,
@@ -91,8 +92,15 @@ export type OnboardingBoard = {
  */
 const ROW_CAP = 500;
 
-/** No movement in this many days and a person is stuck. Matches the notification feed's rule. */
-const STUCK_AFTER_DAYS = 10;
+/**
+ * No movement in this many days and a person is stuck - the FALLBACK, not the rule.
+ *
+ * The live number is founder-editable (`studentLifecycleConfig.stuckAfterDays`, Console →
+ * Student lifecycle) and is read below. This constant remains as the value a tenant with no
+ * saved config gets, which is also what the App Guide quotes as the default - it used to be the
+ * only number there was, and the guide said as much.
+ */
+const STUCK_AFTER_DAYS_DEFAULT = 10;
 
 /** The subset of a batch the journey needs: is it ready, and has it started teaching. */
 type BatchFacts = { readiness: BatchReadiness; started: boolean };
@@ -127,7 +135,7 @@ export const getPersonJourney = cache(
               name: true,
               stage: true,
               _count: { select: { callLogs: true, bookings: true, outcomes: true } },
-              agreements: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true, status: true } },
+              agreements: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true, status: true, expiresAt: true, signedAt: true } },
               students: { select: { id: true }, take: 1 },
             },
           })
@@ -143,7 +151,7 @@ export const getPersonJourney = cache(
               _count: { select: { incomes: true, pendingPayments: true } },
               enrollments: { select: { programLevel: true, status: true, batchId: true } },
               gnMemberships: { select: { batchId: true }, take: 1 },
-              agreements: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true, status: true } },
+              agreements: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true, status: true, expiresAt: true, signedAt: true } },
             },
           })
         : Promise.resolve(null),
@@ -169,7 +177,7 @@ export const getPersonJourney = cache(
               _count: { select: { incomes: true, pendingPayments: true } },
               enrollments: { select: { programLevel: true, status: true, batchId: true } },
               gnMemberships: { select: { batchId: true }, take: 1 },
-              agreements: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true, status: true } },
+              agreements: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true, status: true, expiresAt: true, signedAt: true } },
             },
           })
         : null);
@@ -184,7 +192,7 @@ export const getPersonJourney = cache(
               name: true,
               stage: true,
               _count: { select: { callLogs: true, bookings: true, outcomes: true } },
-              agreements: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true, status: true } },
+              agreements: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true, status: true, expiresAt: true, signedAt: true } },
               students: { select: { id: true }, take: 1 },
             },
           })
@@ -250,7 +258,9 @@ export const getPersonJourney = cache(
       hasContact: (filledLead?._count.callLogs ?? 0) > 0,
       hasBooking: (filledLead?._count.bookings ?? 0) > 0,
       hasDiscoveryOutcome: (filledLead?._count.outcomes ?? 0) > 0,
-      agreementStatus: agreement?.status ?? null,
+      // The whole agreement, not just its status: expiry is derived, so `journeyGaps` cannot see
+      // an expired link without the date. See `effectiveAgreementStatus`.
+      agreement: agreement ? { status: agreement.status, expiresAt: agreement.expiresAt } : null,
       hasStudent: filledStudent !== null,
       hasEnrolment: (filledStudent?.enrollments.length ?? 0) > 0,
       programLevel: chosen?.programLevel ?? null,
@@ -278,6 +288,9 @@ export const getPersonJourney = cache(
 
 export const getOnboardingBoard = cache(async (): Promise<OnboardingBoard> => {
   const now = new Date();
+  // Shares a home with the early-warning radar: both are this team's definition of "worrying".
+  const stuckAfterDays =
+    (await getStudentLifecycleConfig()).stuckAfterDays ?? STUCK_AFTER_DAYS_DEFAULT;
 
   const [leads, orphanStudents, batches, sessionTotals, sessionsStarted] = await Promise.all([
     prisma.lead.findMany({
@@ -300,7 +313,9 @@ export const getOnboardingBoard = cache(async (): Promise<OnboardingBoard> => {
         agreements: {
           orderBy: { createdAt: "desc" },
           take: 1,
-          select: { status: true },
+          // `expiresAt` because an expired link is DERIVED from it - nothing ever writes the
+          // EXPIRED status, so without the date `AGREEMENT_EXPIRED` can never fire.
+          select: { status: true, expiresAt: true },
         },
         students: {
           select: {
@@ -335,7 +350,7 @@ export const getOnboardingBoard = cache(async (): Promise<OnboardingBoard> => {
         _count: { select: { incomes: true, pendingPayments: true } },
         enrollments: { select: { id: true, programLevel: true, status: true, batchId: true } },
         gnMemberships: { select: { batchId: true } },
-        agreements: { orderBy: { createdAt: "desc" }, take: 1, select: { status: true } },
+        agreements: { orderBy: { createdAt: "desc" }, take: 1, select: { status: true, expiresAt: true, signedAt: true } },
       },
     }),
 
@@ -408,7 +423,8 @@ export const getOnboardingBoard = cache(async (): Promise<OnboardingBoard> => {
     contacts: number;
     bookings: number;
     outcomes: number;
-    agreementStatus: string | null;
+    /** The whole agreement - expiry is derived, so the status alone cannot show an expired link. */
+    agreement: { status: string; expiresAt: Date | null } | null;
     student: {
       userId: string | null;
       incomes: number;
@@ -430,7 +446,7 @@ export const getOnboardingBoard = cache(async (): Promise<OnboardingBoard> => {
       hasContact: p.contacts > 0,
       hasBooking: p.bookings > 0,
       hasDiscoveryOutcome: p.outcomes > 0,
-      agreementStatus: p.agreementStatus,
+      agreement: p.agreement,
       hasStudent: s !== null,
       hasEnrolment: (s?.enrollments.length ?? 0) > 0,
       programLevel: chosen?.programLevel ?? null,
@@ -452,7 +468,7 @@ export const getOnboardingBoard = cache(async (): Promise<OnboardingBoard> => {
       contacts: l._count.callLogs,
       bookings: l._count.bookings,
       outcomes: l._count.outcomes,
-      agreementStatus: l.agreements[0]?.status ?? null,
+      agreement: l.agreements[0] ?? null,
       student: st
         ? {
             userId: st.userId,
@@ -483,7 +499,7 @@ export const getOnboardingBoard = cache(async (): Promise<OnboardingBoard> => {
       contacts: 0,
       bookings: 0,
       outcomes: 0,
-      agreementStatus: s.agreements[0]?.status ?? null,
+      agreement: s.agreements[0] ?? null,
       student: {
         userId: s.userId,
         incomes: s._count.incomes,
@@ -516,7 +532,7 @@ export const getOnboardingBoard = cache(async (): Promise<OnboardingBoard> => {
       and somebody lost is not stuck either - they are decided.
     */
     stuck: inFlight.filter(
-      (r) => r.daysSinceActivity !== null && r.daysSinceActivity >= STUCK_AFTER_DAYS,
+      (r) => r.daysSinceActivity !== null && r.daysSinceActivity >= stuckAfterDays,
     ),
     doneThisMonth: rows.filter((r) => r.journey.complete && r.lastActivityAt >= monthStart),
     byStep: JOURNEY_STEPS.map((step) => ({
@@ -524,6 +540,6 @@ export const getOnboardingBoard = cache(async (): Promise<OnboardingBoard> => {
       rows: inFlight.filter((r) => r.journey.state === step),
     })).filter((g) => g.rows.length > 0),
     truncated: leads.length === ROW_CAP || orphanStudents.length === ROW_CAP,
-    stuckAfterDays: STUCK_AFTER_DAYS,
+    stuckAfterDays,
   };
 });

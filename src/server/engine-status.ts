@@ -12,6 +12,7 @@ import {
   getMaintenanceConfig,
   getPipelineConfig,
   getSpeedToLeadAlertConfig,
+  getWeeklyReportConfig,
 } from "./founder-config";
 
 /**
@@ -50,6 +51,12 @@ const CHECKS: Record<Exclude<EngineKey, "cron" | "intake">, () => Promise<boolea
   classReminders: async () => {
     const { cadence } = (await getWatiRuntime()).settings;
     return cadence.classReminderEnabled && !cadence.classReminderDryRun;
+  },
+  // Same three-state rule as the class reminders above: rehearsing counts as OFF, because a
+  // dry run opens every cohort's week and tells nobody about it.
+  weeklyReport: async () => {
+    const cfg = await getWeeklyReportConfig();
+    return cfg.enabled && !cfg.dryRun;
   },
   speedToLead: async () => (await getSpeedToLeadAlertConfig()).enabled,
   dunning: async () => (await getDunningConfig()).enabled,

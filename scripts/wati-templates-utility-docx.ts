@@ -173,6 +173,24 @@ export const PENDING_SUBMISSION: { name: string; why: string }[] = [
   // ⚠ APPROVAL IS NOT DELIVERY. Every name above is approved and **none of them is bound to its
   // touchpoint** - see the binding note on NEEDS_ACTION below. Nothing changed for a single
   // customer when these cleared review.
+
+  // ── Added 30/10/2026 with the Weekly Report feature ────────────────────────────────────────
+  // Three new touchpoints, three new templates, none of them ever sent to Meta. The feature
+  // ships with its engine OFF, so nothing is skipping silently today - but the engine cannot be
+  // switched on until these clear, because a weekly cycle that opens and then messages nobody is
+  // worse than one that never opened.
+  {
+    name: "b2_weekly_report_link",
+    why: "new touchpoint - the message that tells a cohort its week is open and points each student at their dashboard. Without it, switching the weekly engine on opens cycles that reach nobody.",
+  },
+  {
+    name: "b2_weekly_report_reminder",
+    why: "new touchpoint - the mid-window nudge to students who have not answered. Unbound, every non-responder is chased by nothing.",
+  },
+  {
+    name: "b2_weekly_report_missing",
+    why: "new touchpoint - the after-the-window message for a student who missed the week. This is the Red Flag System's first rung, so without it the ladder starts silently.",
+  },
 ];
 
 /**
@@ -368,6 +386,24 @@ export const NEEDS_ACTION: {
 
   // ── A decision with no edit attached, yet ──
   {
+    // Found 30/10/2026 while cross-checking every WhatsAppKind against both packs. This is the
+    // ONE kind with no template of its own in either, and the reason it was never noticed is
+    // that the NAME it would want is taken and approved.
+    name: "b2_booking_auto_cancelled",
+    action: "DECIDE",
+    why:
+      "TWO DIFFERENT TOUCHPOINTS WANT THIS ONE APPROVED NAME, and only one of them has it. `b2_booking_auto_cancelled` " +
+      "is approved (MARKETING) and is bound to the Outreach SOP's Step 16, SOP_DISCO_CANCEL. The Bookings section's own " +
+      "confirm-or-cancel loop has a SEPARATE kind, BOOKING_AUTO_CANCELLED, and no template at all - so that half of the " +
+      "feature can never send. The two are not the same message even though they read alike: the SOP's fires after two " +
+      "logged confirmation calls on an outreach journey, the Bookings one fires off the in-house confirm loop with no " +
+      "calls involved. DECIDE WHICH: either (a) accept one wording for both and bind the approved template to both kinds, " +
+      "which is cheap and loses the distinction, or (b) submit a second template under a new name for the Bookings loop. " +
+      "Do NOT edit the approved body to try to serve both - Meta holds one body per (name, language), so the edit would " +
+      "take Step 16 out of service while the replacement sits in review. Nothing is sending today either way: the " +
+      "Bookings auto-cancel has been unbound since it was built, which is why this cost nobody anything until now.",
+  },
+  {
     name: "b2_stage_disco_completed",
     action: "DECIDE",
     why:
@@ -403,6 +439,7 @@ const AREA_A = "A · Discovery-call & booking lifecycle";
 const AREA_I = "I · Class reminders";
 const AREA_J = "J · Missing a class & catching up";
 const AREA_K = "K · Pipeline stage messages";
+const AREA_L = "L · Weekly student report";
 const AREA_SOP = "F · Outreach Specialist SOP (Steps 3–21)";
 const AREA_H = "H · Portal accounts";
 
@@ -1198,6 +1235,118 @@ export const TEMPLATES: Tpl[] = [
         "rather than the student's, and both appear on the Attendance desk instead. “Watched” is " +
         "judged on the TRACKED percentage, not the student's own tick - so somebody who ticked " +
         "watched at 40% still receives this.",
+    },
+  },
+
+  // ════════════════════════════════════════════════════════════════════════════════════════════
+  //  L · WEEKLY STUDENT REPORT  (src/server/weekly-report-cycles.ts)
+  // ════════════════════════════════════════════════════════════════════════════════════════════
+  //
+  // Three templates, not one, for the reason the enum comment gives: the app binds exactly ONE
+  // template per kind, and an invitation, a nudge and a "you missed it" cannot share a body. The
+  // first goes to the whole roster, the second only to the students who have not answered, the
+  // third only after the window shut.
+  //
+  // ── ALL THREE ARE UTILITY, AND THE BODIES ARE WHAT MAKES THAT TRUE ──────────────────────────
+  // These go to ENROLLED students about a weekly check-in their programme requires, which is a
+  // transaction, not an offer. The temptation that would cost the category is adding a line of
+  // encouragement about job outcomes, or a link to anything other than the form - that is
+  // re-engagement, and Meta re-categorises it as MARKETING whatever the declaration says. Each
+  // body below points at the form and nothing else.
+  //
+  // ── THE SHARED VARIABLE, AND WHAT IT POINTS AT ──────────────────────────────────────────────
+  // All three declare the same four variables, and `report_url` is the student PORTAL - the same
+  // address for everyone. There is no public form and no per-cohort token any more (2 Nov 2026).
+  // Two consequences worth stating at submission: the URL carries nothing secret, so a message
+  // forwarded out of a group chat lets nobody answer as anybody, because the sign-in is the
+  // identity check; and a student whose record has no portal login attached cannot answer no
+  // matter how often they are sent it. The Weekly Reports desk counts those students above the
+  // table for exactly that reason.
+  {
+    area: AREA_L,
+    name: "b2_weekly_report_link",
+    kind: "WEEKLY_REPORT_LINK",
+    sub: "This week's report is open",
+    category: "UTILITY",
+    fires:
+      "To every student on a cohort's roster when that week's report opens (Console → Weekly reports sets the opening day and time). One send per student per week, guarded by the cycle's unique week key so a re-run cannot message the cohort twice.",
+    vars: [
+      { name: "name", sample: "Priya" },
+      { name: "cohort", sample: "Guided - Sept 2026" },
+      { name: "week", sample: "Week 7 (26 Oct - 1 Nov)" },
+      { name: "report_url", sample: "https://app.b2consultants.in/my-journey" },
+    ],
+    body:
+      "Hi {{name}}, your weekly report for *{{cohort}}* is open.\n\n" +
+      "{{week}}\n\n" +
+      "Sign in and it is waiting on your My Journey page: {{report_url}}\n\n" +
+      "It takes about four minutes.",
+    note: {
+      tag: "The link is the portal, not a form",
+      text:
+        "report_url is the student portal, and the same address for every student. It carries no " +
+        "token and no name, so a message forwarded out of a group chat lets nobody answer as " +
+        "anybody - the sign-in is the identity check. The one thing that stops a student here is " +
+        "having no portal login attached to their record; the Weekly Reports desk counts those " +
+        "students above the table so they can be fixed before the week goes out.",
+    },
+  },
+  {
+    area: AREA_L,
+    name: "b2_weekly_report_reminder",
+    kind: "WEEKLY_REPORT_REMINDER",
+    sub: "Not filled in yet",
+    category: "UTILITY",
+    fires:
+      "Part-way through the week's window, to the students on that cohort who have not submitted. Sent only to non-responders - a student who already answered never receives it.",
+    vars: [
+      { name: "name", sample: "Priya" },
+      { name: "cohort", sample: "Guided - Sept 2026" },
+      { name: "week", sample: "Week 7 (26 Oct - 1 Nov)" },
+      { name: "report_url", sample: "https://app.b2consultants.in/my-journey" },
+    ],
+    body:
+      "Hi {{name}}, we do not have your weekly report for *{{cohort}}* yet.\n\n" +
+      "{{week}}\n\n" +
+      "Sign in and it is still waiting on your My Journey page: {{report_url}}\n\n" +
+      "If something got in the way this week, say so in the form - that is what your coach reads first.",
+    note: {
+      tag: "Same destination, different audience",
+      text:
+        "Deliberately the same report_url as the opening message. The nudge is about the AUDIENCE " +
+        "(who has not answered), not about a different form. There is only ever one place to " +
+        "answer, so there is no second address a submission could arrive through.",
+    },
+  },
+  {
+    area: AREA_L,
+    name: "b2_weekly_report_missing",
+    kind: "WEEKLY_REPORT_MISSING",
+    sub: "The week closed with no report",
+    category: "UTILITY",
+    fires:
+      "Once, AFTER the week's window closed with no submission from this student - the Red Flag System's first rung. Never during the window; that is the reminder's job.",
+    vars: [
+      { name: "name", sample: "Priya" },
+      { name: "cohort", sample: "Guided - Sept 2026" },
+      { name: "week", sample: "Week 7 (26 Oct - 1 Nov)" },
+      { name: "report_url", sample: "https://app.b2consultants.in/my-journey" },
+    ],
+    body:
+      "Hi {{name}}, this week's report for *{{cohort}}* closed without your update.\n\n" +
+      "{{week}}\n\n" +
+      "Your coach will pick it up with you directly. If you would still like to record the week, " +
+      "sign in here: {{report_url}}\n\n" +
+      "It will be marked late, and it still counts.",
+    note: {
+      warn: true,
+      tag: "Promises a human follow-up - so make sure one happens",
+      text:
+        "This body promises a coach will follow up, because a message that only says you missed it " +
+        "and stops is a reprimand. The flag this send corresponds to appears on the Weekly Reports " +
+        "desk under Needs attention at the same moment, which is what makes the promise true. If " +
+        "that desk is not being read, bind this template to nothing rather than sending a promise " +
+        "the business does not keep.",
     },
   },
 

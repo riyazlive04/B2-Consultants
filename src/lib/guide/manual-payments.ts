@@ -167,7 +167,7 @@ export const MANUAL_PAYMENTS: GuideManual[] = [
         ],
         shot: {
           file: "payments-invoice-page.png",
-          route: "/payments/[id]",
+          route: "/payments/[first]",
           caption: "An open invoice: the lines on the left, and the details, summary and save button on the right.",
           highlight: { text: "Summary", label: "The totals being saved" },
         },
@@ -200,7 +200,7 @@ export const MANUAL_PAYMENTS: GuideManual[] = [
         ],
         shot: {
           file: "payments-record-payment.png",
-          route: "/payments/[id]",
+          route: "/payments/[first]",
           caption: "An issued invoice with the Record payment button, and its payments and receipts listed on the right.",
           highlight: { text: "Record payment", label: "Log money received" },
         },
@@ -230,7 +230,7 @@ export const MANUAL_PAYMENTS: GuideManual[] = [
         ],
         shot: {
           file: "payments-public-link.png",
-          route: "/payments/[id]",
+          route: "/payments/[first]",
           caption: "A sent invoice. The Link button opens the customer's link with Copy, Replace link and Revoke.",
           highlight: { text: "Link", label: "Manage the customer's link" },
         },
@@ -335,7 +335,7 @@ export const MANUAL_PAYMENTS: GuideManual[] = [
           "The list ignores the period picker. It always shows every subscription.",
         ],
         watchOut: [
-          "The bin icon says the subscription can be restored, but it is deleted for good and never appears under Archived. Use Cancel to end a plan and keep its record.",
+          "The bin icon is a permanent delete - the subscription is removed for good and never appears under Archived. Its dialog says so and offers Cancel instead, which stops billing and keeps the record.",
           "Keep your own reminder for each next billing date, and raise the invoice by hand when it comes round.",
         ],
         shot: {

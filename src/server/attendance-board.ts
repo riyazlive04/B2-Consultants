@@ -93,6 +93,12 @@ export type AttendanceBoard = {
   defaultWindowMins: number;
   defaultGraceMins: number;
   publishRequired: boolean;
+  /**
+   * The founder's green/amber/red attendance thresholds, carried so every screen colours a
+   * percentage the same way - see `attendanceBandForPct`. Four screens used to decide this
+   * inline and had drifted to three different ladders.
+   */
+  bands: { amberRatePct: number; redRatePct: number };
   /** Hours after a recording goes up before not watching it counts as late. */
   catchUpHours: number;
   /** True when this person leads nothing and is looking at other people's cohorts. */
@@ -175,6 +181,22 @@ export const getAttendanceBoard = cache(
         events: {
           where: {
             delivery: "LIVE",
+            /**
+             * ── A CLASS THAT WAS CALLED OFF IS NOT A REGISTER TO TAKE ────────────────────
+             *
+             * `SessionStatus` is explicit that "SCHEDULED is the only state that counts towards
+             * an attendance rate, opens a register or shows a join link; the other two are
+             * excluded at every one of those call sites" - and this call site, the register desk
+             * itself, was not excluding them. So a cancelled class sat in "Never marked" for
+             * ever: it cannot be marked, there is nobody to mark, and no amount of work by the
+             * tutor would clear it. It also counted in the cohort card's "N of M classes marked"
+             * denominator, so a cohort whose tutor had marked everything read short.
+             *
+             * Filtered in the QUERY here rather than per bucket, because unlike My Teaching this
+             * desk has no reason to list a called-off class at all - it is a to-do screen, and
+             * the cohort page is where the timetable with its cancellations is read.
+             */
+            status: "SCHEDULED",
             startsAt: { gte: new Date(Date.now() - LOOKBACK_DAYS * 86_400_000) },
           },
           orderBy: { startsAt: "asc" },
@@ -307,6 +329,7 @@ export const getAttendanceBoard = cache(
       defaultWindowMins: config.checkInWindowMins,
       defaultGraceMins: config.checkInLateAfterMins,
       publishRequired: config.publishRequired,
+      bands: { amberRatePct: config.amberRatePct, redRatePct: config.redRatePct },
       catchUpHours: config.catchUpHours,
       supervising,
       catchUp,

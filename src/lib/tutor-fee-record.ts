@@ -24,14 +24,36 @@ export type ComputedTutorFee = {
   bandLabel: string;
 };
 
+/** `Level.code` is "GN_A1"; the rate card keys its bands as "A1". */
+export function stripLevelPrefix(levelCode: string): string {
+  return levelCode.startsWith("GN_") ? levelCode.slice(3) : levelCode;
+}
+
 /**
- * The level codes the fee bands are keyed on. `Level.code` is "GN_A1"; the config's band keys
- * are "A1". Anything that is not a German level has no tutor fee - coaching tiers are
- * delivered by a coach on salary, not a per-head trainer.
+ * THE GATE: does this level carry a trainer fee at all?
+ *
+ * Returns the card's key for the level, or null when the card does not price it. Null is not an
+ * error - coaching tiers are delivered by a coach on salary, not a per-head trainer, and a level
+ * the founders have not given a rate for is a level they have not decided about yet. Callers skip
+ * on null rather than writing a zero row, because "₹0" and "no trainer fee concept here" are
+ * different claims and a table full of the first hides the second.
+ *
+ * ── What changed on 1 Nov 2026, and what deliberately did not ───────────────────────────────
+ * This used to answer `A1 | A2 | B1` from a hardcoded comparison, so a GN_B2 batch was dropped
+ * from the tutor-cost table with nothing on screen saying a level had been skipped. It now asks
+ * the founder's rate card instead.
+ *
+ * The BEHAVIOUR for an unpriced level is unchanged on purpose: no band, no fee, omitted. Adding
+ * the ability to price B2 must not retroactively start pricing it at a guessed rate - that would
+ * silently restate the German Note P&L for every month already reported. The founder adds the row
+ * when they are ready, and only then does the level start costing anything.
  */
-export function tutorFeeLevelFromCode(levelCode: string): TutorFeeLevel | null {
-  const stripped = levelCode.startsWith("GN_") ? levelCode.slice(3) : levelCode;
-  return stripped === "A1" || stripped === "A2" || stripped === "B1" ? stripped : null;
+export function tutorFeeLevelFromCode(
+  levelCode: string,
+  config: TutorFeeConfig = DEFAULT_TUTOR_FEE_CONFIG,
+): TutorFeeLevel | null {
+  const stripped = stripLevelPrefix(levelCode);
+  return config.ratesByLevel[stripped] ? stripped : null;
 }
 
 /**
@@ -46,7 +68,7 @@ export function computeTutorFee(
   headcount: number,
   config: TutorFeeConfig = DEFAULT_TUTOR_FEE_CONFIG,
 ): ComputedTutorFee | null {
-  const level = tutorFeeLevelFromCode(levelCode);
+  const level = tutorFeeLevelFromCode(levelCode, config);
   if (!level) return null;
 
   const ratePerHeadRupees = tutorRatePerHeadRupees(level, headcount, config);

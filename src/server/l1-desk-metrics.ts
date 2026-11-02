@@ -13,7 +13,7 @@ import {
   summariseCalls,
   type CallbackVerdict,
 } from "@/lib/callback-chase";
-import { getCallDistribution } from "./founder-config";
+import { getBookingRulesConfig, getCallDistribution } from "./founder-config";
 import {
   bucketForLead,
   slaFor,
@@ -192,6 +192,14 @@ export type L1Desk = {
    * them looking for leads in the wrong column.
    */
   callbackRule: { gapHours: number; maxCallbacks: number; closesWhenExhausted: boolean };
+  /**
+   * The public booking page's window, so the desk can say what it actually is.
+   *
+   * Carried for the same reason `callbackRule` is: this desk gives instructions that only make
+   * sense against the live setting, and the one it gave about confirming tomorrow's calls was
+   * quoting a hardcoded "8 hours" at a setting that ships at 2.
+   */
+  bookingRule: { minNoticeHours: number };
   /** Server clock at build time, so the client countdown doesn't drift off a wrong local clock. */
   now: string;
 };
@@ -216,6 +224,16 @@ export const getL1Desk = cache(async (userId: string): Promise<L1Desk> => {
   // pipeline list; `followUpRestHours` is how long a called lead stays off the chase buckets.
   const callCfg = await getCallDistribution();
   const priorityWeights = callCfg.priority;
+  /**
+   * The public booking page's minimum notice, carried so the desk can QUOTE it.
+   *
+   * "Tomorrow's discovery calls" told the setter that "bookings inside 8 hours are blocked". The
+   * real minimum notice is a founder setting (`minNoticeHours`) and ships at 2, so the one piece
+   * of advice on that section - cancel early enough for the slot to be re-bookable - was being
+   * given against a figure four times the truth. A number a telecaller acts on must come from
+   * the setting, never from a sentence somebody typed once.
+   */
+  const bookingCfg = await getBookingRulesConfig();
   const day = istTodayInstants();
   const month = istMonthInstantRange();
   const oldLeadCutoff = new Date(now.getTime() - OLD_LEAD_AFTER_DAYS * DAY_MS);
@@ -846,6 +864,8 @@ export const getL1Desk = cache(async (userId: string): Promise<L1Desk> => {
       maxCallbacks: callCfg.callbackChase.maxCallbacks,
       closesWhenExhausted: callCfg.callbackChase.closeWhenExhausted,
     },
+    /** The founder's public-booking window, so the desk quotes it instead of a hardcoded figure. */
+    bookingRule: { minNoticeHours: bookingCfg.minNoticeHours },
     now: now.toISOString(),
   };
 });

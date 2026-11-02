@@ -17,7 +17,25 @@ export function ymdInZone(instant: Date, timeZone: string): string {
 }
 
 export function istToday(): Date {
-  return parseDateInput(ymdInZone(new Date(), IST_ZONE));
+  return istDayOf(new Date());
+}
+
+/**
+ * The IST calendar DAY an instant falls on, as UTC midnight - the @db.Date encoding.
+ *
+ * The boundary every "which week is it" question has to cross first. `istWeekRange` and the
+ * rest below do their arithmetic with `setUTCDate`, which preserves the TIME of the value
+ * handed to them: given a real instant rather than a day, they return "Monday, at whatever
+ * o'clock it happens to be now", and anything built from that - a deadline, a week key - is
+ * then wrong by up to a day.
+ *
+ * It cost a real bug. The weekly report's window is "opens Friday 10:00 IST"; computed from a
+ * raw `new Date()` at 00:12 IST on a Friday, "Friday 00:00" came out as Friday 18:45 UTC - six
+ * hours in the FUTURE on a day that had already started - so the cron opened nothing, silently,
+ * and the only symptom was a cohort that never got asked.
+ */
+export function istDayOf(instant: Date): Date {
+  return parseDateInput(ymdInZone(instant, IST_ZONE));
 }
 
 /** [first day of month, first day of next month) in IST terms. */
@@ -35,6 +53,30 @@ export function istWeekRange(ref = istToday()): { start: Date; end: Date } {
   const end = new Date(start);
   end.setUTCDate(start.getUTCDate() + 7);
   return { start, end };
+}
+
+/**
+ * The ISO-8601 week an IST date falls in, as "2026-W44".
+ *
+ * A key, not a label: the weekly report uses it to recognise the same calendar week
+ * across cohorts that started months apart, so it has to agree with itself at a year
+ * boundary. Hence the Thursday rule rather than "week 1 starts on 1 January" - the week
+ * of 29 Dec 2026 is 2026-W53 and the week of 31 Dec 2025 is 2026-W01, and a naive
+ * year-plus-week-number would file those under the wrong year and collide.
+ */
+export function istIsoWeekKey(ref = istToday()): string {
+  // Thursday of this ISO week decides which ISO YEAR the week belongs to.
+  const thursday = new Date(ref);
+  thursday.setUTCDate(ref.getUTCDate() - ((ref.getUTCDay() + 6) % 7) + 3);
+  const isoYear = thursday.getUTCFullYear();
+
+  // 4 January is always in ISO week 1, so the Thursday of its week is week 1's Thursday.
+  const jan4 = new Date(Date.UTC(isoYear, 0, 4));
+  const firstThursday = new Date(jan4);
+  firstThursday.setUTCDate(jan4.getUTCDate() - ((jan4.getUTCDay() + 6) % 7) + 3);
+
+  const week = 1 + Math.round((thursday.getTime() - firstThursday.getTime()) / (7 * 86400000));
+  return `${isoYear}-W${String(week).padStart(2, "0")}`;
 }
 
 /** [Jan 1 of current IST year, Jan 1 next year). */

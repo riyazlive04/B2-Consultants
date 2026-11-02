@@ -117,11 +117,11 @@ function BatchPicker({
   );
 }
 
-const B2_LEVEL_OPTIONS = [
-  { value: "SOLO", label: "Solo" },
-  { value: "GUIDED", label: "Guided (90d)" },
-  { value: "ELITE", label: "Elite (120d)" },
-];
+/*
+ * The three B2 tiers used to be hardcoded here, as they were on the Students board. They come
+ * from the live `Level` catalogue now - a founder-added coaching tier was offered everywhere
+ * except the two forms that enrol a student into one. See `B2_LEVEL_KINDS`.
+ */
 
 // The coach picker's options.
 //
@@ -322,9 +322,15 @@ export function StudentDetailClient({
   canSeat,
   todayKey,
   weeklyReports,
+  levelOptions,
 }: {
   student: StudentDetail;
   isAdmin: boolean;
+  /**
+   * The B2 programme tiers, from the live `Level` catalogue rather than a copy of the three
+   * seeded ones - so a tier the founder adds can actually be enrolled into.
+   */
+  levelOptions: { value: string; label: string }[];
   canEditTracker: boolean; // Admin or Head
   /**
    * The `batches.manage` CAPABILITY, not a role test. It defaults to Admin but the founder can
@@ -771,7 +777,7 @@ export function StudentDetailClient({
               }}
               className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
             >
-              <Field label="Program level"><Select name="programLevel" options={B2_LEVEL_OPTIONS} defaultValue="GUIDED" /></Field>
+              <Field label="Program level"><Select name="programLevel" options={levelOptions} defaultValue={levelOptions.some((o) => o.value === "GUIDED") ? "GUIDED" : levelOptions[0]?.value ?? ""} /></Field>
               <Field label="Enrolment date"><TextInput type="date" name="enrollmentDate" required defaultValue={todayKey} /></Field>
               <Field label="Sessions planned"><TextInput kind="int" name="totalSessionsPlanned" /></Field>
               <Field label="Assigned coach"><Select name="assignedCoach" options={coachOptions(student.teamMembers)} defaultValue={student.defaultCoach} /></Field>

@@ -51,6 +51,13 @@ export async function runCommissionPayout(): Promise<ActionResult> {
   const totalInrMinor = BigInt(report.totals.reduce((s, t) => s + t.amountInrMinor, 0));
   const lines = report.totals.map((t) => ({ name: t.name, amountInrMinor: t.amountInrMinor, deals: t.deals }));
 
+  // What the snapshot said BEFORE this run - the figure the ledger was posted against, if it
+  // was. Read ahead of the upsert because the upsert overwrites it.
+  const before = await prisma.commissionPayoutRun.findUnique({
+    where: { month: monthDate },
+    select: { totalInrMinor: true, postedEntryId: true },
+  });
+
   // 1. Record the snapshot first - it is the primary artefact and must survive even if the
   //    optional ledger posting later fails (e.g. an unseeded chart of accounts).
   const run = await prisma.commissionPayoutRun.upsert({
@@ -67,6 +74,40 @@ export async function runCommissionPayout(): Promise<ActionResult> {
       createdById: session.user.id,
     },
   });
+
+  /**
+   * ── RE-RECORDING A RUN HAS TO RESTATE THE LEDGER, NOT JUST THE SNAPSHOT ──────────────────
+   *
+   * This action is idempotent per month by `upsert`, so running it again after a late payment or
+   * a rate change rewrites the snapshot with a new total. The ledger did not follow:
+   * `postEntryOnce` is idempotent on `sourceId` and returns null when a live entry already
+   * exists, so the second run updated `lines` and `totalInrMinor` while the books kept the FIRST
+   * amount. The screen and the accounts then disagreed about what the team was owed, with
+   * nothing saying which was right.
+   *
+   * So a changed total voids the old entry before posting the new one - the same
+   * `voidEntryForSource` the explicit void path uses, which keeps the reversal inside the
+   * original's own period (see `voidEntry`). An unchanged total touches nothing: re-recording an
+   * identical run must not churn the journal.
+   */
+  const totalChanged = before !== undefined && before !== null && before.totalInrMinor !== totalInrMinor;
+  if (totalChanged && before.postedEntryId) {
+    try {
+      await prisma.$transaction((tx) =>
+        voidEntryForSource(tx, "MANUAL", COMMISSION_SOURCE(monthKey), {
+          reason: `commission payout run re-recorded - ${formatInrMinor(before.totalInrMinor)} → ${formatInrMinor(totalInrMinor)}`,
+          actorId: session.user.id,
+          on: istToday(),
+        }),
+      );
+      // The snapshot's pointer goes with it, so the re-post below is not mistaken for a no-op.
+      await prisma.commissionPayoutRun.update({ where: { id: run.id }, data: { postedEntryId: null } });
+      run.postedEntryId = null;
+    } catch {
+      // Leave the old entry standing rather than losing the new snapshot. The post below will
+      // find a live entry and decline, which is the same state as before this fix - not worse.
+    }
+  }
 
   // 2. Optionally accrue to the ledger.
   const cfg = await getFinancePostingConfig();
@@ -101,8 +142,15 @@ export async function runCommissionPayout(): Promise<ActionResult> {
     section: "finance",
     entityType: "CommissionPayoutRun",
     entityId: run.id,
-    summary: `Recorded the ${monthKey} commission payout - ${formatInrMinor(totalInrMinor)} across ${lines.length} ${lines.length === 1 ? "person" : "people"}${postedEntryId ? " (recorded as owed in the ledger)" : ""}`,
-    meta: { month: monthKey, totalInrMinor: totalInrMinor.toString(), people: lines.length, posted: Boolean(postedEntryId) },
+    summary: `${before ? "Re-recorded" : "Recorded"} the ${monthKey} commission payout - ${formatInrMinor(totalInrMinor)} across ${lines.length} ${lines.length === 1 ? "person" : "people"}${postedEntryId ? " (recorded as owed in the ledger)" : ""}`,
+    meta: {
+      month: monthKey,
+      totalInrMinor: totalInrMinor.toString(),
+      people: lines.length,
+      posted: Boolean(postedEntryId),
+      // A re-record that moved the figure is the case worth being able to find afterwards.
+      ...(totalChanged ? { restatedFromInrMinor: before.totalInrMinor.toString() } : {}),
+    },
   });
 
   revalidatePath("/finance");

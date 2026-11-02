@@ -166,6 +166,7 @@ export const RATE_RULES = {
    */
   accessRequestPerIp: { capacity: 3, refillPerSec: 3 / 3600 }, // 3 burst, then 3/hour
   accessRequestGlobal: { capacity: 10, refillPerSec: 10 / 3600 },
+
 } satisfies Record<string, RateRule>;
 
 /** A real 429 - with `Retry-After`, which Pabbly and WATI both honour and will redeliver on. */

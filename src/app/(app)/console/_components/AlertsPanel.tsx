@@ -246,6 +246,18 @@ function DunningCard({ config }: { config: DunningConfig }) {
         Stages never fire out of order or bunch up: an instalment already ten days overdue when
         this is switched on gets the <em>final notice only</em>, not all three at once. A paid
         instalment is re-checked immediately before every send.
+        <br />
+        {/*
+          ── WHAT THIS LADDER DOES NOT CHASE ────────────────────────────────────────────────
+          `runDunning`'s candidates are `Instalment` rows under a live `PendingPayment` plan.
+          An ISSUED INVOICE with an unpaid balance is not one, so it ages without a single
+          message whether this is on or off - and nothing here said so, which made "chase late
+          payments automatically" a promise the engine does not keep. Said rather than quietly
+          widened: chasing invoices would be a new customer-email trigger, and that is the
+          founder's call to ask for, not a gap to fill in passing.
+        */}
+        <strong>Instalment plans only.</strong> An issued invoice that goes unpaid is not chased
+        by this - it ages on Payments until somebody follows it up by hand.
       </Hint>
       <div className="mt-4 space-y-4">
         <Toggle

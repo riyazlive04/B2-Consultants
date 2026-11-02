@@ -144,6 +144,42 @@ export function signalFor(
   return "GREEN";
 }
 
+/**
+ * The attendance BAND for a bare percentage - green, amber or red, from the founder's thresholds.
+ *
+ * ── WHY THIS EXISTS ──────────────────────────────────────────────────────────────────────────
+ * `signalFor` above is the full rule and needs a whole `AttendanceSummary`: the sample size, the
+ * rate and the consecutive-miss streak. Four screens have none of that - just a percentage - so
+ * each had written its own ladder inline, and they had drifted into three different answers:
+ *
+ *   · Attendance cohort cards      80 / 60   (the Console's own defaults, by luck)
+ *   · My Teaching, student rows    75 / 50
+ *   · My Classroom, the dashboard  75 / 50
+ *
+ * So the same 70% was amber on one screen, green on the next and red on a third, and the Console
+ * thresholds the founder actually sets moved exactly one of them. Same thresholds, same
+ * comparisons, one function.
+ *
+ * It deliberately returns the three colour bands and NOT an `AttendanceSignal`: there is no
+ * UNKNOWN here, because a caller holding a single percentage has already decided it has enough
+ * data to show one. Where the sample size matters, use `signalFor`.
+ */
+export type AttendanceBand = "good" | "warn" | "bad";
+
+export function attendanceBandForPct(
+  pct: number,
+  /**
+   * Only the two thresholds, so a client component can be handed them without the whole
+   * attendance config - `AttendanceConfig` structurally satisfies this, so a server caller
+   * passes its config straight in.
+   */
+  config: Pick<AttendanceConfig, "amberRatePct" | "redRatePct"> = DEFAULT_ATTENDANCE_CONFIG,
+): AttendanceBand {
+  if (pct < config.redRatePct) return "bad";
+  if (pct < config.amberRatePct) return "warn";
+  return "good";
+}
+
 /** Why the signal is what it is - shown beside it, so a colour is never unexplained. */
 export function signalReason(
   summary: AttendanceSummary,

@@ -250,7 +250,17 @@ export function LeadSection({
           </Field>
           {stage === "WON" && (
             <Field label="Programme level (Won)" hint="Which programme did they enrol in?">
-              <Select name="wonLevel" options={levelOptions} defaultValue={editing?.wonLevel ?? "GUIDED"} />
+              {/* "GUIDED" as a bare default is a code that need not be in the catalogue - levels are
+                  founder-editable and one can be retired. Fall back to the first option offered,
+                  the way the enrolment forms already do. */}
+              <Select
+                name="wonLevel"
+                options={levelOptions}
+                defaultValue={
+                  editing?.wonLevel ??
+                  (levelOptions.some((o) => o.value === "GUIDED") ? "GUIDED" : levelOptions[0]?.value ?? "")
+                }
+              />
             </Field>
           )}
           {PAYMENT_PLAN_STAGES.has(stage) && (

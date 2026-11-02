@@ -334,6 +334,22 @@ export const GUIDES: GuideEntry[] = [
     tip: "Your coach can correct or remove anything you log, and will see that you logged it. Log what happened and the board takes care of itself.",
   },
   {
+    section: "weekly-reports", icon: "📋", title: "Weekly Reports", href: "/weekly-reports",
+    what: "What each student said about their own week, beside what you said about it - and who has gone quiet, worked out for you instead of by you.",
+    steps: [
+      "Pick a cohort and a week. On open it shows the newest week, because the question on a Monday is about the week that just finished.",
+      "“Open this week” creates the cohort's link for that week. Copy it into their group, or press “Send the link” to WhatsApp it to every student on the roster. A student with a portal login does not need the link at all - the form is on their own My Journey page.",
+      "“Question set” picks what this cohort is asked. Two cohorts on the same level can be running different activities, so each one can have its own form; it applies to the next week you open.",
+      "One link serves the whole cohort, so treat it like a group link: anyone holding it can open the form. If it reaches somewhere it should not have, “Withdraw the link” kills it without touching anything already submitted.",
+      "“Remind non-responders” chases only the students who have not answered yet. Nobody is messaged twice for the same week, whether the reminder came from you or from the engine.",
+      "The flag beside each student is worked out from their whole run of weeks, and it always shows its reasons. A single missed report is a yellow immediately; two in a row, or two weeks with no applications, is a red. Coming back from a red takes two clean weeks - one good week shows as yellow, which means “not out of it yet”.",
+      "Press “Review” to record what you did about it: the action you took, whether it still needs following up, and a note. Set the flag by hand only when you disagree with the rules - the derived verdict stays visible underneath so anyone can see you overrode it.",
+      "A note is staff-only unless you tick “Show this note to the student”. Shared notes appear on that student's My Journey page.",
+      "“Needs attention” gathers every yellow and red across every cohort you run, worst first, with the chase message already written. Check the bracketed bits before you send it.",
+    ],
+    tip: "A dash in a number column means nobody asked that question - it is not a zero. A zero is a real and serious answer, and it is what the red-flag rules look for.",
+  },
+  {
     section: "german-note", icon: "🇩🇪", title: "German Note", href: "/german-note",
     what: "German language batches: a Classroom of Fathom recordings, a class schedule, a Skool-style community, members and a leaderboard.",
     steps: [

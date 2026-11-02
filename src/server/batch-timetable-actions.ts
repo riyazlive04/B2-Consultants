@@ -495,7 +495,7 @@ export async function postSessionRecording(sessionId: string, form: FormData): P
   /**
    * HOW LONG THE STUDENTS MAY WATCH IT - the tutor's or head coach's call, per recording.
    *
-   * An absent field falls back to the house default (Console → Attendance), which itself ships
+   * An absent field falls back to the house default (Console → System → Alerts & Chasing), which itself ships
    * at "no limit" so that nothing a cohort was already promised changes by deploying this.
    */
   const rawDays = form.get("accessDays");

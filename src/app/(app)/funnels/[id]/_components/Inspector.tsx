@@ -35,6 +35,7 @@ export default function Inspector({
   onNudge,
   onClose,
   forms,
+  hosts,
   breadcrumb,
   onSelect,
   onSaveAsSection,
@@ -48,6 +49,8 @@ export default function Inspector({
   onNudge: (dir: -1 | 1) => void;
   onClose: () => void;
   forms: { id: string; name: string }[];
+  /** Bookable team members - whose calendar a `booking` block may show. */
+  hosts: { id: string; name: string }[];
   breadcrumb: Block[];
   onSelect: (id: string) => void;
   /** Save this node and everything under it to the shared section library. */
@@ -118,7 +121,7 @@ export default function Inspector({
 
       <div className="flex-1 space-y-3 overflow-y-auto p-3">
         {tab === "general" ? (
-          <GeneralFields node={node} onPatch={onPatch} forms={forms} />
+          <GeneralFields node={node} onPatch={onPatch} forms={forms} hosts={hosts} />
         ) : (
           <>
             {device === "mobile" && (
@@ -292,7 +295,7 @@ function OnClickFields({ node, onPatch, forms }: { node: Block; onPatch: (p: Par
   );
 }
 
-function GeneralFields({ node, onPatch, forms }: { node: Block; onPatch: (p: Partial<Block>) => void; forms: { id: string; name: string }[] }) {
+function GeneralFields({ node, onPatch, forms, hosts }: { node: Block; onPatch: (p: Partial<Block>) => void; forms: { id: string; name: string }[]; hosts: { id: string; name: string }[] }) {
   switch (node.type) {
     case "heading":
     case "subheading":
@@ -373,6 +376,52 @@ function GeneralFields({ node, onPatch, forms }: { node: Block; onPatch: (p: Par
         <Field label="Form">
           <Select placeholder="- pick a published form -" value={node.formId ?? ""} onChange={(e) => onPatch({ formId: e.target.value })} options={forms.map((f) => ({ value: f.id, label: f.name }))} />
         </Field>
+      );
+    /**
+     * The embedded discovery-call booker.
+     *
+     * ── Why this panel had to exist ───────────────────────────────────────────
+     * `booking` was in the palette, so a calendar could be dropped onto a step, but the inspector
+     * had no case for it - so none of the four fields the live renderer reads could be set from
+     * the builder. The block therefore always drew the unscoped pool under the default heading
+     * "Book your call", and the one thing it is for - this person's page offers this person's
+     * times - was reachable only by editing the page JSON in the database. Generating slots for a
+     * coach in Bookings → Availability and then finding the funnel's calendar unchanged is the
+     * same bug seen from the other end.
+     */
+    case "booking":
+      return (
+        <>
+          <Field label="Whose calendar">
+            <Select
+              size="sm"
+              value={node.bookingOwnerId ?? ""}
+              onChange={(e) => onPatch({ bookingOwnerId: e.target.value || undefined })}
+              options={[
+                { value: "", label: "Anyone - every open slot" },
+                ...hosts.map((h) => ({ value: h.id, label: h.name })),
+              ]}
+            />
+          </Field>
+          <p className="text-caption text-ink-3">
+            Pick the person this page is about and it offers only their open slots - the ones
+            assigned to them under <strong>Bookings → Availability</strong>. “Anyone” shows the
+            whole pool, so two personalised pages would offer identical times.
+          </p>
+          <Field label="Eyebrow"><input className={inputCls} value={node.bookingEyebrow ?? ""} onChange={(e) => onPatch({ bookingEyebrow: e.target.value })} placeholder="DISCOVERY" /></Field>
+          <Field label="Title"><input className={inputCls} value={node.label ?? ""} onChange={(e) => onPatch({ label: e.target.value })} placeholder="Book your call" /></Field>
+          <Field label="Description">
+            <textarea className={areaCls} rows={4} value={node.text ?? ""} onChange={(e) => onPatch({ text: e.target.value })} />
+          </Field>
+          <Field label="Logo URL"><input className={inputCls} value={node.url ?? ""} onChange={(e) => onPatch({ url: e.target.value })} placeholder="/media/…" /></Field>
+          <Field label="After booking, go to">
+            <input className={inputCls} value={node.bookingRedirectUrl ?? ""} onChange={(e) => onPatch({ bookingRedirectUrl: e.target.value })} placeholder="/p/this-funnel/thank-you" />
+          </Field>
+          <p className="text-caption text-ink-3">
+            Leave the redirect blank to keep the built-in “You’re booked in” card. Pointing it at a
+            confirmation step is what lets the funnel measure the booking.
+          </p>
+        </>
       );
     case "html":
       return (

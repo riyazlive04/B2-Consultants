@@ -7,6 +7,7 @@ import { setUserCapability } from "@/server/users-actions";
 import { toast } from "@/components/ui/feedback";
 import { Card, Hint, Toggle } from "./kit";
 import { safeAction } from "@/lib/action-guard";
+import { SharedSettingNotice } from "@/components/ui/SharedSettingNotice";
 
 /**
  * Console → Per-person rules.
@@ -85,6 +86,8 @@ export function PerPersonPanel({ people }: { people: PersonRow[] }) {
         and nothing changes. <strong>Admins hold everything</strong> and are shown locked - the
         founder can never remove their own access.
       </Hint>
+
+      <SharedSettingNotice setting="capabilities" self="console" />
 
       {PER_PERSON_GROUPS.map((group) => (
         <Card key={group.title} title={group.title} subtitle={group.blurb}>

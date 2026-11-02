@@ -34,7 +34,19 @@ export type KanbanLead = {
   canMove: boolean;
 };
 
-export function KanbanBoard({ leads, stages }: { leads: KanbanLead[]; stages: string[] }) {
+export function KanbanBoard({
+  leads,
+  stages,
+  total,
+  limit,
+}: {
+  leads: KanbanLead[];
+  stages: string[];
+  /** Every open-stage lead, so the board can admit when it is showing a slice. */
+  total: number;
+  /** The configured card cap in force. */
+  limit: number;
+}) {
   const router = useRouter();
   const [rows, setRows] = useState(leads);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -71,8 +83,27 @@ export function KanbanBoard({ leads, stages }: { leads: KanbanLead[]; stages: st
     router.refresh();
   }
 
+  /**
+   * Is this the whole pipeline, or the newest slice of it?
+   *
+   * `rows` rather than `leads`, because the poll above appends freshly captured leads to a board
+   * that may already be at the cap - so the honest comparison is against what is on screen now.
+   */
+  const truncated = total > rows.length;
+
   return (
     <div className="overflow-x-auto pb-2">
+      {truncated && (
+        /**
+         * The board was silently capped for as long as it has existed. Saying so is the fix;
+         * raising the cap is the founder's call, and the link says where.
+         */
+        <p className="mb-2 text-caption text-ink-3">
+          Showing the newest <strong>{rows.length}</strong> of <strong>{total}</strong> open leads.
+          Raise the card limit in Founder Console, then System, then Operations
+          {limit > 0 ? ` (currently ${limit})` : ""}, or use the Leads tab to see all of them.
+        </p>
+      )}
       <div className="flex gap-3" style={{ minWidth: `${stages.length * 15}rem` }}>
         {stages.map((stage) => {
           const inStage = rows.filter((r) => r.stage === stage);

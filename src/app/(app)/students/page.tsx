@@ -29,7 +29,8 @@ import { BookOrdersPanel } from "./_components/BookOrdersPanel";
 import { ImportPanel } from "./_components/ImportPanel";
 import { getBookOrderData, getStudentOptions } from "@/server/book-order-metrics";
 import { getActiveLevels } from "@/server/levels";
-import { levelOptions } from "@/lib/levels";
+import { B2_LEVEL_KINDS, levelLabelMap, levelOptions } from "@/lib/levels";
+import { levelBreakdownRows, levelTallyRows } from "@/lib/level-tally";
 import { TrackerTable } from "./_components/TrackerTable";
 import { TrackerBatchForm } from "./_components/TrackerBatchForm";
 
@@ -80,9 +81,38 @@ export default async function StudentsPage({
   const [bookOrders, studentOptions] = isAdmin
     ? await Promise.all([getBookOrderData(), getStudentOptions()])
     : [{ rows: [], vendors: [], thresholdRupees: 0 }, []];
+  /**
+   * The level catalogue, read once for both pickers on this page.
+   *
+   * ── Why the enrolment picker needed it ──────────────────────────────────────────────────────
+   * `StudentsPanel` and the student record both held a hardcoded three - Solo, Guided, Elite -
+   * so a coaching tier the founder added in Programs → Programmes was sellable, priceable and
+   * curriculum-able, and then could not be enrolled into from the one form that enrols people.
+   * `enrollmentSchema` validated against the same fixed three, so even a hand-made submission
+   * was refused. Both now read `B2_LEVEL_KINDS` off the live catalogue.
+   */
+  const activeLevels = await getActiveLevels();
+  const b2LevelOptions = levelOptions(activeLevels, B2_LEVEL_KINDS);
+  /**
+   * The by-level rows for the cards below - from the same catalogue the pickers use.
+   *
+   * These cards named Solo, Guided and Elite in source while the cards ABOVE them counted every
+   * active enrolment, so the moment a fourth tier existed the popup stopped summing to the
+   * figure it was explaining. One rule in lib/level-tally.ts now: every active tier gets a row,
+   * and any other code the data carries gets one too. See `levelTallyRows`.
+   */
+  const activeRows = levelTallyRows(counts.activeByLevel, activeLevels, B2_LEVEL_KINDS);
+  const completedRows = levelTallyRows(counts.completedThisMonthByLevel, activeLevels, B2_LEVEL_KINDS);
+  const droppedRows = levelTallyRows(counts.droppedThisMonthByLevel, activeLevels, B2_LEVEL_KINDS);
+  const ltvRows = levelBreakdownRows(
+    Object.keys(ltvSummary.avgByLevel).filter((k) => ltvSummary.avgByLevel[k] > 0),
+    activeLevels,
+    B2_LEVEL_KINDS,
+  );
+  const levelLabel = levelLabelMap(activeLevels);
   // Book orders are per single level (never a bundle).
   const bookLevelOptions = isAdmin
-    ? levelOptions(await getActiveLevels(), ["GERMAN_LEVEL", "COACHING_TIER", "OTHER"])
+    ? levelOptions(activeLevels, ["GERMAN_LEVEL", "COACHING_TIER", "OTHER"])
     : [];
 
   return (
@@ -90,7 +120,7 @@ export default async function StudentsPage({
       <PageHeader
         icon={<GraduationCap size={20} />}
         title="Students"
-        subtitle="B2 Consultants students only (Solo / Guided / Elite). German Note comes in a later phase."
+        subtitle={`B2 Consultants students only (${b2LevelOptions.map((o) => o.label).join(" / ")}). German Note comes in a later phase.`}
         actions={
           isAdmin ? (
             <SectionLink href="/batches" sectionKey="batches">
@@ -112,43 +142,21 @@ export default async function StudentsPage({
           label="Total active students"
           value={counts.totalActive}
           icon={<Users size={18} />}
-          detail={{
-            rows: [
-              { label: "Solo", value: counts.activeSolo },
-              { label: "Guided", value: counts.activeGuided },
-              { label: "Elite", value: counts.activeElite },
-            ],
-          }}
+          detail={{ rows: activeRows.map((r) => ({ label: r.label, value: r.value })) }}
         />
         <MetricCard
           label="Active by level"
-          value={
-            <span className="text-2xl">
-              {counts.activeSolo} · {counts.activeGuided} · {counts.activeElite}
-            </span>
-          }
-          secondary="Solo · Guided · Elite"
+          value={<span className="text-2xl">{activeRows.map((r) => r.value).join(" · ")}</span>}
+          secondary={activeRows.map((r) => r.label).join(" · ")}
           icon={<Layers size={18} />}
-          detail={{
-            rows: [
-              { label: "Solo", value: counts.activeSolo },
-              { label: "Guided", value: counts.activeGuided },
-              { label: "Elite", value: counts.activeElite },
-            ],
-          }}
+          detail={{ rows: activeRows.map((r) => ({ label: r.label, value: r.value })) }}
         />
         <MetricCard
           label="Completed this month"
           value={counts.completedThisMonth}
           signal={counts.completedThisMonth > 0 ? "ok" : undefined}
           icon={<GraduationCap size={18} />}
-          detail={{
-            rows: [
-              { label: "Solo", value: counts.completedThisMonthByLevel.SOLO },
-              { label: "Guided", value: counts.completedThisMonthByLevel.GUIDED },
-              { label: "Elite", value: counts.completedThisMonthByLevel.ELITE },
-            ],
-          }}
+          detail={{ rows: completedRows.map((r) => ({ label: r.label, value: r.value })) }}
         />
         {/*
           WHY they stopped, not only how many (@39:42).
@@ -167,9 +175,7 @@ export default async function StudentsPage({
                 label: r.reason,
                 value: `${r.count} (${r.pct}%)`,
               })),
-              { label: "Solo", value: counts.droppedThisMonthByLevel.SOLO },
-              { label: "Guided", value: counts.droppedThisMonthByLevel.GUIDED },
-              { label: "Elite", value: counts.droppedThisMonthByLevel.ELITE },
+              ...droppedRows.map((r) => ({ label: r.label, value: String(r.value) })),
             ],
           }}
         />
@@ -236,9 +242,10 @@ export default async function StudentsPage({
           icon={<Crown size={18} />}
           detail={{
             rows: [
-              { label: "Avg paid - Solo", value: formatInrMinor(ltvSummary.avgSolo, { compact: true }) },
-              { label: "Avg paid - Guided", value: formatInrMinor(ltvSummary.avgGuided, { compact: true }) },
-              { label: "Avg paid - Elite", value: formatInrMinor(ltvSummary.avgElite, { compact: true }) },
+              ...ltvRows.map((r) => ({
+                label: `Avg paid - ${r.label}`,
+                value: formatInrMinor(ltvSummary.avgByLevel[r.key] ?? 0, { compact: true }),
+              })),
               { label: "Upgrade rate", value: formatPct(ltvSummary.upgradeRatePct) },
             ],
           }}
@@ -247,9 +254,10 @@ export default async function StudentsPage({
 
       <p className="text-sm text-muted">
         <span className="font-medium text-ink">Average paid:</span>{" "}
-        Solo {formatInrMinor(ltvSummary.avgSolo, { compact: true })} · Guided{" "}
-        {formatInrMinor(ltvSummary.avgGuided, { compact: true })} · Elite{" "}
-        {formatInrMinor(ltvSummary.avgElite, { compact: true })} ·{" "}
+        {ltvRows
+          .map((r) => `${r.label} ${formatInrMinor(ltvSummary.avgByLevel[r.key] ?? 0, { compact: true })}`)
+          .join(" · ")}
+        {" · "}
         <span className="font-medium text-ink">Upgrade rate:</span> {formatPct(ltvSummary.upgradeRatePct)}
       </p>
 
@@ -302,7 +310,10 @@ export default async function StudentsPage({
                   {t.studentName}
                 </Link>
                 <span className="text-xs text-muted">
-                  {t.programLevel === "GUIDED" ? "Guided" : "Elite"} · Day {t.dayNumber}/{t.totalDays}
+                  {/* The tier's own name. This read `=== "GUIDED" ? "Guided" : "Elite"`, which
+                      labels a student on any other tier "Elite" - on the at-risk list, which is
+                      the one place a coach reads a name and a level together. */}
+                  {levelLabel[t.programLevel] ?? t.programLevel} · Day {t.dayNumber}/{t.totalDays}
                 </span>
                 {t.alreadyRed && <Pill tone="bad">already RED</Pill>}
                 <span className="ml-auto flex flex-wrap justify-end gap-1">
@@ -322,7 +333,7 @@ export default async function StudentsPage({
         tabs={[
           {
             label: `90/120-day tracker${tracker.some((t) => t.signalColour === "RED") ? " ⚠" : ""}`,
-            content: <TrackerTable rows={tracker} isAdmin={isAdmin} waStatus={waByStudent} />,
+            content: <TrackerTable rows={tracker} isAdmin={isAdmin} waStatus={waByStudent} levelLabels={levelLabel} />,
           },
           /**
            * The weekly round - the in-app replacement for the Google Form that was being used to
@@ -345,13 +356,19 @@ export default async function StudentsPage({
                         currentMilestone: t.currentMilestone,
                         signalColour: t.signalColour,
                         daysSinceLastSession: t.daysSinceLastSession,
+                        // The four fields whose boxes used to open empty over a stored value and
+                        // delete it on save - see `TrackerBatchRow`.
+                        lastSessionDate: t.lastSessionDate,
+                        lastTaskAssigned: t.lastTaskAssigned,
+                        lastTaskCompleted: t.lastTaskCompleted,
+                        nextCheckInDate: t.nextCheckInDate,
                       }))}
                     />
                   ),
                 },
               ]
             : []),
-          { label: "All students & totals", content: <StudentsPanel rows={students} isAdmin={isAdmin} today={today} coaches={coaches} defaultCoach={defaultCoach} /> },
+          { label: "All students & totals", content: <StudentsPanel rows={students} isAdmin={isAdmin} today={today} coaches={coaches} defaultCoach={defaultCoach} levelOptions={b2LevelOptions} /> },
           ...(isAdmin
             ? [
                 {

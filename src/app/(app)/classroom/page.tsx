@@ -11,6 +11,9 @@ import {
 import { requireSection } from "@/lib/rbac";
 import { getMyClassroom, type ClassroomBatchView } from "@/server/student-classroom";
 import { getMyOpenCheckIns } from "@/server/attendance-checkin";
+import { getAttendanceConfig } from "@/server/founder-config";
+import { attendanceBandForPct } from "@/lib/attendance";
+import type { AttendanceConfig } from "@/lib/config-schema";
 import { CheckInCard } from "@/components/attendance/CheckInCard";
 import { ClassroomTimetable } from "./_components/ClassroomTimetable";
 import { Tabs } from "@/components/ui/Tabs";
@@ -31,9 +34,12 @@ export const dynamic = "force-dynamic";
  */
 export default async function ClassroomPage() {
   const session = await requireSection("classroom");
-  const [classroom, checkIns] = await Promise.all([
+  const [classroom, checkIns, attendanceConfig] = await Promise.all([
     getMyClassroom(session.user.id),
     getMyOpenCheckIns(session.user.id),
+    // The founder's green/amber/red thresholds. This screen used to hardcode 75/50 while the
+    // Attendance cards used 80/60 and the Console set neither - see `attendanceBandForPct`.
+    getAttendanceConfig(),
   ]);
 
   if (!classroom) {
@@ -119,18 +125,25 @@ export default async function ClassroomPage() {
       {/* One batch is the normal case and gets no tab bar; a student repeating a level, or on
           both a coaching programme and a German course, gets one tab per cohort. */}
       {classroom.batches.length === 1 ? (
-        <BatchBlock batch={classroom.batches[0]} />
+        <BatchBlock batch={classroom.batches[0]} bands={attendanceConfig} />
       ) : (
         <Tabs
           urlKey="batch"
-          tabs={classroom.batches.map((b) => ({ label: b.name, content: <BatchBlock batch={b} /> }))}
+          tabs={classroom.batches.map((b) => ({ label: b.name, content: <BatchBlock batch={b} bands={attendanceConfig} /> }))}
         />
       )}
     </div>
   );
 }
 
-function BatchBlock({ batch }: { batch: ClassroomBatchView }) {
+function BatchBlock({
+  batch,
+  bands,
+}: {
+  batch: ClassroomBatchView;
+  /** The founder's attendance thresholds, so this bar is the colour every other screen gives it. */
+  bands: Pick<AttendanceConfig, "amberRatePct" | "redRatePct">;
+}) {
   const attendancePct = batch.counted > 0 ? Math.round((batch.attended / batch.counted) * 100) : null;
   const taskPct = batch.tasksTotal > 0 ? Math.round((batch.tasksDone / batch.tasksTotal) * 100) : null;
 
@@ -161,7 +174,7 @@ function BatchBlock({ batch }: { batch: ClassroomBatchView }) {
                 <Users size={12} aria-hidden /> Attendance
               </p>
               <p className="text-sm text-ink">{batch.attended} of {batch.counted} classes</p>
-              <ProgressBar pct={attendancePct} tone={attendancePct >= 75 ? "good" : attendancePct >= 50 ? "warn" : "bad"} />
+              <ProgressBar pct={attendancePct} tone={attendanceBandForPct(attendancePct, bands)} />
             </div>
           )}
           {taskPct !== null && (

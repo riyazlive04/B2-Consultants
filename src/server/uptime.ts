@@ -59,6 +59,12 @@ export const STALE_AFTER_MINUTES: Record<string, number> = {
    * `__tests__/cron-stale-thresholds.test.ts` fails if a cron route ships without an entry.
    */
   agreements: 1500,
+  /*
+   * Ticks every 15 minutes (docker/cron/entrypoint.sh). 60 gives a dead engine four missed
+   * ticks before it reads as stale, which is wide enough that one slow run on a Friday - the
+   * tick that fans out to every cohort at once - does not raise an alarm by itself.
+   */
+  "weekly-reports": 60,
 };
 
 const DEFAULT_STALE_MINUTES = 180;

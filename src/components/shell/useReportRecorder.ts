@@ -218,11 +218,42 @@ export function useReportRecorder() {
       streamsRef.current = streams;
       const stream = new MediaStream(tracks);
 
+      /**
+       * BUILDING AND STARTING THE RECORDER CAN THROW, AND IT WAS NOT GUARDED.
+       *
+       * The try/catch above covers the PERMISSION step only - the pickers and the prompts - which
+       * is the part everybody thinks of. But `new MediaRecorder(...)` raises `NotSupportedError`
+       * for a codec combination the browser will not encode, and `.start()` raises
+       * `InvalidStateError` if a track died between the picker and here (a tab closed, a device
+       * unplugged, the "Stop sharing" bar pressed in the half-second in between).
+       *
+       * Unguarded, that throw escaped an async function invoked from a click, so nothing on screen
+       * changed and three things were left wrong at once: `status` stuck at "starting", which
+       * means THE REPORT FORM STAYS HIDDEN - the person is looking at the app with a floating
+       * "Starting…" bar whose Stop button is disabled - the screen-share and microphone tracks
+       * stay OPEN, so the browser keeps telling them they are being recorded, and the words they
+       * had already typed are behind a form they cannot get back to without losing them.
+       *
+       * So it is caught, the devices are released, and it fails the way a declined permission
+       * already failed: a sentence in the panel, and back to idle with the form visible.
+       */
       const mimeType = RECORDER_PREFERENCES[want].find((t) => MediaRecorder.isTypeSupported(t));
-      const recorder = new MediaRecorder(stream, {
-        ...(mimeType ? { mimeType } : {}),
-        ...(want === "SCREEN" ? SCREEN_BITRATES : {}),
-      });
+      let recorder: MediaRecorder;
+      try {
+        recorder = new MediaRecorder(stream, {
+          ...(mimeType ? { mimeType } : {}),
+          ...(want === "SCREEN" ? SCREEN_BITRATES : {}),
+        });
+      } catch {
+        release();
+        setError(
+          want === "SCREEN"
+            ? "This browser could not start a screen recording. Try a voice note instead, or use Chrome."
+            : "This browser could not start a recording. Try again, or type it instead.",
+        );
+        setStatus("idle");
+        return;
+      }
       recorderRef.current = recorder;
       chunksRef.current = [];
 
@@ -271,7 +302,16 @@ export function useReportRecorder() {
       };
 
       startedAtRef.current = Date.now();
-      recorder.start();
+      try {
+        recorder.start();
+      } catch {
+        // A track that ended between the picker and this line - see the note above. Same
+        // recovery: let go of the devices and put the form back.
+        release();
+        setError("The recording could not be started. Nothing was captured - try again.");
+        setStatus("idle");
+        return;
+      }
       setStatus("recording");
       setElapsed(0);
 

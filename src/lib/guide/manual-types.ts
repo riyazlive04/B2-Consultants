@@ -36,7 +36,7 @@ export const CONSOLE_PANELS = {
     "qualification", "call-distribution", "availability", "zoom",
     "confirm-loop", "operations", "lead-webhook",
   ],
-  delivery: ["agreements", "delivery-defaults", "daily-targets", "gamification", "goals", "rewards"],
+  delivery: ["agreements", "delivery-defaults", "daily-targets", "gamification", "goals", "rewards", "weekly-report"],
   system: ["not-armed", "alerts", "leaderboard", "student-lifecycle", "improvements", "maintenance"],
 } as const;
 export type ConsoleArea = keyof typeof CONSOLE_PANELS;
@@ -85,6 +85,19 @@ export type GuideShotSpec = {
   caption: string;
   /** Visible text of the ONE thing to box (a button, tab or heading) and the label on the box. */
   highlight?: { text: string; label: string };
+  /**
+   * WHO HAS TO BE SIGNED IN for this screen to look like itself.
+   *
+   * Defaults to the section's own audience: a `personal` section is captured as the demo
+   * student, everything else as the founder. This overrides that PER SHOT, which is needed
+   * because a screen can serve two roles and show each of them something different.
+   *
+   * My Desk is the case that forced it. It branches on the signed-in person's log variant, so
+   * the founder sees the owner's task list and a telecaller sees the call desk - eight of its
+   * nine shots are of a screen the founder's account simply cannot render, and every one of
+   * them failed with "not on /my-desk" while the page loaded perfectly.
+   */
+  as?: "staff" | "student" | "telecaller";
 };
 
 export type GuideFeature = {

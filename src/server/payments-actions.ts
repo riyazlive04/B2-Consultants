@@ -1104,10 +1104,27 @@ export async function sendInvoice(id: string): Promise<SendInvoiceResult> {
     where: { id },
     select: {
       id: true, kind: true, number: true, customerName: true, customerEmail: true,
-      publicToken: true, totalInrMinor: true,
+      /**
+       * `currency` and BOTH totals, because the email quotes the amount.
+       *
+       * It used to select `totalInrMinor` alone and print it with `formatInrMinor`, so a euro
+       * invoice went to the customer saying "₹" over a figure that was in fact the rupee mirror
+       * of their euro total - an invoice that disagreed with its own PDF attachment about both
+       * the currency and the number. See `formatMinor`, which the document itself uses.
+       */
+      currency: true,
+      publicToken: true, totalInrMinor: true, totalEurMinor: true,
     },
   });
   if (!inv) return { ok: false, error: "Not found" };
+
+  // The side the document prints, formatted the way that currency groups - the one definition,
+  // shared with the public invoice page and the PDF.
+  const currency = asInvoiceCurrency(inv.currency);
+  const totalDisplay = formatMinor(
+    currency === "EUR" ? inv.totalEurMinor : inv.totalInrMinor,
+    currency,
+  );
 
   const noun = inv.kind === "ESTIMATE" ? "Estimate" : "Invoice";
   const url = publicInvoiceUrl(inv.publicToken);
@@ -1131,7 +1148,7 @@ export async function sendInvoice(id: string): Promise<SendInvoiceResult> {
         from,
         to,
         subject: `${noun} ${inv.number} from B2 Consultants`,
-        html: invoiceEmailHtml({ customerName: inv.customerName, noun, number: inv.number, totalDisplay: formatInrMinor(inv.totalInrMinor), url }),
+        html: invoiceEmailHtml({ customerName: inv.customerName, noun, number: inv.number, totalDisplay, url }),
         attachments,
       });
       message = res.ok ? `Emailed to ${to}` : `Marked sent, but the email failed (${res.error})`;
@@ -1155,7 +1172,7 @@ export async function sendInvoice(id: string): Promise<SendInvoiceResult> {
     section: "payments",
     entityType: "Invoice",
     entityId: inv.id,
-    summary: `Sent ${noun.toLowerCase()} ${inv.number} (${formatInrMinor(inv.totalInrMinor)}) to ${inv.customerName} - ${message}`,
+    summary: `Sent ${noun.toLowerCase()} ${inv.number} (${totalDisplay}) to ${inv.customerName} - ${message}`,
     meta: { number: inv.number, to: to ?? null, totalInrMinor: inv.totalInrMinor.toString(), message },
   });
 
@@ -1589,6 +1606,14 @@ export async function setSubscriptionStatus(id: string, status: string): Promise
   return { ok: true };
 }
 
+/**
+ * PERMANENT. `Subscription` has no `deletedAt`, so there is no archive for this to move to.
+ *
+ * The UI used to confirm it as "Archive ... it can be restored", which was the opposite of true.
+ * The reversible stop is `setSubscriptionStatus(id, "CANCELLED")` - billing stops, the record
+ * stays, and it can be set back to ACTIVE. Keep the two distinct; if this ever needs to become a
+ * real archive it needs the column first.
+ */
 export async function deleteSubscription(id: string): Promise<ActionResult> {
   const { allowed, denied, session } = await capabilityCheck("finance.write");
   if (!allowed) return denied;
@@ -1599,8 +1624,10 @@ export async function deleteSubscription(id: string): Promise<ActionResult> {
     section: "payments",
     entityType: "Subscription",
     entityId: row.id,
-    summary: `Deleted ${row.customerName}'s ${priceDisplay(row.amountInrMinor, row.amountEurMinor)} subscription`,
-    meta: { amountInrMinor: row.amountInrMinor.toString(), interval: row.interval },
+    summary: `Permanently deleted ${row.customerName}'s ${priceDisplay(row.amountInrMinor, row.amountEurMinor)} subscription`,
+    // `hard: true`, the same marker `purgeInvoice` uses, so the activity log distinguishes this
+    // from an archive at a glance.
+    meta: { amountInrMinor: row.amountInrMinor.toString(), interval: row.interval, hard: true },
   });
 
   revalidatePath("/payments");

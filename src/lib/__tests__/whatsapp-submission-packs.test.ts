@@ -100,7 +100,71 @@ const sopPack = () => parsePack(SOP_PACK, "SUBMISSION_TEMPLATES");
  */
 const utilityPack = () => parsePack(UTILITY_PACK, "export const TEMPLATES: Tpl[] = [");
 
+/**
+ * Every template's body, as Meta will read it.
+ *
+ * The generator writes a body as a run of quoted fragments joined by `+`, with newlines
+ * escaped. This rebuilds the message: the fragments concatenated and the escapes resolved,
+ * so a trailing `\\n` cannot hide the fact that the last thing in the message is a variable.
+ */
+function parseBodies(file: string, from: string): { name: string; body: string }[] {
+  let src = fs.readFileSync(file, "utf8").replace(/\r\n/g, "\\n");
+  src = src.slice(src.indexOf(from));
+  const out: { name: string; body: string }[] = [];
+  for (const block of src.split(/\n {2}\{\n/).slice(1)) {
+    const name = /name: "([a-z0-9_]+)"/.exec(block);
+    const body = /\bbody:\s*((?:\s*"(?:[^"\\\\]|\\\\.)*"\s*\+?)+)\s*,/.exec(block);
+    if (!name || !body) continue;
+    const parts = body[1].match(/"(?:[^"\\\\]|\\\\.)*"/g) ?? [];
+    out.push({
+      name: name[1],
+      body: parts
+        .map((p) => p.slice(1, -1))
+        .join("")
+        .replace(/\\\\n/g, "\\n"),
+    });
+  }
+  return out;
+}
+
 describe("the WATI submission packs", () => {
+  test("no transactional body opens or closes on a variable, or puts two side by side", () => {
+    /**
+     * Three of Meta's rules fail SILENTLY here: the message is simply not delivered, and
+     * `sendWhatsApp` logs a skip rather than an error, so the only symptom is a cohort that
+     * never hears from us. The SOP pack has had this guard since Step 20 nearly shipped with
+     * a trailing variable; the utility pack had nothing, and b2_weekly_report_link ended on
+     * {{report_url}} for an afternoon with the whole suite green.
+     */
+    /**
+     * Two exemptions, both deliberate.
+     *
+     * AUTHENTICATION templates are Meta's own fixed format - the code comes first, as in
+     * "{{code}} is your verification code" - so the opening rule cannot apply to them.
+     *
+     * `b2_agreement_copy` closes on {{copy_url}} and is already APPROVED AND BOUND: it is
+     * absent from the action list entirely. Editing an approved body is a replacement in
+     * review, so the touchpoint sends nothing until it clears - which is a decision for the
+     * founder, not a test. Listed here so it stays visible rather than being quietly
+     * normalised away, and so the next template to do this still fails.
+     */
+    const CLOSES_ON_VARIABLE_ALREADY_LIVE = new Set(["b2_agreement_copy"]);
+
+    const bad: string[] = [];
+    for (const t of parseBodies(UTILITY_PACK, "export const TEMPLATES: Tpl[] = [")) {
+      const body = t.body.trim();
+      const isAuth = new RegExp(`name: "${t.name}"[^}]*?category: "AUTHENTICATION"`, "s").test(
+        fs.readFileSync(UTILITY_PACK, "utf8"),
+      );
+      if (!isAuth && /^\{\{/.test(body)) bad.push(`${t.name} opens on a variable`);
+      if (!CLOSES_ON_VARIABLE_ALREADY_LIVE.has(t.name) && /\}\}$/.test(body)) {
+        bad.push(`${t.name} closes on a variable`);
+      }
+      if (/\}\}\s*\{\{/.test(body)) bad.push(`${t.name} puts two variables side by side`);
+    }
+    assert.deepEqual(bad, []);
+  });
+
   test("are both still parseable, so this guard is pointed at something", () => {
     // A rename or a reformat that defeats the parser must fail loudly here rather than silently
     // passing every assertion below on an empty list.
@@ -235,6 +299,66 @@ describe("the WATI submission packs", () => {
       offenders,
       [],
       `these reuse an SOP template name for a different template - give them a _u suffix:\n  ${offenders.join("\n  ")}`,
+    );
+  });
+
+  /**
+   * ── EVERY TOUCHPOINT HAS A TEMPLATE SOMEWHERE  (30 Oct 2026) ────────────────────────────
+   *
+   * The three tests above all check templates AGAINST EACH OTHER. None of them notices the
+   * cheapest failure of the lot: a `WhatsAppKind` that appears in neither pack, so nobody ever
+   * writes a body, nobody submits one, and the touchpoint skips every send for ever.
+   *
+   * That is not hypothetical. `BOOKING_AUTO_CANCELLED` has been in this state since the
+   * Bookings confirm loop was built - the name it wants (`b2_booking_auto_cancelled`) is
+   * approved and bound to the SOP's Step 16 instead - and it took a hand cross-check of the
+   * enum against both files to find it. The same would have happened to the three weekly-report
+   * kinds added the same day had they not been written up in the same sitting.
+   *
+   * Reading the ENUM rather than `WHATSAPP_KINDS`: the enum is the thing a new touchpoint is
+   * added to first, and a kind can exist there before anything imports it.
+   */
+  const NO_TEMPLATE_ON_PURPOSE: Record<string, string> = {
+    MANUAL:
+      "free-form send from a section - the operator writes the words, so there is no body to " +
+      "approve. The 24-hour customer-service window is what makes it legal, not a template.",
+    BOOKING_AUTO_CANCELLED:
+      "BLOCKED ON A DECISION, tracked as a DECIDE entry in the utility pack's NEEDS_ACTION. " +
+      "The name it wants is approved and already serves SOP_DISCO_CANCEL; the choice is whether " +
+      "to share that one body across both touchpoints or submit a second template. Delete this " +
+      "line the moment that is settled - it is a record of a known hole, not permission for one.",
+  };
+
+  test("every WhatsAppKind has a template in one of the packs", () => {
+    const schema = fs
+      .readFileSync(path.join(ROOT, "prisma", "schema.prisma"), "utf8")
+      .replace(/\r\n/g, "\n");
+    const block = /enum WhatsAppKind \{([\s\S]*?)\n\}/.exec(schema);
+    assert.ok(block, "could not find enum WhatsAppKind - re-point this test");
+
+    const kinds = [...block[1].matchAll(/^ {2}([A-Z][A-Z0-9_]*)\b/gm)].map((m) => m[1]);
+    assert.ok(kinds.length >= 50, `parsed ${kinds.length} kinds from the enum - re-point this test`);
+
+    const covered = new Set([...sopPack(), ...utilityPack()].map((t) => t.kind));
+    const orphans = kinds.filter((k) => !covered.has(k) && !NO_TEMPLATE_ON_PURPOSE[k]);
+
+    assert.deepEqual(
+      orphans,
+      [],
+      "these touchpoints have no template in either submission pack, so nothing will ever be " +
+        "submitted for them and every send skips silently - add a body to the pack, or record " +
+        `why not in NO_TEMPLATE_ON_PURPOSE:\n  ${orphans.join("\n  ")}`,
+    );
+  });
+
+  test("the no-template allow-list has not gone stale", () => {
+    // A kind that gained a template should lose its excuse, or the next real hole hides behind it.
+    const covered = new Set([...sopPack(), ...utilityPack()].map((t) => t.kind));
+    const stale = Object.keys(NO_TEMPLATE_ON_PURPOSE).filter((k) => covered.has(k));
+    assert.deepEqual(
+      stale,
+      [],
+      `these are listed as deliberately template-less but now have one - drop them from the list:\n  ${stale.join("\n  ")}`,
     );
   });
 });

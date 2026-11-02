@@ -172,7 +172,7 @@ export async function openAttendanceWindow(input: unknown): Promise<ActionResult
 
   const config = await getAttendanceConfig();
   if (!config.selfCheckInEnabled) {
-    return { ok: false, error: "Self check-in is switched off in Console → Attendance." };
+    return { ok: false, error: "Self check-in is switched off in Console → System → Alerts & Chasing." };
   }
 
   /**

@@ -133,6 +133,9 @@ export const getTeamGame = cache(async (): Promise<TeamGame> => {
       .map((s) => ({
         userId: s.changedById!,
         dateKey: istDayKey(s.changedAt),
+        // The direction of the move, so a correction backwards pays nothing - see
+        // `isForwardStageMove`.
+        fromStage: s.fromStage,
         toStage: s.toStage,
         leadName: s.lead.name,
       })),

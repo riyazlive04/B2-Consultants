@@ -129,7 +129,17 @@ export async function getCashOverview(period: CashPeriodKey = "12w") {
     ]);
 
   // ── Receivables (auto-pull from Phase 1, PRD3 §4.2) ──
-  const active = pendingRows.filter((p) => p.status === "ACTIVE" && p.balance.inr > 0);
+  /**
+   * `owing`, not `status === "ACTIVE"`.
+   *
+   * This line used to count ACTIVE rows only, while Finance counted ACTIVE and OVERDUE - so the
+   * two screens reported different receivable totals off the same `getPendingRows` call, and the
+   * rows Cash Health dropped were the OVERDUE ones: exactly the money a cash-flow screen exists
+   * to warn about. `owing` is that function's own definition of "still owed", exposed so neither
+   * caller has to keep a copy. Named `active` still because that is what the figures below call
+   * themselves; what it means is "open".
+   */
+  const active = pendingRows.filter((p) => p.owing && p.balance.inr > 0);
   const overdue = active.filter((p) => p.overdue);
   const in30 = active.filter((p) => {
     if (!p.nextDueDate) return false;

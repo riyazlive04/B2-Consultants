@@ -22,13 +22,25 @@ export function TrackerTable({
   rows,
   isAdmin,
   waStatus = {},
+  levelLabels = {},
 }: {
   rows: TrackerRow[];
   isAdmin: boolean;
   waStatus?: Record<string, WhatsAppStatusCell>;
+  /** code -> name, from the live catalogue. The filter below is built from it. */
+  levelLabels?: Record<string, string>;
 }) {
   const [signalFilter, setSignalFilter] = useState("");
   const [levelFilter, setLevelFilter] = useState("");
+  const levelFilterOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const r of rows) {
+      if (r.programLevel && !seen.has(r.programLevel)) {
+        seen.set(r.programLevel, `${levelLabels[r.programLevel] ?? r.programLevel} only`);
+      }
+    }
+    return [...seen].map(([value, label]) => ({ value, label }));
+  }, [rows, levelLabels]);
   const [sort, setSort] = useState<"signal" | "session" | "end">("signal");
 
   const visible = useMemo(() => {
@@ -136,11 +148,10 @@ export function TrackerTable({
           value={levelFilter}
           onChange={(e) => setLevelFilter(e.target.value)}
           aria-label="Level filter"
-          options={[
-            { value: "", label: "All levels" },
-            { value: "GUIDED", label: "Guided only" },
-            { value: "ELITE", label: "Elite only" },
-          ]}
+          /* The tiers these rows ACTUALLY carry, not "Guided only / Elite only" - the tracker
+             takes every enrolment with an end date, which is any tier the founders gave a
+             90- or 120-day duration, and a filter that cannot name one cannot find it. */
+          options={[{ value: "", label: "All levels" }, ...levelFilterOptions]}
         />
         <span className="text-xs text-muted">{visible.length} of {rows.length} active tracked students</span>
       </div>

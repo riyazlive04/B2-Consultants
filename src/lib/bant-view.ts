@@ -12,7 +12,11 @@
  */
 
 import type { BantVerdict } from "@prisma/client";
-import { BANT_CONFIRM_ABOVE, BANT_DOUBT_FROM, bantVerdictFor } from "./booking-intake";
+import {
+  DEFAULT_BANT_THRESHOLDS,
+  bantVerdictFor,
+  type BantThresholds,
+} from "./booking-intake";
 
 /** Where a displayed score came from - shown to the reader, never inferred by them. */
 export type BantOrigin = "booking" | "opt-in" | "manual";
@@ -89,7 +93,32 @@ export const BANT_ORIGIN_LABELS: Record<BantOrigin, string> = {
   manual: "set by a specialist",
 };
 
-/** Traffic light on the 0-4 average, matching Ameen's verdict thresholds (>2.4 · 1.6-2.4 · <1.6). */
-export function bantSignal(avg: number): "ok" | "watch" | "risk" {
-  return avg > BANT_CONFIRM_ABOVE ? "ok" : avg >= BANT_DOUBT_FROM ? "watch" : "risk";
+/**
+ * Traffic light on the 0-`BANT_MAX` average, using the SAME cutoffs as the verdict.
+ *
+ * It takes the thresholds rather than reading the shipped constants so the colour cannot
+ * disagree with the word beside it: a founder who moves the Cancel line and then sees a red dot
+ * on a prospect labelled "Doubtful" has been told two different things about one number.
+ */
+export function bantSignal(
+  avg: number,
+  thresholds: BantThresholds = DEFAULT_BANT_THRESHOLDS,
+): "ok" | "watch" | "risk" {
+  return avg > thresholds.confirmAbove ? "ok" : avg >= thresholds.doubtFrom ? "watch" : "risk";
+}
+
+/**
+ * The same traffic light, taken from the VERDICT that was already decided.
+ *
+ * Prefer this wherever a snapshot is in hand. The verdict on a snapshot was computed - at write
+ * time, or by `snapshot()` below - with whatever cutoffs were configured, so reading the colour
+ * off it cannot disagree with the label beside it and needs no access to the config. That matters
+ * most in leaf UI: `BantChip` renders on a dozen screens, several of them client components, and
+ * handing each of them the thresholds to re-apply would be twelve chances to apply them wrongly.
+ *
+ * `bantSignal` above remains for the one case this cannot serve: an AGGREGATE, such as the month's
+ * average on /bookings, which is a number nobody ever gave a verdict to.
+ */
+export function bantSignalFor(verdict: BantVerdict): "ok" | "watch" | "risk" {
+  return verdict === "CONFIRM" ? "ok" : verdict === "DOUBT" ? "watch" : "risk";
 }

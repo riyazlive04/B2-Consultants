@@ -213,9 +213,28 @@ describe("batches.manage is exercisable by the role it was written for (P18)", (
       "the per-user grant no longer takes effect",
     );
     assert.ok(
-      sectionAllowed(batches, "HEAD", null),
+      sectionAllowed(batches, "HEAD", null, granted),
       "a head coach cannot open /batches, so the grant above is unexercisable",
     );
+  });
+
+  /**
+   * The other half of the pair, and the bug it closes.
+   *
+   * The section lists HEAD, so the sidebar offered "Batches & Plans" to every head coach - and
+   * the page bounces anyone without the capability straight back to the dashboard. Two settings
+   * describing one decision, disagreeing. `needsCapability` on the catalogue entry makes the
+   * section follow the page, so the item appears exactly when the grant is there.
+   */
+  test("without the grant, the section is not offered either", () => {
+    assert.equal(
+      sectionAllowed(batches, "HEAD", null, null),
+      false,
+      "/batches is listed for a head coach the page will refuse",
+    );
+    assert.equal(batches.needsCapability, "batches.manage", "the section no longer names its key");
+    // The founder is unaffected - `hasCapability` gives ADMIN everything.
+    assert.ok(sectionAllowed(batches, "ADMIN", null, null), "the founder lost Batches & Plans");
   });
 
   test("the grant is still a decision about a person, not a role default", () => {

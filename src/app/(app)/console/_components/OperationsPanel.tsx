@@ -90,12 +90,16 @@ function BookOrderSection({ config }: { config: BookOrderConfig }) {
             </div>
           </Field>
 
-          <Toggle
-            checked={draft.requireFreshQuotePerLevel}
-            onChange={(b) => setDraft((d) => ({ ...d, requireFreshQuotePerLevel: b }))}
-            label="Take a fresh quotation before each level"
-            title="Order A1's books first, then re-quote before moving the student to A2."
-          />
+          {/*
+            "Take a fresh quotation before each level" used to be a toggle here. It changed
+            nothing: the preview below is computed from `draft` and was identical either way,
+            because an order is per level and always opens at QUOTE_REQUESTED. Stated as the fact
+            it is rather than offered as a choice - see `bookOrderConfigSchema`.
+          */}
+          <p className="text-sm text-ink-2">
+            Each level is quoted on its own: A1&apos;s books are ordered first, and the next level is
+            re-quoted before it starts. An order always opens by asking the publisher for a price.
+          </p>
 
           <div className="overflow-x-auto rounded-field border border-line bg-surface-2 px-4 py-3">
             <p className="text-caption font-semibold uppercase text-ink-3">What happens at each amount paid</p>
@@ -142,7 +146,17 @@ function PipelineSection({ config }: { config: PipelineConfig }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const dirty = draft.mode !== saved.mode;
+  /**
+   * THE WHOLE DRAFT, not just the mode.
+   *
+   * This was `draft.mode !== saved.mode`, so the two toggles on this card were unsavable: flip
+   * "Put every new lead on the Deals board" and the Save button stayed inert, with nothing
+   * saying why. `autoCreateOpportunity` is the switch that decides whether inbound leads reach
+   * the board at all - the thing that left the live board holding one card against 23,545 leads
+   * - so it was the most consequential setting on the screen and the one that could not be
+   * changed. Compared the same way `BookOrderSection` above compares its own draft.
+   */
+  const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
 
   async function save() {
     setBusy(true);
@@ -151,7 +165,8 @@ function PipelineSection({ config }: { config: PipelineConfig }) {
     setBusy(false);
     if (!res.ok) return setError(res.error);
     setSaved(draft);
-    toast("Pipeline mode saved");
+    // Named for what it covers now that more than the mode can be saved from here.
+    toast("Pipeline settings saved");
     router.refresh();
   }
 
@@ -206,6 +221,21 @@ function PipelineSection({ config }: { config: PipelineConfig }) {
               board looked empty.
             </p>
           )}
+
+          {/* The cap was always 300 and the board never said so - see `kanbanCardLimit`. The
+              number being editable matters less than the board now admitting when it is a slice. */}
+          <Field
+            label="Cards on the board"
+            hint="How many open leads the board loads, newest first. Every card renders at once, so a very high number makes the board slow rather than more useful - the board tells you when it is showing a slice, and the Leads tab always has all of them."
+          >
+            <NumInput
+              value={draft.kanbanCardLimit}
+              min={50}
+              max={2000}
+              ariaLabel="Cards on the board"
+              onChange={(kanbanCardLimit) => setDraft((d) => ({ ...d, kanbanCardLimit }))}
+            />
+          </Field>
         </div>
 
         <SaveBar

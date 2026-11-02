@@ -36,9 +36,16 @@ const BAND_STYLE: Record<string, string> = {
 export default function AttributionTable({ rows }: { rows: AttributionRow[] }) {
   if (rows.length === 0) {
     return (
+      /* The old text said to "add a marketing source and tag leads with it", neither of which
+         was a thing anybody could do: there was no screen for a source and nothing in the app
+         ever tagged a lead. Campaigns are now created from the UTMs a capture already carries
+         (see `resolveMarketingSourceId`), so the honest instruction is about the links. */
       <div className="rounded-card border border-line bg-surface p-6 text-sm text-ink-3">
-        No campaigns yet. Add a marketing source and tag leads with it to see cost per lead,
-        cost per acquisition and ROAS per campaign.
+        No campaigns yet. A campaign appears here as soon as a lead arrives through a link
+        carrying <code className="rounded bg-surface-2 px-1">utm_campaign</code> - tag your ad and
+        funnel links and the rows build themselves. Cost per lead and return on spend stay blank
+        until the spend for a campaign is recorded; the lead, booking and enrolment counts do not
+        wait for it.
       </div>
     );
   }

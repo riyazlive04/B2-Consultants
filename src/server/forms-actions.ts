@@ -18,7 +18,7 @@ import { afterResponse } from "./after-response";
 import { logActivity, diffFields } from "./activity-log";
 import {
   defaultFormFields, defaultFormSettings, slugify, CONTACT_FIELD_KEYS,
-  normaliseItems, normaliseSettings, isStaticItem, isChoiceItem, isMultiItem,
+  normaliseItems, normaliseSettings, isStaticItem, isChoiceItem, isMultiItem, capturesName,
   reachableItems, validateAnswer, answerToText, pagesOf, computeScore,
   OTHER_VALUE, otherFieldName,
   type FormItem, type FormAnswers, type FormSettings,
@@ -223,8 +223,22 @@ export async function togglePublishForm(id: string): Promise<ActionResult> {
   if (!f) return { ok: false, error: "Form not found" };
   if (!f.published) {
     const keys = new Set(normaliseItems(f.fields).filter((x) => !isStaticItem(x.type)).map((x) => x.key));
-    if (!keys.has("name") || !keys.has("phone")) {
-      return { ok: false, error: "Publish needs a 'name' and a 'phone' field so captures reach the CRM" };
+    /**
+     * ── THE SAME NAME RULE THE SUBMISSION HANDLER USES ────────────────────────────────────
+     *
+     * This demanded a field keyed exactly `name`. The palette offers a First/Last pair as well,
+     * the live opt-in uses the split, and `buildIntakeFromSubmission` joins the halves - so a
+     * form built the way the business actually builds them could never be published, and the
+     * error told the founder to add a field the builder had deliberately replaced.
+     */
+    if (!capturesName(keys)) {
+      return {
+        ok: false,
+        error: "Publish needs a name field - either Full Name, or First name and Last name - so captures reach the CRM",
+      };
+    }
+    if (!keys.has("phone")) {
+      return { ok: false, error: "Publish needs a 'phone' field so captures reach the CRM" };
     }
   }
   await prisma.form.update({ where: { id }, data: { published: !f.published } });

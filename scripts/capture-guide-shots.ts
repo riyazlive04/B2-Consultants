@@ -92,6 +92,25 @@ const SHOTS: Shot[] = [
   { name: "guide", at: "/guide", settleOn: "h1" },
 ];
 
+/**
+ * Close the role walkthrough if it is covering the page.
+ *
+ * It opens on a first sign-in and marks itself seen in localStorage, which a fresh browser
+ * context has never had - so every run is a first sign-in. It appears on the landing page AND
+ * on the first personal screen opened after it, which is why this is called after each
+ * navigation rather than once after login. Left alone it sits in the middle of the shot.
+ */
+async function dismissWalkthrough(page: Page) {
+  const skip = page.getByRole("button", { name: "Skip", exact: true });
+  try {
+    await skip.waitFor({ state: "visible", timeout: 2500 });
+    await skip.click();
+    await skip.waitFor({ state: "hidden", timeout: 4000 });
+  } catch {
+    // Not shown - nothing to dismiss.
+  }
+}
+
 async function login(page: Page, email = EMAIL, password = PASSWORD) {
   await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
   // The form is a client component: submitting before React hydrates does nothing at all, and
@@ -108,6 +127,8 @@ async function login(page: Page, email = EMAIL, password = PASSWORD) {
       shown.split("\n").find((l) => /invalid|incorrect|error|failed/i.test(l)) ?? "(no message on screen)";
     throw new Error(`Login did not navigate. Page says: ${msg}`);
   }
+
+  await dismissWalkthrough(page);
 }
 
 async function capture(page: Page, shot: Shot): Promise<string> {
@@ -151,6 +172,12 @@ const MANUAL_OUT = path.join(OUT, "manual");
 const MANIFEST = path.join(process.cwd(), "src", "lib", "guide", "shots.generated.ts");
 const STUDENT_EMAIL = process.env.STUDENT_EMAIL ?? "gn.student.demo@b2consultants.in";
 const STUDENT_PASSWORD = process.env.STUDENT_PASSWORD ?? "hallo-2026";
+/**
+ * The telecaller pass. My Desk branches on the signed-in person's log variant, so the founder's
+ * account renders the owner's task list and never the call desk - see `GuideShotSpec.as`.
+ */
+const CALLER_EMAIL = process.env.CALLER_EMAIL ?? "local.demo.user@b2consultants.in";
+const CALLER_PASSWORD = process.env.CALLER_PASSWORD ?? "caller-2026";
 
 type ManualShot = GuideShotSpec & { section: string };
 
@@ -163,7 +190,14 @@ function manualShots(): ManualShot[] {
 function readManifest(): Record<string, CapturedShot> {
   if (!fs.existsSync(MANIFEST)) return {};
   const body = fs.readFileSync(MANIFEST, "utf8");
-  const json = body.slice(body.indexOf("= {") + 2, body.lastIndexOf("}") + 1);
+  // Anchored on the declaration, not on the first `= {` in the file - that one is the
+  // CapturedShot TYPE above it, so the slice used to hand JSON.parse a TypeScript type, fail,
+  // and return {}. A `--only` run then wrote a manifest holding nothing but the shots it had
+  // just taken, dropping every other screenshot out of the guide while its file sat on disk.
+  const marker = "export const MANUAL_SHOTS: Record<string, CapturedShot> = ";
+  const start = body.indexOf(marker);
+  if (start < 0) return {};
+  const json = body.slice(start + marker.length, body.lastIndexOf("}") + 1);
   try {
     return JSON.parse(json) as Record<string, CapturedShot>;
   } catch {
@@ -238,6 +272,7 @@ async function captureManual(page: Page, shot: ManualShot): Promise<CapturedShot
   await page.waitForSelector("h1", { timeout: 30_000 });
   await page.waitForLoadState("networkidle").catch(() => {});
   await page.waitForTimeout(600);
+  await dismissWalkthrough(page);
 
   let hotspot: CapturedShot["hotspot"];
   if (shot.highlight) {
@@ -279,9 +314,12 @@ async function runManual(only: string | undefined) {
   const browser = await chromium.launch();
   let ok = 0;
   try {
+    // A shot's own `as` wins; otherwise the section decides, as it always did.
+    const audienceOf = (s: ManualShot) => s.as ?? (personal.has(s.section) ? "student" : "staff");
     const passes = [
-      { who: "staff", email: EMAIL, password: PASSWORD, shots: all.filter((s) => !personal.has(s.section)) },
-      { who: "student", email: STUDENT_EMAIL, password: STUDENT_PASSWORD, shots: all.filter((s) => personal.has(s.section)) },
+      { who: "staff", email: EMAIL, password: PASSWORD, shots: all.filter((s) => audienceOf(s) === "staff") },
+      { who: "student", email: STUDENT_EMAIL, password: STUDENT_PASSWORD, shots: all.filter((s) => audienceOf(s) === "student") },
+      { who: "telecaller", email: CALLER_EMAIL, password: CALLER_PASSWORD, shots: all.filter((s) => audienceOf(s) === "telecaller") },
     ];
     for (const pass of passes) {
       if (pass.shots.length === 0) continue;

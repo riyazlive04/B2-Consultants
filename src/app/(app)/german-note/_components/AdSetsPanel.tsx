@@ -51,7 +51,22 @@ function AdSetFields({ set }: { set?: GnAdSetRow }) {
   );
 }
 
-export function AdSetsPanel({ workshopId, adSets, adTotals }: { workshopId: string; adSets: GnAdSetRow[]; adTotals: GnAdTotals }) {
+export function AdSetsPanel({
+  workshopId,
+  adSets,
+  adTotals,
+  canManage,
+}: {
+  workshopId: string;
+  adSets: GnAdSetRow[];
+  adTotals: GnAdTotals;
+  /**
+   * Admin. Every writer behind this panel (`createAdSet`, `updateAdSet`, `deleteAdSet`) requires
+   * Admin, while the page itself opens to anyone granted `germanNote.finance` - so a head coach
+   * was shown Add, Edit and Delete and refused on save. Read-only is the honest state for them.
+   */
+  canManage: boolean;
+}) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [creating, setCreating] = useState(false);
@@ -68,14 +83,18 @@ export function AdSetsPanel({ workshopId, adSets, adTotals }: { workshopId: stri
           <h2 className="font-display text-xl font-semibold">Ad performance</h2>
           <p className="text-xs text-muted">Meta ad-sets that drove the taster. Conversion % = deals ÷ attendees.</p>
         </div>
-        <Btn variant="soft" icon={<Plus size={15} />} onClick={() => { setCreating(true); setError(null); }}>
-          Add ad-set
-        </Btn>
+        {canManage && (
+          <Btn variant="soft" icon={<Plus size={15} />} onClick={() => { setCreating(true); setError(null); }}>
+            Add ad-set
+          </Btn>
+        )}
       </div>
 
       {adSets.length === 0 ? (
         <p className="rounded-card border border-dashed border-line bg-surface-2 px-4 py-8 text-center text-sm text-muted">
-          No ad-sets yet - add spend &amp; reach to see CTR, CPC and conversion rate.
+          {canManage
+            ? "No ad-sets yet - add spend & reach to see CTR, CPC and conversion rate."
+            : "No ad-sets recorded for this workshop."}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-card border border-line bg-surface shadow-card">
@@ -90,7 +109,7 @@ export function AdSetsPanel({ workshopId, adSets, adTotals }: { workshopId: stri
                 <th className="px-3 py-2.5 text-right font-semibold">CPC</th>
                 <th className="px-3 py-2.5 text-right font-semibold">Attended</th>
                 <th className="px-3 py-2.5 text-right font-semibold">Conv · %</th>
-                <th className="px-3 py-2.5" />
+                {canManage && <th className="px-3 py-2.5" />}
               </tr>
             </thead>
             <tbody>
@@ -107,6 +126,7 @@ export function AdSetsPanel({ workshopId, adSets, adTotals }: { workshopId: stri
                     <span className="tnum">{num(s.conversions)}</span>
                     <span className="text-caption text-muted"> · {pct(s.convRate)}</span>
                   </td>
+                  {canManage && (
                   <td className="px-3 py-2.5">
                     <div className="flex items-center justify-end gap-1">
                       <IconButton label={`Edit ${s.label ?? "ad-set"}`} size="sm" onClick={() => { setEditing(s); setError(null); }}>
@@ -129,6 +149,7 @@ export function AdSetsPanel({ workshopId, adSets, adTotals }: { workshopId: stri
                       </IconButton>
                     </div>
                   </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -146,7 +167,7 @@ export function AdSetsPanel({ workshopId, adSets, adTotals }: { workshopId: stri
                     <span className="tnum">{num(adTotals.conversions)}</span>
                     <span className="text-caption text-muted"> · {pct(adTotals.convRate)}</span>
                   </td>
-                  <td />
+                  {canManage && <td />}
                 </tr>
               </tfoot>
             )}

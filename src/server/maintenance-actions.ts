@@ -228,6 +228,9 @@ export async function saveFinancePostingConfig(input: unknown): Promise<ActionRe
     meta: {
       invoiceIssuancePosting: parsed.data.invoiceIssuancePosting.enabled,
       commissionAccrual: parsed.data.commissionAccrual.enabled,
+      // Third toggle on the card, and the one whose absence from this line would make the
+      // activity entry a false record of what the founder just armed.
+      tutorFeeAccrual: parsed.data.tutorFeeAccrual.enabled,
     },
   });
   revalidatePath("/console");

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { istToday } from "@/lib/dates";
 import { canonicalPhone, normalizeWhatsappNumber } from "@/lib/phone";
 import { pickFirstCaller } from "./assignment";
+import { resolveMarketingSourceId } from "./marketing-source";
 import { notifyNewOptIn } from "./outreach-notify";
 import { afterResponse } from "./after-response";
 import { scoreLeadAtOptIn } from "./lead-qualification";
@@ -396,11 +397,29 @@ async function acceptReturningOptIn(
     known: known.map((e) => e.emailKey),
   });
 
+  /**
+   * The campaign, if this lead has none yet.
+   *
+   * FILL-BLANKS, like the UTM beside it, and for a sharper reason: attribution is FIRST-TOUCH.
+   * Re-crediting a returning prospect to whichever campaign they came back through would let a
+   * retargeting ad claim a lead the original campaign paid to find, and every cost-per-lead
+   * figure on the report would drift towards the cheapest campaign in the account.
+   *
+   * It is still worth doing for an untagged lead: `Lead.marketingSourceId` had no writer at all
+   * until now, so every lead in the business is untagged, and a returning opt-in carrying a UTM
+   * is the only evidence any of them will ever have.
+   */
+  const returningSourceId =
+    existing.marketingSourceId === null
+      ? await resolveMarketingSourceId({ channel: input.leadSource, utm: input.utm })
+      : null;
+
   const fillBlanks = {
     email: emailPlan.primary,
     city: existing.city ?? input.city ?? null,
     industry: existing.industry ?? input.industry ?? null,
     utm: existing.utm === null && utm !== undefined ? utm : undefined,
+    marketingSourceId: returningSourceId ?? undefined,
     // Same fill-blanks-only contract: the FIRST domain someone was seen on is the one that
     // sticks. Overwriting it on a later opt-in would rewrite history every time they came back
     // through a different page, and the gate would start judging them by their most recent visit.
@@ -632,6 +651,18 @@ async function resolveIntakeLead(rawInput: IntakeLead): Promise<IntakeResult> {
   // nothing and costs the pooler a connection.
   const assignedToId = await rotationPick;
   const autoCreateOpportunity = await autoCreateOpportunityRead;
+  /**
+   * Which campaign to credit this lead to.
+   *
+   * `Lead.marketingSourceId` had no writer anywhere in the app, so /reports' campaign
+   * attribution was structurally empty for every business, for ever - it joined spend to leads
+   * through a column nothing ever set. The UTM parameters were already being captured into
+   * `Lead.utm` on this very row and simply never read. See `resolveMarketingSourceId`.
+   *
+   * Outside the transaction, like the two reads above, and null-safe by construction: a capture
+   * with no campaign gets no tag, and a failure to resolve one never costs us the lead.
+   */
+  const marketingSourceId = await resolveMarketingSourceId({ channel: input.leadSource, utm: input.utm });
   const lead = await prisma.$transaction(async (tx) => {
     const created = await tx.lead.create({
       data: {
@@ -647,6 +678,7 @@ async function resolveIntakeLead(rawInput: IntakeLead): Promise<IntakeResult> {
         source: input.source,
         externalRef: input.externalRef ?? null,
         utm,
+        marketingSourceId,
         originDomain: input.originDomain ?? null,
         dateIn: istToday(),
         stage: "NEW_LEAD",

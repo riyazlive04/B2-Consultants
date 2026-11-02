@@ -79,13 +79,24 @@ export function TelecallerClient({ board }: { board: TelecallerBoard }) {
       danger: true,
     });
     if (!ok) return;
-    await deletePayout(row.id);
+    /**
+     * ── THE RESULT IS READ, WHICH IT WAS NOT ──────────────────────────────────────────────
+     *
+     * Both of these awaited the action and then toasted success unconditionally. Both are gated
+     * on `rewards.approve`, so a delegate without it saw "Payout deleted" over a row that was
+     * still there, and "Marked paid" over a payout still pending - the app reporting that money
+     * had been signed off when the server had refused. `submit` above was already doing this
+     * properly through `safeAction`; these two were the ones that got away.
+     */
+    const res = await safeAction(() => deletePayout(row.id));
+    if (!res.ok) return toast(res.error, "error");
     toast("Payout deleted");
   };
 
   const toggleStatus = async (row: PayoutRow) => {
     const next = row.status === "PAID" ? "PENDING" : "PAID";
-    await setPayoutStatus(row.id, next);
+    const res = await safeAction(() => setPayoutStatus(row.id, next));
+    if (!res.ok) return toast(res.error, "error");
     toast(next === "PAID" ? "Marked paid" : "Marked pending");
   };
 

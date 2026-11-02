@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, CheckCircle2, Clock, UserPlus, Users } from "lucide-react";
-import { requireSection } from "@/lib/rbac";
+import { canOpenSection, requireSection } from "@/lib/rbac";
 import { getOnboardingBoard, type OnboardingRow } from "@/server/onboarding-metrics";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Tabs } from "@/components/ui/Tabs";
@@ -42,7 +42,11 @@ export const dynamic = "force-dynamic";
  * derived state, so the board and the record can never disagree.
  */
 export default async function OnboardingPage() {
-  await requireSection("onboarding");
+  const session = await requireSection("onboarding");
+  // "Add someone" leads to a wizard whose first step is `createContact`, which guards on the
+  // Contacts section and REDIRECTS when refused. Onboarding is open to a head coach; Contacts is
+  // not. They can still carry on anyone already on the board below.
+  const canAddContact = await canOpenSection("contacts", session.role, session.overrides);
   const board = await getOnboardingBoard();
 
   return (
@@ -54,12 +58,14 @@ export default async function OnboardingPage() {
         actions={
           /* The guided flow. One door into the journey, so nobody has to know which of the six
              screens that can create a student is the right one to start from. */
-          <Link
-            href="/onboarding/new"
-            className="inline-flex h-10 items-center gap-1.5 rounded-btn bg-primary px-4 text-sm font-semibold text-on-accent transition-colors hover:bg-primary-strong"
-          >
-            <UserPlus size={16} /> Add someone
-          </Link>
+          canAddContact ? (
+            <Link
+              href="/onboarding/new"
+              className="inline-flex h-10 items-center gap-1.5 rounded-btn bg-primary px-4 text-sm font-semibold text-on-accent transition-colors hover:bg-primary-strong"
+            >
+              <UserPlus size={16} /> Add someone
+            </Link>
+          ) : undefined
         }
       />
 

@@ -178,8 +178,21 @@ export type JourneyInput = {
   hasBooking: boolean;
   /** A DiscoveryOutcome has been recorded. */
   hasDiscoveryOutcome: boolean;
-  /** `Agreement.status` for the agreement that represents them now, or null if none drafted. */
-  agreementStatus: string | null;
+  /**
+   * The agreement that represents them now, or null if none has been drafted.
+   *
+   * ── WHY THIS IS NOT JUST `status` ───────────────────────────────────────────────────────
+   * It used to be `agreementStatus: string | null`, read straight off `Agreement.status` - and
+   * `journeyGaps` tests it for "EXPIRED". Nothing in the app ever writes that value: expiry is
+   * DERIVED from `expiresAt` (see `deriveAgreementState`, and the no-status-column note on the
+   * agreement engine). So `AGREEMENT_EXPIRED` could never fire, and the gap the Onboarding
+   * journey promises to surface - "the link went out and ran out unsigned, re-issue it" - was
+   * invisible on every screen that reads this.
+   *
+   * Taking the expiry rather than the derived state keeps this module pure and keeps one rule in
+   * one place: `effectiveAgreementStatus` below is the only thing that decides it.
+   */
+  agreement: { status: string; expiresAt: string | Date | null } | null;
   /** A `Student` row exists. */
   hasStudent: boolean;
   /** `Enrollment` exists at all - the thing three of the six creation doors skip. */
@@ -260,9 +273,10 @@ export type Journey = {
  * `hasStudent` implies the sales steps are moot rather than missing - a paying student plainly
  * said yes - so ENROLLED upward is reachable without any lead evidence at all.
  */
-export function reachedSteps(i: JourneyInput): JourneyStep[] {
+export function reachedSteps(i: JourneyInput, now: number = Date.now()): JourneyStep[] {
   const stage = i.leadStage;
-  const agreement = i.agreementStatus;
+  // Expiry applied, so a link that ran out is not reported as still out for signature.
+  const agreement = effectiveAgreementStatus(i.agreement, now);
   const out: JourneyStep[] = [];
 
   // A person is on the journey at all if they are a lead or already a student.
@@ -299,10 +313,29 @@ export function reachedSteps(i: JourneyInput): JourneyStep[] {
  * lead they have no portal login. Each gap therefore has a precondition, and they read in the
  * order a founder would close them.
  */
-export function journeyGaps(i: JourneyInput): JourneyGap[] {
+/**
+ * The agreement's status WITH expiry applied - the only place this journey decides it.
+ *
+ * A SENT or VIEWED link whose `expiresAt` has passed is EXPIRED, exactly as
+ * `deriveAgreementState` and the public token path compute it. Nothing stores that value, so
+ * every reader has to derive it, and a reader that forgets simply never sees an expired link.
+ */
+export function effectiveAgreementStatus(
+  agreement: { status: string; expiresAt: string | Date | null } | null,
+  now: number = Date.now(),
+): string | null {
+  if (!agreement) return null;
+  if (agreement.status !== "SENT" && agreement.status !== "VIEWED") return agreement.status;
+  const raw = agreement.expiresAt;
+  if (!raw) return agreement.status;
+  const at = typeof raw === "string" ? Date.parse(raw) : raw.getTime();
+  return Number.isFinite(at) && at <= now ? "EXPIRED" : agreement.status;
+}
+
+export function journeyGaps(i: JourneyInput, now: number = Date.now()): JourneyGap[] {
   const gaps: JourneyGap[] = [];
 
-  if (i.agreementStatus === "EXPIRED") gaps.push("AGREEMENT_EXPIRED");
+  if (effectiveAgreementStatus(i.agreement, now) === "EXPIRED") gaps.push("AGREEMENT_EXPIRED");
 
   // A student record with nothing bought. The headline gap: three of the six creation paths
   // land here, including the income form.
@@ -390,7 +423,7 @@ export function deriveJourney(i: JourneyInput): Journey {
 
   const lost =
     !i.hasStudent &&
-    ((i.leadStage !== null && LOST_STAGES.has(i.leadStage)) || i.agreementStatus === "DECLINED");
+    ((i.leadStage !== null && LOST_STAGES.has(i.leadStage)) || i.agreement?.status === "DECLINED");
 
   const furthest = reached.length > 0 ? reached[reached.length - 1] : "NEW";
   const state: JourneyState = lost ? "LOST" : furthest;

@@ -257,8 +257,10 @@ export function PayablesSection({
             onClick={async () => {
               const ok = await askConfirm({ title: `Delete payable ${r.name}?`, confirmLabel: "Delete", danger: true });
               if (ok) {
-                await deletePayable(r.id);
-                toast("Payable deleted");
+                // The result is read, not discarded: `deletePayable` needs `finance.write` and
+                // returns a refusal, which this used to toast over as "Payable deleted".
+                const res = await safeAction(() => deletePayable(r.id));
+                toast(res.ok ? "Payable deleted" : res.error, res.ok ? "success" : "error");
               }
             }}
           >

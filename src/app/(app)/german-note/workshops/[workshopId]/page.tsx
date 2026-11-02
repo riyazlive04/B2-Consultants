@@ -23,7 +23,16 @@ export default async function WorkshopDetailPage({ params }: { params: { worksho
   await requireSection("german-note");
   // Same key as the Financials tab that links here - otherwise a granted viewer
   // would click a workshop and get bounced. Admin passes implicitly.
-  await requireCapability("germanNote.finance");
+  const session = await requireCapability("germanNote.finance");
+  /**
+   * READING this page and EDITING it are different permissions.
+   *
+   * `germanNote.finance` is grantable to a head coach so they can see the workshop's money. Every
+   * writer the two panels below call - ad-sets and conversions alike - is `requireAdmin`. So the
+   * page used to draw Add, Edit and Delete for a granted viewer and refuse every one of them on
+   * save, which reads as a broken screen rather than a boundary.
+   */
+  const canManage = session.role === "ADMIN";
   const w = await getGnWorkshopDetail(params.workshopId);
   if (!w) notFound();
 
@@ -136,8 +145,8 @@ export default async function WorkshopDetailPage({ params }: { params: { worksho
         </section>
       </div>
 
-      <AdSetsPanel workshopId={w.id} adSets={w.adSets} adTotals={w.adTotals} />
-      <ConversionsPanel workshopId={w.id} conversions={w.conversions} />
+      <AdSetsPanel workshopId={w.id} adSets={w.adSets} adTotals={w.adTotals} canManage={canManage} />
+      <ConversionsPanel workshopId={w.id} conversions={w.conversions} canManage={canManage} />
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 import { z } from "zod";
 import { LeadSource, type LeadStage, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireSection, type AppSession } from "@/lib/rbac";
+import { requireAdmin, requireSection, type AppSession } from "@/lib/rbac";
 import { istWallToUtc, parseDateInput, toDateInputValue } from "@/lib/dates";
 import { clientIpFrom, takeTokens, RATE_RULES } from "@/lib/rate-limit";
 import { INTAKE_OPTIONS } from "@/lib/booking-intake";
@@ -28,7 +28,12 @@ import { releasedSlotStatus } from "@/lib/booking-hold";
 import { optionalRule, rule } from "@/lib/field-rules";
 import { activityStamp } from "@/lib/activity-actions";
 import { slotStartsForRange, WEEKDAY_KEYS } from "@/lib/slot-plan";
-import { BOOKING_RULES_KEY, getBookingRulesConfig, writeBookingRulesConfig } from "./founder-config";
+import {
+  BOOKING_RULES_KEY,
+  getBookingRulesConfig,
+  getQualificationConfig,
+  writeBookingRulesConfig,
+} from "./founder-config";
 import { logActivity, diffFields } from "./activity-log";
 import { emitTrigger } from "./automation";
 import { upsertIntakeLead } from "./lead-intake";
@@ -51,6 +56,26 @@ import type { ActionResult } from "./finance-actions";
  *  - The slot/booking management actions are Admin-only (requireSection("bookings")).
  * No messaging happens here - confirmations/reminders are Wave-2, gated on sign-off.
  */
+
+/**
+ * Every screen that draws the slot calendar, refreshed together.
+ *
+ * ── Why a helper and not three calls per action ───────────────────────────────
+ * Each slot action revalidated `/bookings` and sometimes `/book`, and nothing ever revalidated
+ * `/bookings/availability` - which is where the generate form and the "Upcoming slots" list
+ * actually live, since that section moved out of the Bookings modal and onto its own route.
+ * `revalidatePath` does not cascade to child segments, so adding or removing a slot left the very
+ * list you were looking at untouched: the toast said it worked and the screen said otherwise.
+ *
+ * `/book` is in here for the same reason - it is the public page whose availability just changed.
+ * The funnel steps (`/p/[slug]/[step]`) need no entry: they are `force-dynamic` and read their
+ * calendar per request, which is the whole point of `getStepCalendars`.
+ */
+function revalidateSlotSurfaces() {
+  revalidatePath("/bookings");
+  revalidatePath("/bookings/availability");
+  revalidatePath("/book");
+}
 
 // Values a select may legitimately hold (guards against tampered POSTs).
 const valuesOf = (field: keyof typeof INTAKE_OPTIONS) =>
@@ -455,6 +480,12 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
    */
   const scored = await scoreSubmission(d);
   const bant = scored.result;
+  /**
+   * The same configured cutoffs `scoreSubmission` just applied, for the SOP's Step 11 verdict
+   * written further down. Read here rather than inside the transaction so a cold config read
+   * cannot lengthen the window in which a slot is claimed.
+   */
+  const { thresholds } = await getQualificationConfig();
   const utm = d.utm ? sanitizeUtm(d.utm) : null;
 
   // The evidence half of the gate above. Written inside whichever transaction ends up
@@ -593,8 +624,7 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
       /* email is best-effort */
     }
 
-    revalidatePath("/bookings");
-    revalidatePath("/book");
+    revalidateSlotSurfaces();
     return { ok: true, declined: true };
   }
 
@@ -691,7 +721,7 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
         select: { id: true, bookingId: true, qualified: true },
       });
       if (journey && journey.bookingId === null) {
-        const verdict = qualifiedFromBant(bant.bantAvg);
+        const verdict = qualifiedFromBant(bant.bantAvg, thresholds);
         await tx.outreachJourney.update({
           where: { id: journey.id },
           data: {
@@ -760,8 +790,7 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
     await sendBookingConfirmation(bookingId);
   });
 
-  revalidatePath("/bookings");
-  revalidatePath("/book");
+  revalidateSlotSurfaces();
   return { ok: true };
 }
 
@@ -784,7 +813,7 @@ const slotGenSchema = z.object({
  * to every date in [startDate, endDate] that falls on one of the chosen weekdays - a one-time
  * batch expansion of the original single-date generator (§9), not a persisted recurring rule.
  */
-export async function generateSlots(form: FormData): Promise<ActionResult> {
+export async function generateSlots(form: FormData): Promise<ActionResult & { summary?: string }> {
   const session = await requireSection("bookings");
   // FormData can carry multiple "weekdays" entries (one per checked checkbox);
   // Object.fromEntries would silently keep only the last one, so pull it separately.
@@ -824,10 +853,24 @@ export async function generateSlots(form: FormData): Promise<ActionResult> {
     return { ok: false, error: "That window fits no slots - widen it, add weekdays, or shorten the duration" };
   }
 
-  // Skip any instant that already has a slot, so re-running a range is idempotent - same
-  // dedupe the original single-date generator used, just against the wider `starts` list.
+  /**
+   * Skip any instant that already has a slot FOR THIS OWNER, so re-running a range is idempotent.
+   *
+   * ── Why the owner has to be part of the key ───────────────────────────────────
+   * This deduped on `startsAt` alone, which was right while one pool owned the whole calendar and
+   * silently wrong the moment slots were assigned per person. Asma already holding 18:00 marked
+   * 18:00 "taken" for Ameen too, so generating Ameen's window over a range Asma already covered
+   * created NOTHING - and the form still said "Slots added". The funnel's booking block then
+   * showed "No times are open right now" on the page named after him, because it filters by
+   * owner. Two people being free at the same time is the normal case, not a collision.
+   *
+   * `slot-topup.ts` fixed exactly this for the cron and said so in a comment; the manual form
+   * never got the same fix. It is the same key now, so a hand-generated range and an
+   * auto-topped-up horizon still collide rather than accumulating near-duplicate pairs.
+   */
+  const owner = d.assignedToId || null;
   const existing = await prisma.appointmentSlot.findMany({
-    where: { startsAt: { in: starts } },
+    where: { startsAt: { in: starts }, assignedToId: owner },
     select: { startsAt: true },
   });
   const taken = new Set(existing.map((s) => s.startsAt.getTime()));
@@ -837,8 +880,12 @@ export async function generateSlots(form: FormData): Promise<ActionResult> {
       data: fresh.map((startsAt) => ({
         startsAt,
         durationMins: d.durationMins,
-        assignedToId: d.assignedToId || null,
+        assignedToId: owner,
       })),
+      // Belt and braces against this racing the hourly top-up, which claims instants the same
+      // read-then-write way. There is no unique index on `startsAt` - two callers may legitimately
+      // hold the same time - so this only guards an exact duplicate row, the case that matters.
+      skipDuplicates: true,
     });
     // createMany returns no ids and a re-run is idempotent, so the batch itself is the
     // entity here - "batch" can never collide with a real slot's cuid.
@@ -857,13 +904,27 @@ export async function generateSlots(form: FormData): Promise<ActionResult> {
         startTime: d.startTime,
         endTime: d.endTime,
         durationMins: d.durationMins,
-        assignedToId: d.assignedToId || null,
+        assignedToId: owner,
       },
     });
   }
 
-  revalidatePath("/bookings");
-  return { ok: true };
+  revalidateSlotSurfaces();
+  /**
+   * Say what actually happened, including when it was nothing.
+   *
+   * A flat `{ ok: true }` toasted "Slots added" whether it had written forty rows or none, so the
+   * one case worth knowing about - the whole range already existed, nothing changed, go look
+   * somewhere else for your missing availability - was indistinguishable from success.
+   */
+  const skipped = starts.length - fresh.length;
+  return {
+    ok: true,
+    summary: fresh.length
+      ? `${fresh.length} slot${fresh.length === 1 ? "" : "s"} added` +
+        (skipped ? ` · ${skipped} already on this calendar` : "")
+      : `No new slots - this calendar already has all ${starts.length} of them`,
+  };
 }
 
 const bookingRulesFormSchema = z.object({
@@ -879,9 +940,18 @@ const bookingRulesFormSchema = z.object({
   rejectionBody: z.string().trim().min(1).max(4000),
 });
 
-/** Admin edits the slot window + the confirmation-loop cadence/toggles (AppSetting). */
+/**
+ * Admin edits the slot window + the confirmation-loop cadence/toggles (AppSetting).
+ *
+ * ADMIN, not `requireSection("bookings")`. These are business RULES, not day-to-day booking work:
+ * the buffer, the minimum notice, how far ahead a prospect may book, the auto-disqualify rule and
+ * the switch that lets the engine cancel a real person's call. Anyone with the Bookings section -
+ * a head coach, a telecaller - could change them from the availability screen, while every
+ * comparable money or messaging rule has always been Admin-only. The slot and booking actions in
+ * this file stay on the section guard; only the rule writers moved.
+ */
 export async function updateBookingRules(form: FormData): Promise<ActionResult> {
-  const session = await requireSection("bookings");
+  const session = await requireAdmin();
   const parsed = bookingRulesFormSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   // Merged over the current config so a key this form does not carry is preserved rather than
@@ -920,8 +990,7 @@ export async function updateBookingRules(form: FormData): Promise<ActionResult> 
       meta: { changed: diff.changed, before: diff.before, after: diff.after },
     });
   }
-  revalidatePath("/bookings");
-  revalidatePath("/book");
+  revalidateSlotSurfaces();
   return { ok: true };
 }
 
@@ -934,7 +1003,8 @@ export async function updateBookingRules(form: FormData): Promise<ActionResult> 
  * owns.
  */
 export async function saveConfirmLoopRules(form: FormData): Promise<ActionResult> {
-  const session = await requireSection("bookings");
+  // Admin, matching `updateBookingRules` and the WhatsApp-settings door onto the same rule.
+  const session = await requireAdmin();
   const res = await prepareConfirmLoopSave(form, session, "the Console");
   if (!res.ok) return { ok: false, error: res.error };
   if (res.write) await res.write();
@@ -956,7 +1026,7 @@ export async function deleteSlot(id: string): Promise<ActionResult> {
     summary: `Removed the ${activityStamp(slot.startsAt)} slot`,
     meta: { startsAt: slot.startsAt, status: slot.status },
   });
-  revalidatePath("/bookings");
+  revalidateSlotSurfaces();
   return { ok: true };
 }
 
@@ -1069,7 +1139,8 @@ export async function setBookingStatus(id: string, status: string): Promise<Acti
     if (rules.promoteNext) await promoteIntoFreedSlot(booking.slotId, session.user.id);
   }
 
-  revalidatePath("/bookings");
+  // A cancellation puts the slot back on the public calendar, so that surface changed too.
+  revalidateSlotSurfaces();
   revalidatePath("/pipeline");
   return { ok: true };
 }
@@ -1098,7 +1169,7 @@ export async function setSlotBlocked(id: string, blocked: boolean): Promise<Acti
     summary: `${blocked ? "Blocked" : "Unblocked"} the ${activityStamp(slot.startsAt)} slot`,
     meta: { changed: ["status"], before: { status: slot.status }, after: { status: next } },
   });
-  revalidatePath("/bookings");
+  revalidateSlotSurfaces();
   return { ok: true };
 }
 
@@ -1238,7 +1309,7 @@ async function afterBookingMoved(
 
   // Intimate the prospect their call moved (best-effort; silent when WhatsApp is off).
   await sendBookingRescheduled(booking.id, session.user.id);
-  revalidatePath("/bookings");
+  revalidateSlotSurfaces();
   revalidatePath("/pipeline");
 }
 
@@ -1474,9 +1545,11 @@ export async function setBookingConfirmed(id: string, confirmed: boolean): Promi
 
 /** Run the confirm-or-cancel + promote engine now (also the /api/cron/whatsapp path). */
 export async function runBookingAutomationNow(): Promise<ActionResult & { summary?: string }> {
-  await requireSection("bookings");
+  // Admin: this run cancels bookings and reassigns freed slots. Arming it and firing it are the
+  // same decision, so they sit behind the same guard.
+  await requireAdmin();
   const run = await runBookingConfirmations();
-  revalidatePath("/bookings");
+  revalidateSlotSurfaces();
   if (!run.enabled) return { ok: false, error: run.reason ?? "Confirmation loop is off" };
   return {
     ok: true,

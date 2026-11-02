@@ -90,6 +90,13 @@ export function IncomeFields({
   const interval = derived.recurrenceInterval;
   const nextBilling = derived.recurrenceNextDate;
   const instalmentCount = draft.instalmentCount;
+  /**
+   * This payment names a receivable, so it SETTLES a plan rather than starting one.
+   *
+   * `pendingPaymentId` is decisive server-side ("the money settles that plan's ladder"), so it is
+   * what decides here whether the form asks the plan-building questions at all.
+   */
+  const settlesExistingPlan = !!pendingPaymentId?.trim();
   // The headline the parts are reconciled against: fee + surcharge, in the fee's currencies.
   const planTotal = planTotalText(draft.fee, draft.extra);
   const mintStudent = draft.mintStudent;
@@ -418,7 +425,26 @@ export function IncomeFields({
         {/* Instalment plans carry two more answers: how many instalments the fee is split
             into, and the surcharge added for choosing the plan. Asked only when it applies -
             a full payment keeps the short form. */}
-        {typeKind === "INSTALMENT" && (
+        {/*
+          ── RECORDING A LATER INSTALMENT, WHICH USED TO BE IMPOSSIBLE ─────────────────────
+          With a receivable named above, this payment pays off the next instalment(s) of a plan
+          that already exists - so there is no plan to describe. The three fields below BUILD a
+          plan, and asking for them here was a trap rather than a question: "Number of
+          instalments" is required, typing it auto-fills `count - 1` dated rows in the schedule
+          box, and a non-empty schedule is refused by the server with "already has an instalment
+          plan for this level". The only way through was to untick auto-fill and hand-clear the
+          last row, so in practice no later instalment was ever ticked off.
+
+          `prepareIncome` enforces the same rule server-side, so a stale form cannot raise a
+          second schedule either.
+        */}
+        {typeKind === "INSTALMENT" && settlesExistingPlan && (
+          <p className="sm:col-span-2 rounded-field border border-line bg-surface-2 px-3 py-2 text-caption text-muted">
+            This pays off the next instalment{"(s)"} of the receivable selected above. The plan&apos;s
+            length and surcharge were set when it was agreed - edit those under Pending payments.
+          </p>
+        )}
+        {typeKind === "INSTALMENT" && !settlesExistingPlan && (
           <>
             <Field label="Number of instalments" hint="How many instalments the fee is split into">
               <TextInput

@@ -1,4 +1,5 @@
-import { BarChart3, MessageCircle } from "lucide-react";
+import Link from "next/link";
+import { BarChart3, Layers, MessageCircle } from "lucide-react";
 import { requireSection } from "@/lib/rbac";
 import { SectionLink } from "@/components/ui/SectionLink";
 import { hasCapability } from "@/lib/capabilities";
@@ -65,6 +66,20 @@ export default async function OpportunitiesPage({
         <SectionLink href="/outreach" sectionKey="outreach">
           <MessageCircle size={14} /> Outreach queue
         </SectionLink>
+        {/*
+          THE PAGE NOTHING LINKED TO.
+          `/opportunities/pipelines` exists, works, and is guarded on this same section - but no
+          link anywhere in the app pointed at it, so the only way to the list behind the board was
+          to type the URL. It is a child of this screen, so this is where the way in belongs.
+          Plain Link rather than SectionLink: it is the same section as the page you are on, so
+          there is no second access question to ask.
+        */}
+        <Link
+          href="/opportunities/pipelines"
+          className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-xs font-medium text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+        >
+          <Layers size={14} /> {canConfigure ? "Manage pipelines" : "All pipelines"}
+        </Link>
       </div>
       {board.activePipelineId && <BoardFilterBar owners={board.owners} filtered={board.filtered} />}
       <Board

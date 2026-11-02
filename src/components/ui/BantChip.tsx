@@ -1,7 +1,7 @@
 import { HelpCircle } from "lucide-react";
 import {
   BANT_ORIGIN_LABELS,
-  bantSignal,
+  bantSignalFor,
   type BantSnapshot,
 } from "@/lib/bant-view";
 
@@ -38,7 +38,13 @@ export function BantChip({
     );
   }
 
-  const signal = bantSignal(bant.avg);
+  /**
+   * From the VERDICT, not re-derived from the average. The verdict already applied the
+   * founder's configured cutoffs (Console -> Sales ops -> Qualification); re-testing the
+   * number here against the shipped defaults would paint this chip red beside a label
+   * reading "Doubtful" the moment those cutoffs are edited.
+   */
+  const signal = bantSignalFor(bant.verdict);
   const tone = {
     ok: "bg-ok-soft text-ok",
     watch: "bg-watch-soft text-watch",

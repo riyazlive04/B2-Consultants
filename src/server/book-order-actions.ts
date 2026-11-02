@@ -47,7 +47,9 @@ function firstError(e: z.ZodError): string {
  * `book-order-metrics` spreads `ACTIVE` into the identical sum, so the panel showed one number
  * while the decision used another. `tutor-fees` filters it too. These two were the outliers.
  *
- * One helper for both call sites, because the thing that let them drift is that there were two.
+ * The other decision site is `book-order-sweep.ts`, which keeps the same `INCOME_COUNTABLE`
+ * filter for the same reason. It is a separate module because a sweep that re-prices every
+ * deferred order must not be a callable server action - see its header.
  */
 async function cashCollectedInrMinor(studentId: string): Promise<number> {
   const paid = await prisma.income.aggregate({
@@ -372,29 +374,8 @@ export async function messagePublisher(orderId: string, opts?: { dryRun?: boolea
   return { ok: true };
 }
 
-/**
- * Re-evaluate every deferred order against the current cash collected.
- *
- * This is what makes DEFERRED self-clearing: an EMI student crossing the threshold on their
- * third instalment should not depend on someone remembering to check. Intended for the same
- * cron tick that runs the other engines.
+/*
+ * `releaseDeferredBookOrders` used to live here. It is now `server/book-order-sweep.ts`, and the
+ * daily maintenance tick calls it: in a `"use server"` file every export is a callable action, and
+ * that one took no arguments and checked no permission. See that module's header.
  */
-export async function releaseDeferredBookOrders(): Promise<{ released: number; checked: number }> {
-  const config = await getBookOrderConfig();
-  const deferred = await prisma.bookOrder.findMany({
-    where: { status: "DEFERRED" },
-    select: { id: true, studentId: true },
-  });
-  let released = 0;
-  for (const order of deferred) {
-    const paid = await cashCollectedInrMinor(order.studentId);
-    const decision = decideBookOrder(paid, config);
-    if (!decision.order) continue;
-    await prisma.bookOrder.update({
-      where: { id: order.id },
-      data: { status: "QUOTE_REQUESTED", deferReason: null },
-    });
-    released++;
-  }
-  return { released, checked: deferred.length };
-}

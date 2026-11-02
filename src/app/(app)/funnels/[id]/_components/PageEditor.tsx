@@ -45,6 +45,7 @@ export default function PageEditor({
   blocks,
   onChange,
   forms,
+  hosts,
   calendars,
   snippets,
   snippetCategories,
@@ -54,6 +55,8 @@ export default function PageEditor({
   blocks: Block[];
   onChange: (b: Block[]) => void;
   forms: { id: string; name: string }[];
+  /** Bookable team members, for a booking block's "whose calendar" picker. */
+  hosts: { id: string; name: string }[];
   /** Real open slots per booking-block owner, forwarded to the canvas. */
   calendars: StepCalendars;
   /** The section library. Empty is a valid state - the picker says so rather than hiding. */
@@ -235,6 +238,7 @@ export default function PageEditor({
             node={selected}
             device={device}
             forms={forms}
+            hosts={hosts}
             breadcrumb={ancestors}
             onSelect={setSelectedId}
             onPatch={(p) => patch(p, typeof p.text === "string" || typeof p.html === "string")}

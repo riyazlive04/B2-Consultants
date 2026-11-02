@@ -36,14 +36,15 @@ import { getResolvedSections } from "./founder-config";
 /**
  * WHICH ENGINE BELONGS TO WHICH SCREEN.
  *
- * Mirrors the `enginesOff([...])` calls the eight feature pages already make, so a report from
- * `/payments` carries the same dunning verdict the page itself shows.
+ * Mirrors the `enginesOff([...])` calls the feature pages already make, so a report from a screen
+ * carries the same engine verdict the screen itself shows.
  *
  * ── Why a second copy, and what stops it drifting ───────────────────────────────────────────
  * The pages hold this knowledge inline, one `enginesOff` call each, and a server action cannot
  * read a page's local argument list. So this map restates it - and
- * `src/server/__tests__/improvement-context-engines.test.ts` reads those eight page files as text and
- * fails if any page names an engine this map does not. That is the same device
+ * `src/server/__tests__/improvement-context-engines.test.ts` reads those page files as text and
+ * fails if any page names an engine this map does not - and, just as usefully, if this map names
+ * an engine no page asks about any more. That is the same device
  * `cron-stale-thresholds.test.ts` uses to keep the crontab and the staleness table in step, and
  * it is the only reason to believe a restated list.
  *
@@ -54,15 +55,22 @@ export const SECTION_ENGINES: Partial<Record<string, readonly ScreenEngineKey[]>
   attendance: ["classReminders"],
   bookings: ["confirmLoop"],
   finance: ["commissionAccrual", "tutorFeeAccrual", "invoicePosting"],
-  payments: ["dunning"],
+  /*
+   * `payments: ["dunning"]` was here. /payments no longer asks about that engine, because it was
+   * never true of that screen: `runDunning` works on Finance instalment plans, and arming it
+   * chases none of the invoices on the Payments board. A report from there carrying a "dunning is
+   * off" verdict pointed whoever read it at a switch that would have changed nothing.
+   */
   pipeline: ["speedToLead", "autoCreateOpportunity"],
   students: ["studentWelcome"],
+  "weekly-reports": ["weeklyReport", "whatsapp"],
   whatsapp: ["whatsapp", "studentWelcome", "classReminders", "confirmLoop"],
 };
 
 /** Engines whose OFF state means "a message did not go out", so the delivery verdict is relevant. */
 const SENDING_ENGINES: readonly ScreenEngineKey[] = [
   "whatsapp",
+  "weeklyReport",
   "email",
   "studentWelcome",
   "classReminders",

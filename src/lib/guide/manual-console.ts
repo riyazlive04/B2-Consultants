@@ -402,12 +402,13 @@ export const MANUAL_CONSOLE: GuideManual[] = [
         name: "Cash targets",
         where: W("money", "Cash targets"),
         href: consoleHref("money", "cash-targets"),
-        what: "The bars Cash Health judges your cash against.",
+        what: "The bars Cash Health judges your cash against, and the euro rate used if the live one cannot be fetched.",
         use: [
           "Open Founder Console, then Money, then Cash targets.",
           "Set the monthly revenue target in rupees.",
           "Set the green and amber runway months, and the gauge horizon.",
           "Set the burn averaging window and the minimum cash buffer.",
+          "Set the fallback euro rate to roughly today's real rate.",
           "Check the “How a runway would read” row, then press “Save changes”.",
         ],
         logic: [
@@ -418,19 +419,24 @@ export const MANUAL_CONSOLE: GuideManual[] = [
           "A payable due within 7 days turns red when cash in hand is below the buffer times the bill.",
           "A revenue target of 0 hides the months-to-target verdict rather than calling it reached.",
           "Read by Cash Health, the home page figures and the runway pill in the top bar.",
+          "The fallback euro rate is used only on a day the daily rate cannot be fetched and none has ever been stored. Anything worked out from it is marked as a stale rate on screen.",
+          "It changes nothing already recorded. Every entry stamps the rate it used at the time, so past figures never move.",
         ],
         controls: [
           {
-            setting: "Revenue target, runway bands, burn window and payable buffer",
+            setting: "Revenue target, runway bands, burn window, payable buffer and the fallback euro rate",
             where: W("money", "Cash targets"),
             href: consoleHref("money", "cash-targets"),
             who: ["ADMIN"],
             default:
-              "₹8,00,000 a month. Green at 6 months or more, amber at 3. Gauge of 12 months. Buffer of 2 times the bill. Burn averaged over 3 months.",
+              "₹8,00,000 a month. Green at 6 months or more, amber at 3. Gauge of 12 months. Buffer of 2 times the bill. Burn averaged over 3 months. Fallback euro rate ₹90.",
             effect:
               "No recorded figure changes. Every cash verdict is re-judged against the new bars the next time a page loads.",
             reset: "“Reset to shipped defaults” refills the shipped bars. Press “Save changes” to apply.",
           },
+        ],
+        watchOut: [
+          "The fallback euro rate shipped at ₹90 while the real rate has run nearer ₹110. On the rare day it is reached, every euro figure reads about a fifth light, so it is worth setting even though it is almost never used.",
         ],
         shot: {
           file: "console-cash-targets.png",
@@ -448,14 +454,19 @@ export const MANUAL_CONSOLE: GuideManual[] = [
         use: [
           "Open Founder Console, then Money, then Tutor Fee.",
           "Set the threshold: how many students a batch needs for the lower rate.",
-          "For A1, A2 and B1, type the per-head rate at or above the threshold, and below it.",
-          "Check the preview of what an A1 batch costs at each size.",
+          "For each level listed, type the per-head rate at or above the threshold, and below it.",
+          "To price a level that is not listed, type its code under “Add a level” - B2, not GN_B2 - and press “Add level”.",
+          "Use the remove control on a row to stop paying a trainer for that level.",
+          "Check the preview of what a batch costs at each size.",
           "Press “Save changes”.",
         ],
         logic: [
           "The rate depends on batch size, not level. At or above the threshold a batch pays the lower volume rate; below it, the higher thin-batch rate.",
           "The fee is charged per student. A 5-student batch at ₹7,000 costs ₹35,000.",
-          "Only A1, A2 and B1 are priced. Other levels carry no tutor fee.",
+          "Only the levels listed here are priced. A level with no row carries no tutor fee: its batches are left out of the cost table rather than charged at a guess.",
+          "Adding a level starts pricing it from then on. It does not go back and charge for batches already reported, so past months are never restated.",
+          "Removing a level stops future batches showing a cost. Fees already approved or paid keep their own figures.",
+          "Use the code without the GN_ prefix. A row typed as GN_A1 could never be matched, so it is refused.",
           "Rates are whole rupees.",
           "German Note's batch costs read these bands live, from each batch's current headcount.",
           "The Tutor Fees ledger next door only picks up new bands when you press “Recompute from rosters”.",
@@ -466,7 +477,7 @@ export const MANUAL_CONSOLE: GuideManual[] = [
             where: W("money", "Tutor Fee"),
             href: consoleHref("money", "tutor-fee"),
             who: ["ADMIN"],
-            default: "Threshold of 5 students. ₹7,000 per head at 5 or more, ₹8,000 per head below 5, for every level.",
+            default: "Threshold of 5 students. A1, A2 and B1 listed, each at ₹7,000 per head at 5 or more and ₹8,000 below 5. No other level is priced.",
             effect:
               "Batch cost views change at once. Draft fees change only when you recompute. Approved and paid fees never change.",
             reset: "“Reset to defaults” refills the shipped bands. Press “Save changes” to apply.",
@@ -474,11 +485,13 @@ export const MANUAL_CONSOLE: GuideManual[] = [
         ],
         watchOut: [
           "These bands are separate from the per-sale delivery cost used in German Note workshop profit, so changing them does not restate workshop profit.",
+          "If you have started teaching a level that is not listed here, its batches are showing no tutor cost at all and the German Note margin is reading high. Add the level.",
+          "An empty list is allowed and means no trainer is paid for anything. The panel says so in amber.",
         ],
         shot: {
           file: "console-tutor-fee.png",
           route: consoleHref("money", "tutor-fee"),
-          caption: "Tutor fee bands, with what an A1 batch costs at each size.",
+          caption: "Tutor fee bands per level, with what a batch costs at each size.",
           highlight: {
             text: "Threshold - students needed for the lower rate",
             label: "Where the rate steps down",
@@ -545,6 +558,7 @@ export const MANUAL_CONSOLE: GuideManual[] = [
           "Open “Advanced: landing-page wording” to add the field names and answer wordings an outside form uses.",
           "Check the landing page card for answers that are not being recognised.",
           "Press “Make these questions live” once it is allowed, or “Revert to shipped scoring” to go back.",
+          "Use “Verdict cutoffs” to move where Confirm, Doubt and Cancel fall on the 0 to 4 average.",
         ],
         logic: [
           "A dimension takes the best answer it has, not the sum.",
@@ -554,6 +568,9 @@ export const MANUAL_CONSOLE: GuideManual[] = [
           "Changing only the landing-page field names or answer wordings updates the question in place.",
           "“Retire” hides a question; it is never deleted. “Restore” brings it back.",
           "Once these questions are live, with auto-disqualify on, a change here changes who is turned away at booking.",
+          "The cutoffs decide what a score means. Above the Confirm cutoff is a confirm, at or above the Doubt cutoff is a doubt, and below it is a cancel. The same three lines are used by the booking screen's colours and by the outreach queue's Qualified verdict, so they can never disagree.",
+          "Moving a cutoff applies to the next score. Verdicts already recorded on leads and bookings are left as they are, because they record what was acted on.",
+          "The 0 to 4 scale itself cannot be changed here. Changing it would re-read every score ever stored against a scale it was never measured on, so it needs a developer and a one-off restate.",
         ],
         controls: [
           {
@@ -567,10 +584,21 @@ export const MANUAL_CONSOLE: GuideManual[] = [
             reset:
               "“Revert to shipped scoring” switches the booking form back at once. Questions have no reset; edit or retire them.",
           },
+          {
+            setting: "Verdict cutoffs (Confirm above, Doubt from, Dimension met at)",
+            where: W("sales", "Qualification"),
+            href: consoleHref("sales", "qualification"),
+            who: ["ADMIN"],
+            default: "Confirm above 2.4, Doubt from 1.6, Dimension met at 2.4, on the 0 to 4 average",
+            effect:
+              "Forward only, and everywhere at once: the booking verdict, the Avg BANT card's colour and bands on Bookings, the outreach queue's Qualified verdict, and - with auto-disqualify on - who is turned away at booking.",
+            reset: "Type the three defaults back in: 2.4, 1.6 and 2.4.",
+          },
         ],
         watchOut: [
           "If leads are arriving but none has been scored in 7 days, the field names do not match the outside form. The panel says so in red.",
           "An answer that matches a question but no option scores too low. Add its wording against the option it means.",
+          "The Doubt cutoff is the one with teeth. With auto-disqualify on, anything below it is turned away with an email, so lower it before raising it if you are unsure.",
         ],
         shot: {
           file: "console-qualification.png",
@@ -1329,6 +1357,7 @@ export const MANUAL_CONSOLE: GuideManual[] = [
           "Open Founder Console, then System, then Maintenance.",
           "Read Scheduled jobs and Error tracking first. A job that has never run is not wired up.",
           "In Daily housekeeping, choose the FX pre-warm, the overdue sweep and data pruning, and save that card.",
+          "Set “Keep archived records (days)” on the same card. This is the one that deletes for good.",
           "In Ledger auto-posting, choose invoice issuance posting and commission payout posting, and save.",
           "In Scheduled founder digest, set how often, when and to whom, and save.",
           "Press “Record this month's payout” to save this month's commission totals.",
@@ -1337,6 +1366,8 @@ export const MANUAL_CONSOLE: GuideManual[] = [
           "Everything here runs from the scheduled jobs. If they are not set up, nothing on this panel fires.",
           "The overdue sweep marks sent invoices and due instalments overdue once their date has passed. Part-paid invoices are left alone.",
           "Data pruning deletes WhatsApp message records and unaccepted invites older than their window, once a day. 0 days keeps that kind forever.",
+          "The same switch also runs the permanent purge: anything deleted anywhere in the app sits in the Archive for the number of days set here, then is destroyed for good, including everything attached to it. Issued invoices are the exception and are never destroyed, because they are tax records.",
+          "“Keep archived records” has no 0. On the two lines above it 0 means keep forever; here it would mean a cut-off of right now, which would empty the whole Archive on the next run. The lowest it accepts is 1 day.",
           "Invoice issuance posting books the receivable and the income when an invoice is issued. Once on, it also posts earlier issued invoices that have no entry yet.",
           "Commission posting books the month's total as money owed when you record a payout run. It is not a cash payment.",
           "The payout run saves this month's commission totals. Pressing it again in the same month replaces that month's snapshot.",
@@ -1349,14 +1380,15 @@ export const MANUAL_CONSOLE: GuideManual[] = [
             href: consoleHref("system", "maintenance"),
             who: ["ADMIN"],
             default:
-              "FX pre-warm on, overdue sweep on, pruning off (WhatsApp messages 365 days, expired invites 30 days). Both ledger postings off. Digest off: weekly, Monday, 9:00 AM, no recipients.",
+              "FX pre-warm on, overdue sweep on, pruning off (WhatsApp messages 365 days, expired invites 30 days, archived records 90 days). Both ledger postings off. Digest off: weekly, Monday, 9:00 AM, no recipients.",
             effect:
               "Commission posting is forward only. Invoice posting also back-fills earlier issued invoices over the next runs. Pruning permanently deletes old rows from its next daily run.",
             reset: "Each card's “Reset to defaults” refills it. Press that card's “Save changes”.",
           },
         ],
         watchOut: [
-          "Archived records, such as deleted leads, invoices and payments, are permanently purged after 90 days by a separate nightly job. The pruning switch here does not control it.",
+          "The pruning switch and the archive window are one decision. Archived records - deleted leads, invoices, payments, income, expenses - are destroyed once they are older than “Keep archived records”, and only while pruning is on.",
+          "The Archive is the only undo the app has for a delete. Shortening that window shortens the time anyone has to change their mind, so the panel warns when it is under 30 days.",
           "The tutor-fee posting switch is not on this panel, although other screens point here for it.",
           "Pruning deletes for good. Leave it off unless you are sure.",
         ],

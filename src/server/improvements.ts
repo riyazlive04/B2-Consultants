@@ -448,6 +448,61 @@ export async function getImprovementBellCounts(): Promise<{ untriaged: number; b
   return { untriaged, blocking };
 }
 
+/**
+ * REPLIES THE REPORTER IS MEANT TO SEE, for their own notification bell.
+ *
+ * ── The loop that did not close ──────────────────────────────────────────────────────────────
+ * `ImprovementEvent.visibleToReporter` exists so a triage reply, or the resolution typed when a
+ * report is closed, can be addressed to the person who filed it - and the schema comment says
+ * exactly why: "a reporting channel where nobody hears back goes quiet in two weeks".
+ *
+ * It was stored and read by nobody. Filing a report is open to every role; the `improvements`
+ * SECTION is Admin and Head only, so a coach, tutor, telecaller or student who reported something
+ * had no screen on which their report existed, let alone the answer to it. The founder typed a
+ * resolution, ticked "the reporter sees this", and it went nowhere at all.
+ *
+ * So it arrives in the bell, which every role has. The reply's own words are carried, not a
+ * "you have a reply" pointer - there is no screen to point them at, and a notification that
+ * teases an answer it will not show is worse than none.
+ *
+ * ── Why a 21-day window and no read state ───────────────────────────────────────────────────
+ * The notification centre is stateless by design (recomputed every page load, nothing stored
+ * about what was "shown" - see its header). A reply therefore has to age out rather than be
+ * dismissed, and three weeks is long enough that somebody on leave still sees it.
+ */
+export async function getRepliesForReporter(
+  reporterId: string,
+): Promise<{ id: string; ref: string; title: string; body: string; closed: boolean; at: Date }[]> {
+  const since = new Date(Date.now() - 21 * 86_400_000);
+  const rows = await prisma.improvementEvent.findMany({
+    where: {
+      visibleToReporter: true,
+      createdAt: { gte: since },
+      // Their OWN reports only, and not ones they have themselves archived.
+      report: { ...ACTIVE, reporterId },
+      // An empty body is a status move somebody happened to mark visible - there is nothing to
+      // tell anyone.
+      body: { not: null },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 10,
+    select: {
+      id: true,
+      body: true,
+      createdAt: true,
+      report: { select: { ref: true, title: true, status: true } },
+    },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    ref: r.report.ref,
+    title: r.report.title,
+    body: r.body ?? "",
+    closed: !isOpenStatus(r.report.status),
+    at: r.createdAt,
+  }));
+}
+
 /** Which sections generate reports, most first - the evidence for where work should go next. */
 export async function getImprovementSectionTally(): Promise<{ sectionKey: string | null; count: number }[]> {
   const rows = await prisma.improvement.groupBy({

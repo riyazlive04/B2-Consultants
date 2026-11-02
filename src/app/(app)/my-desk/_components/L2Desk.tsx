@@ -58,9 +58,24 @@ function DialLink({ phone, name, onDial }: { phone: string; name: string; onDial
  * BANT sits on the same form because the specialist has just finished the conversation -
  * asking them to reopen the lead afterwards is how it ends up never being filled in.
  */
-function RouteModal({ call, onClose }: { call: L2Call; onClose: () => void }) {
+function RouteModal({
+  call,
+  canQualify,
+  onClose,
+}: {
+  call: L2Call;
+  /**
+   * `outreach.qualify`. Both the Level 3 route and the "Highly qualified" tick write that
+   * verdict, and `routeDiscoveryCall` refuses both without the capability - so a specialist who
+   * does not hold it is told here instead of filling the form and being bounced on submit.
+   */
+  canQualify: boolean;
+  onClose: () => void;
+}) {
   const [error, setError] = useState<string | null>(null);
-  const [outcome, setOutcome] = useState<string>("QUALIFIED_FOR_SSS");
+  // Without the qualify capability the Level 3 route is not selectable, so the form opens on the
+  // first outcome this person can actually record rather than on one that will be refused.
+  const [outcome, setOutcome] = useState<string>(canQualify ? "QUALIFIED_FOR_SSS" : "FOLLOW_UP_NEEDED");
 
   return (
     <Modal open onClose={onClose} title={`Record outcome - ${call.name}`} subtitle={`${timeIst(call.startsAt)} IST`}>
@@ -80,26 +95,36 @@ function RouteModal({ call, onClose }: { call: L2Call; onClose: () => void }) {
 
         <fieldset className="space-y-2">
           <legend className="mb-1 text-sm font-medium text-ink">Where does this prospect go?</legend>
-          {DISCOVERY_ROUTES.map((r) => (
-            <label
-              key={r.outcome}
-              className={`flex cursor-pointer items-start gap-3 rounded-card border p-3 ${
-                outcome === r.outcome ? "border-primary bg-primary-soft" : "border-line"
-              }`}
-            >
-              <input
-                type="radio"
-                name="routeChoice"
-                className="mt-1 accent-primary"
-                checked={outcome === r.outcome}
-                onChange={() => setOutcome(r.outcome)}
-              />
-              <span className="min-w-0">
-                <span className="block text-sm font-medium text-ink">{r.label}</span>
-                <span className="block text-caption text-muted">{r.detail}</span>
-              </span>
-            </label>
-          ))}
+          {DISCOVERY_ROUTES.map((r) => {
+            // Only the Level 3 route carries the Highly Qualified verdict; the other two do not.
+            const blocked = r.outcome === "QUALIFIED_FOR_SSS" && !canQualify;
+            return (
+              <label
+                key={r.outcome}
+                title={blocked ? "Only a Discovery Specialist can route to Level 3" : undefined}
+                className={`flex items-start gap-3 rounded-card border p-3 ${
+                  blocked
+                    ? "cursor-not-allowed border-line bg-surface-2 opacity-60"
+                    : `cursor-pointer ${outcome === r.outcome ? "border-primary bg-primary-soft" : "border-line"}`
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="routeChoice"
+                  className="mt-1 accent-primary"
+                  disabled={blocked}
+                  checked={outcome === r.outcome}
+                  onChange={() => setOutcome(r.outcome)}
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-ink">{r.label}</span>
+                  <span className="block text-caption text-muted">
+                    {blocked ? "Needs the Discovery Specialist permission - ask an Admin." : r.detail}
+                  </span>
+                </span>
+              </label>
+            );
+          })}
         </fieldset>
 
         {/* Not routes - the call didn't reach a decision. Kept visually apart so they can't
@@ -162,7 +187,9 @@ function RouteModal({ call, onClose }: { call: L2Call; onClose: () => void }) {
           )}
         </fieldset>
 
-        <CheckboxField name="highlyQualified" label="Highly qualified" />
+        {/* Permissioned the same way the route is: this tick drives priority scoring, the
+            HQ-rate metric and XP, and the server refuses it without `outreach.qualify`. */}
+        {canQualify && <CheckboxField name="highlyQualified" label="Highly qualified" />}
 
         <Field label="Key notes for the closer">
           <TextInput kind="text" name="notes" maxLength={1000} placeholder="What should Level 3 know?" />
@@ -333,7 +360,7 @@ function LeadRow({ lead, onLog }: { lead: L2Lead; onLog: (l: L2Lead, calledAt?: 
   );
 }
 
-export function L2Desk({ desk }: { desk: L2DeskData }) {
+export function L2Desk({ desk, canQualify }: { desk: L2DeskData; canQualify: boolean }) {
   const router = useRouter();
   const [routing, setRouting] = useState<L2Call | null>(null);
   /** A lead being logged against from "Your leads" - the chase form, not the routing form. */
@@ -431,7 +458,7 @@ export function L2Desk({ desk }: { desk: L2DeskData }) {
         </Card>
       </section>
 
-      {routing && <RouteModal call={routing} onClose={() => setRouting(null)} />}
+      {routing && <RouteModal call={routing} canQualify={canQualify} onClose={() => setRouting(null)} />}
       {logging && (
         <LogOutcomeModal
           lead={{ id: logging.lead.id, name: logging.lead.name, phone: logging.lead.phone }}

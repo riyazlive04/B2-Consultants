@@ -23,7 +23,16 @@ export const dynamic = "force-dynamic";
  * width for the fields, and a header that says where you are and how to get out.
  */
 export default async function AvailabilityPage() {
-  await requireSection("bookings");
+  const session = await requireSection("bookings");
+  /**
+   * The rules on this page are Admin-only; adding slots is not.
+   *
+   * `updateBookingRules`, `saveConfirmLoopRules` and `runBookingAutomationNow` all require Admin,
+   * so drawing their forms for a head coach or a telecaller would show three sections that refuse
+   * on save - which reads as a broken page rather than a boundary. The slot work above and below
+   * them stays open to the whole section.
+   */
+  const canEditRules = session.role === "ADMIN";
 
   const [{ slots }, teamMembers, rules] = await Promise.all([
     getBookingsOverview(),
@@ -36,10 +45,14 @@ export default async function AvailabilityPage() {
       <PageHeader
         icon={<CalendarPlus size={20} />}
         title="Availability & booking rules"
-        subtitle="Generate discovery slots, set what the public booking page will accept, and decide what happens to a call nobody confirms."
+        subtitle={
+          canEditRules
+            ? "Generate discovery slots, set what the public booking page will accept, and decide what happens to a call nobody confirms."
+            : "Generate discovery slots and manage upcoming availability. The booking rules themselves are set by an Admin."
+        }
         back={{ href: "/bookings", label: "Bookings" }}
       />
-      <SlotManager slots={slots} teamMembers={teamMembers} rules={rules} />
+      <SlotManager slots={slots} teamMembers={teamMembers} rules={rules} canEditRules={canEditRules} />
     </div>
   );
 }

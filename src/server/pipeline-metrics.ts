@@ -7,10 +7,11 @@ import {
   kpiInstantRange, type KpiRangeKey,
 } from "@/lib/dates";
 import { aggInrMinor, sumAgg } from "@/lib/money";
-import { LEAD_STAGE_LABELS } from "@/lib/labels";
+import { BOOKED_CALL_STAGES, LEAD_STAGE_LABELS } from "@/lib/labels";
 import { ACTIVE } from "@/lib/soft-delete";
 import { priorityScore } from "@/lib/lead-priority";
-import { getCallDistribution } from "./founder-config";
+import { tally, type LevelTally } from "@/lib/level-tally";
+import { getCallDistribution, getPipelineConfig } from "./founder-config";
 
 /**
  * Pipeline dashboard (PRD1 §5.4). Booked / completed / won counts come from the
@@ -24,18 +25,22 @@ const INTERESTED_STAGES = [
 ] as const;
 
 async function distinctLeadsReaching(
-  stage: string,
+  stage: string | readonly string[],
   start: Date,
   end: Date,
   leadFilter?: Prisma.LeadWhereInput,
 ): Promise<number> {
   const rows = await prisma.leadStageHistory.findMany({
     where: {
-      toStage: stage as never,
+      ...(Array.isArray(stage)
+        ? { toStage: { in: stage as never[] } }
+        : { toStage: stage as never }),
       changedAt: { gte: start, lt: end },
       ...(leadFilter ? { lead: leadFilter } : {}),
     },
     select: { leadId: true },
+    // Distinct by LEAD, which is what makes a stage LIST safe: a prospect who passed through
+    // both booked stages is one booked call, not two.
     distinct: ["leadId"],
   });
   return rows.length;
@@ -207,11 +212,14 @@ export const getPipelineSnapshot = cache(async (range: KpiRangeKey = "this-month
   const wonLeads = wonLeadIds.length
     ? await prisma.lead.findMany({ where: { id: { in: wonLeadIds } }, select: { wonLevel: true } })
     : [];
-  const winsByLevel = { SOLO: 0, GUIDED: 0, ELITE: 0, OTHER: 0 };
-  for (const l of wonLeads) {
-    const k = l.wonLevel === "SOLO" || l.wonLevel === "GUIDED" || l.wonLevel === "ELITE" ? l.wonLevel : "OTHER";
-    winsByLevel[k] += 1;
-  }
+  /**
+   * Keyed by the level code the lead was actually won at - NOT three named buckets plus a
+   * residue. Levels are a founder-editable catalogue, so the set of codes is not knowable here;
+   * `levelTallyRows` turns this into rows against the live catalogue at the screen. A won lead
+   * with no level recorded tallies under "" rather than vanishing. See lib/level-tally.ts.
+   */
+  const winsByLevel: LevelTally = {};
+  for (const l of wonLeads) tally(winsByLevel, l.wonLevel);
 
   return {
     interestedLeads,
@@ -279,7 +287,7 @@ export async function getPipelineOverview(
   ] = await Promise.all([
     prisma.lead.count({ where: { ...ACTIVE, dateIn: { gte: week.start, lt: week.end }, ...ownLeadWhere } }),
     prisma.lead.count({ where: { ...ACTIVE, dateIn: { gte: mStart, lt: mEnd }, ...ownLeadWhere } }),
-    distinctLeadsReaching("DISCO_BOOKED", ts.start, ts.end, ownScope),
+    distinctLeadsReaching(BOOKED_CALL_STAGES, ts.start, ts.end, ownScope),
     distinctLeadsReaching("DISCO_COMPLETED", ts.start, ts.end, ownScope),
     distinctLeadsReaching("NO_SHOW", ts.start, ts.end, ownScope),
     prisma.leadStageHistory.findMany({
@@ -313,11 +321,9 @@ export async function getPipelineOverview(
   const wonLeads = wonLeadIds.length
     ? await prisma.lead.findMany({ where: { id: { in: wonLeadIds } }, select: { wonLevel: true } })
     : [];
-  const conversionsByLevel = { SOLO: 0, GUIDED: 0, ELITE: 0, OTHER: 0 };
-  for (const l of wonLeads) {
-    const k = l.wonLevel === "SOLO" || l.wonLevel === "GUIDED" || l.wonLevel === "ELITE" ? l.wonLevel : "OTHER";
-    conversionsByLevel[k] += 1;
-  }
+  // Keyed by level code, for the reason given on `winsByLevel` above.
+  const conversionsByLevel: LevelTally = {};
+  for (const l of wonLeads) tally(conversionsByLevel, l.wonLevel);
 
   // Per-level averages come straight from income; the single blended figure used to
   // value open leads (which carry no committed level yet) falls back to the founder's
@@ -593,13 +599,36 @@ export const KANBAN_STAGES = [
   "DEPOSIT_PAID",
 ] as const;
 
-const KANBAN_CARD_LIMIT = 300;
+/**
+ * The board, plus how much of the board this is.
+ *
+ * `total` is the whole point. The cap has always existed; what did not exist was any way for a
+ * reader to know they were looking at a slice. A business with 412 open leads saw 300 cards and
+ * no indication that 112 were missing - so the board was quietly answering a different question
+ * from the one being asked of it. The count costs one indexed query and buys an honest header.
+ */
+export type KanbanPage = {
+  leads: Awaited<ReturnType<typeof kanbanRows>>;
+  /** Every open-stage lead, not just the loaded ones. */
+  total: number;
+  /** The cap in force, so the caller can tell "all of them" from "the first N". */
+  limit: number;
+};
 
-export async function getKanbanLeads(role: string, userId: string) {
+export async function getKanbanLeads(role: string, userId: string): Promise<KanbanPage> {
+  const { kanbanCardLimit: limit } = await getPipelineConfig();
+  const [leads, total] = await Promise.all([
+    kanbanRows(role, userId, limit),
+    prisma.lead.count({ where: { ...ACTIVE, stage: { in: [...KANBAN_STAGES] } } }),
+  ]);
+  return { leads, total, limit };
+}
+
+async function kanbanRows(role: string, userId: string, limit: number) {
   const leads = await prisma.lead.findMany({
     where: { ...ACTIVE, stage: { in: [...KANBAN_STAGES] } },
     orderBy: { dateIn: "desc" },
-    take: KANBAN_CARD_LIMIT,
+    take: limit,
     select: {
       id: true,
       name: true,

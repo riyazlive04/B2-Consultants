@@ -43,7 +43,14 @@ function sectionEnginesMap(): Record<string, string[]> {
   const block = source.match(/SECTION_ENGINES[^=]*=\s*\{([\s\S]*?)\n\};/);
   assert.ok(block, "SECTION_ENGINES is not where this test expects it in server/improvement-context.ts");
   const out: Record<string, string[]> = {};
-  for (const row of block[1].matchAll(/^\s*([a-zA-Z]+):\s*\[([^\]]*)\]/gm)) {
+  /**
+   * The key may be quoted, because a section key is allowed a hyphen ("weekly-reports",
+   * "german-note", "daily-log") and TypeScript requires quoting those. The original pattern
+   * accepted bare identifiers only, so a hyphenated row was invisible here - and an invisible
+   * row is one this test silently stopped checking. Widening the parser makes it check more,
+   * not less.
+   */
+  for (const row of block[1].matchAll(/^\s*["']?([a-zA-Z-]+)["']?:\s*\[([^\]]*)\]/gm)) {
     out[row[1]] = [...row[2].matchAll(/["']([a-zA-Z]+)["']/g)].map((m) => m[1]);
   }
   return out;

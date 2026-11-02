@@ -44,7 +44,7 @@ export default async function GuidePage() {
   // The directory, grouped and ordered exactly as this person's sidebar is. Off-rail sections
   // (Outreach) are included: they are reachable, so they need a manual as much as anything listed.
   const groups: DirectoryGroup[] = [];
-  for (const s of await visibleSections(session.role, session.overrides)) {
+  for (const s of await visibleSections(session.role, session.overrides, session.capabilities)) {
     if (s.key === "my-journey" && session.role !== "STUDENT") continue;
     const manual = manualFor(s.key);
     if (!manual) continue;

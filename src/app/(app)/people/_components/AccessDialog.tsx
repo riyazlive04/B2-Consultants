@@ -11,6 +11,7 @@ import { Hint } from "@/components/ui/kit";
 import { Btn, CheckCard, SegmentedControl, SubmitBtn, SwitchRow } from "@/components/ui/controls";
 import { inviteUser, resetUserAccess, updateUserAccess, type ListedUser } from "@/server/users-actions";
 import { safeAction } from "@/lib/action-guard";
+import { SharedSettingNotice } from "@/components/ui/SharedSettingNotice";
 import {
   CAPABILITIES,
   effectiveCapabilities,
@@ -20,6 +21,7 @@ import {
   type CapabilityOverrides,
 } from "@/lib/capabilities";
 import {
+  APP_ROLE_OPTIONS,
   effectiveSectionKeys,
   grantableTo,
   roleDefaultKeysFrom,
@@ -44,14 +46,7 @@ export type Actor = {
   capabilities: CapabilityOverrides | null;
 };
 
-export const ROLE_PRESETS: { value: AppRole; label: string }[] = [
-  { value: "ADMIN", label: "Admin" },
-  { value: "HEAD", label: "Head coach" },
-  { value: "USER", label: "Telecaller" },
-  { value: "STUDENT", label: "Student" },
-  { value: "TUTOR", label: "Tutor" },
-  { value: "COACH", label: "Coach" },
-];
+export const ROLE_PRESETS: { value: AppRole; label: string }[] = APP_ROLE_OPTIONS;
 
 const fieldCls =
   "mt-1.5 w-full rounded-field border border-line-strong bg-surface px-3 py-2.5 text-sm font-normal text-ink outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary-soft disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-muted";
@@ -247,10 +242,16 @@ export function AccessDialog({
                 version. Change it on Team &amp; org chart.
               </p>
             ) : (
+              /* There is no "link" button on the org chart, and the old wording sent admins
+                 hunting for one. The join is the EMAIL: `saveTeamProfile` attaches a profile to
+                 the login with the same address, on create and now on edit too. */
               <p className="mt-0.5 text-sm text-warn">
                 <b className="font-semibold">No team profile is linked to this login.</b> Their My
                 Desk cannot know whose calls are theirs, so it will show a dead end however much
-                access you grant here. Link it on the Team &amp; org chart tab.
+                access you grant here. On <b className="font-semibold">Team &amp; org chart</b>, add
+                or edit their profile with this exact email address
+                {user?.email ? <> (<span className="font-medium">{user.email}</span>)</> : null} - the
+                address is what links the two.
               </p>
             )}
           </div>
@@ -287,6 +288,12 @@ export function AccessDialog({
         {/* capabilities - what they can DO */}
         <div>
           <p className="text-sm font-medium text-ink">Capabilities</p>
+          {/* The Console edits the same overrides as a person × permission grid, which is the
+              better shape for setting a whole team up. Saying so here stops the two screens
+              reading as two different settings. */}
+          <div className="mt-2">
+            <SharedSettingNotice setting="capabilities" self="users" />
+          </div>
           <div className="mt-2 space-y-2">
             {CAPABILITIES.map((c) => {
               const on = isAdminRole || caps.has(c.key);

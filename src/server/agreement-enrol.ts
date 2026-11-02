@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { capabilityCheck } from "@/lib/rbac";
 import { logActivity } from "./activity-log";
-import { convertLeadToStudent } from "./students-actions";
+import { createStudentFromLead } from "./student-from-lead";
 import type { ActionResult } from "./agreement-core";
 
 // The decision rule lives in @/lib/agreement-enrol and is imported from there directly. It cannot
@@ -22,14 +22,16 @@ import type { ActionResult } from "./agreement-core";
  * a student at all, which is how this surfaced: "after signing, account creation is not working".
  *
  * This is deliberately a PROMPT, not an automatic consequence of signing. Enrolment picks a
- * programme level, a coach and a code series; `convertLeadToStudent` creates no enrolment for
+ * programme level, a coach and a code series; `createStudentFromLead` creates no enrolment for
  * exactly that reason ("the program level isn't known at convert time"). Doing it silently inside
  * the signing request would also put a student-record write on the student's own signature - a
  * failure there must never cost somebody a signature they already made.
  *
- * It reuses `convertLeadToStudent` rather than creating a second Student-creation path: that one
- * is already idempotent, carries name/email/phone/industry/source across, and stamps
- * `Student.leadId` so the two records stay joined.
+ * It reuses `createStudentFromLead` - the same core Contacts -> Convert to student runs - rather
+ * than creating a second Student-creation path: that one is already idempotent, carries
+ * name/email/phone/industry/source across, and stamps `Student.leadId` so the two records stay
+ * joined. It takes the session this action authorised, so the capability check below is the only
+ * permission involved.
  */
 
 /**
@@ -139,7 +141,15 @@ export async function enrolFromAgreement(
     studentId = existing[0].id;
     created = false;
   } else {
-    const res = await convertLeadToStudent(row.lead.id);
+    /**
+     * Under THIS action's permission, not Admin.
+     *
+     * `convertLeadToStudent` is the Contacts door and re-guards at `requireAdmin()`, which
+     * REDIRECTS rather than returning an error - so calling it here threw a head coach out to the
+     * dashboard with no message, on the one branch the widened capability above exists for. The
+     * shared core takes the session this action already authorised.
+     */
+    const res = await createStudentFromLead(session, row.lead.id);
     if (!res.ok || !res.studentId) {
       return { ok: false, error: res.ok ? "Could not create the student record." : res.error };
     }

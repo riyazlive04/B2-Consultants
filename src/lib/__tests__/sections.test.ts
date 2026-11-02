@@ -154,6 +154,53 @@ describe("the rest of the rule is unchanged", () => {
  * one section that happened to use it, and a mechanism with no test is how a toggle quietly stops
  * working between the day it is needed and the day it is tried.
  */
+/**
+ * THE NAV ITEM THAT KEPT COMING BACK.
+ *
+ * `offRail` sections (Outreach) are listed nowhere but are fully reachable, and the catalogue
+ * promises the founder can put one back "with one toggle in Console → Sections". That was
+ * implemented as `enabled === true` - and the Sections panel writes `enabled` for EVERY row on
+ * every save, while an off-rail section is enabled. So saving anything at all on that screen
+ * re-added Outreach to the sidebar, and the only way to take it off again was to switch the
+ * section off, which breaks its route.
+ *
+ * `onRail` is the explicit answer now. Absent means "the catalogue's", which is what makes an
+ * already-saved config repair itself.
+ */
+describe("the sidebar is its own setting, not a side effect of `enabled`", () => {
+  const outreach = () => find("outreach");
+
+  test("Outreach ships off the rail and reachable", () => {
+    const s = outreach();
+    assert.equal(s.offRail, true);
+    assert.equal(s.enabled, true, "off the rail is not off");
+  });
+
+  test("a save that merely carries `enabled: true` no longer puts it back", () => {
+    // Exactly what the Sections panel used to write for an untouched row.
+    const saved = resolveSections({
+      entries: [{ ...outreach(), enabled: true, roles: [...outreach().roles] }],
+    });
+    const s = saved.find((x) => x.key === "outreach")!;
+    assert.equal(s.offRail, true, "any Sections save re-added Outreach to the sidebar");
+  });
+
+  test("an explicit Sidebar tick does put it back", () => {
+    const saved = resolveSections({
+      entries: [{ ...outreach(), enabled: true, onRail: true, roles: [...outreach().roles] }],
+    });
+    assert.equal(saved.find((x) => x.key === "outreach")!.offRail, false);
+  });
+
+  test("an explicit untick takes an ON-rail section off it", () => {
+    const saved = resolveSections({
+      entries: [{ ...find("contacts"), enabled: true, onRail: false, roles: [...find("contacts").roles] }],
+    });
+    assert.equal(saved.find((x) => x.key === "contacts")!.offRail, true);
+    assert.equal(saved.find((x) => x.key === "contacts")!.enabled, true, "still reachable");
+  });
+});
+
 describe("a switched-off section", () => {
   /** A resolved section as `resolveSections` would hand one over, built by hand. */
   const off = (enabled: boolean): ResolvedSection => ({
@@ -166,6 +213,9 @@ describe("a switched-off section", () => {
     // what `resolveSections` would hand over; nothing in these tests reads it, because the flag
     // deliberately changes no access decision - it only makes the Console ask first.
     sensitive: true,
+    // `finance` carries no `needsCapability`, and nothing in these tests reads it - mirrored only
+    // so the fixture is the shape `resolveSections` actually hands over.
+    needsCapability: null,
     offRail: false,
     label: "Finance",
     icon: "wallet",

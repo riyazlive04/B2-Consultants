@@ -5,6 +5,8 @@ import {
 } from "lucide-react";
 import { requireSection } from "@/lib/rbac";
 import { getMyStudentPortal } from "@/server/student-portal";
+import { getAttendanceConfig } from "@/server/founder-config";
+import { attendanceBandForPct } from "@/lib/attendance";
 import { getMyClassroom } from "@/server/student-classroom";
 import { getMyAgreements } from "@/server/student-agreements";
 import { getMyPayments } from "@/server/student-payments";
@@ -41,14 +43,19 @@ export const dynamic = "force-dynamic";
  */
 export default async function StudentDashboardPage() {
   const session = await requireSection("dashboard");
-  const [portal, classroom, agreements, payments, checkIns, absenceQuestions] = await Promise.all([
-    getMyStudentPortal(session.user.id),
-    getMyClassroom(session.user.id),
-    getMyAgreements(session.user.id),
-    getMyPayments(session.user.id),
-    getMyOpenCheckIns(session.user.id),
-    getMyAbsenceQuestions(session.user.id),
-  ]);
+  const [portal, classroom, agreements, payments, checkIns, absenceQuestions, attendanceConfig] =
+    await Promise.all([
+      getMyStudentPortal(session.user.id),
+      getMyClassroom(session.user.id),
+      getMyAgreements(session.user.id),
+      getMyPayments(session.user.id),
+      getMyOpenCheckIns(session.user.id),
+      getMyAbsenceQuestions(session.user.id),
+      // The founder's green/amber/red thresholds. This bar was 75/50 while the Attendance cards
+      // were 80/60, so a student's own dashboard could disagree with their coach's screen about
+      // whether their attendance was a problem. See `attendanceBandForPct`.
+      getAttendanceConfig(),
+    ]);
 
   const firstName = (portal?.fullName ?? session.user.name ?? "there").split(" ")[0];
 
@@ -239,7 +246,7 @@ export default async function StudentDashboardPage() {
                     </p>
                     <ProgressBar
                       pct={attendancePct}
-                      tone={attendancePct >= 75 ? "good" : attendancePct >= 50 ? "warn" : "bad"}
+                      tone={attendanceBandForPct(attendancePct, attendanceConfig)}
                     />
                   </div>
                 )}

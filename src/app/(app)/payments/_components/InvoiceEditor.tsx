@@ -378,7 +378,16 @@ export default function InvoiceEditor({
                 {invoice.tokenRevokedAt ? "Link revoked" : "Link"}
               </Btn>
             )}
-            {canShare && <a href={`/i/${invoice.publicToken}/pdf?download=1`} target="_blank" rel="noreferrer"><Btn variant="ghost" icon={<Download size={15} />}>PDF</Btn></a>}
+            {/*
+              THE STAFF ROUTE, NOT THE CUSTOMER'S LINK.
+              This used to be `/i/[publicToken]/pdf`, which is gated by `publicLinkIsLive` - so
+              revoking a leaked URL, or letting one expire, took the team's own copy of the tax
+              document away with it. `/api/payments/invoice/[id]/pdf` asks the question that
+              applies to a member of staff (may you open Payments) and renders the same document.
+              Shown whenever the document can be rendered at all, rather than only while a
+              shareable link is live.
+            */}
+            {canShare && <a href={`/api/payments/invoice/${invoice.id}/pdf?download=1`} target="_blank" rel="noreferrer"><Btn variant="ghost" icon={<Download size={15} />}>PDF</Btn></a>}
             {kind === "INVOICE" && invoice.status !== "PAID" && invoice.status !== "VOID" && <Btn variant="soft" icon={<CheckCircle2 size={15} />} onClick={() => setPayOpen(true)}>Record payment</Btn>}
             {kind === "ESTIMATE" && invoice.status !== "ACCEPTED" && <Btn variant="soft" icon={<ArrowRightLeft size={15} />} onClick={convert}>Convert to invoice</Btn>}
             {invoice.status !== "VOID" && <IconButton label="Void" onClick={() => status("VOID", "Voided")}><Ban size={16} /></IconButton>}
@@ -773,8 +782,11 @@ export default function InvoiceEditor({
                           {p.receiptSentAt ? " · emailed" : ""}
                         </span>
                         <span className="flex items-center gap-1">
+                          {/* Keyed by PAYMENT ID through the staff route - the public one rides
+                              on the invoice's shareable link and dies with it, taking the written
+                              confirmation of payment the agreement promises with it. */}
                           <a
-                            href={`/i/${invoice.publicToken}/receipt/${encodeURIComponent(p.receiptNumber)}?download=1`}
+                            href={`/api/payments/receipt/${p.id}?download=1`}
                             target="_blank"
                             rel="noreferrer"
                             className="inline-flex items-center gap-1 font-semibold text-primary hover:underline"

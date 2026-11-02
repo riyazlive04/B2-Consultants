@@ -176,6 +176,11 @@ model User {
   improvementEvents        ImprovementEvent[]         @relation("ImprovementEventActor")
   improvementRecordings    ImprovementRecording[]     @relation("ImprovementRecorder")
   improvementAttachments   ImprovementAttachment[]    @relation("ImprovementAttacher")
+  // Weekly report (src/lib/weekly-flags.ts)
+  weeklyTemplatesCreated   WeeklyReportTemplate[]     @relation("WeeklyTemplateAuthor")
+  weeklyCyclesOpened       WeeklyReportCycle[]        @relation("WeeklyCycleOpener")
+  weeklyResponsesEntered   WeeklyReportResponse[]     @relation("WeeklyResponseEnterer")
+  weeklyReviews            WeeklyReportReview[]       @relation("WeeklyReviewer")
 
   @@map("user")
 }
@@ -333,14 +338,15 @@ model Level {
   /// a FROZEN document - a level renamed after issue must not cascade into it, because the
   /// invoice says what it said. Adding a foreign key to a frozen record is how an audit trail
   /// gets rewritten.
-  enrollments         Enrollment[]         @relation("EnrollmentLevel")
-  batches             Batch[]              @relation("BatchLevel")
-  wonLeads            Lead[]               @relation("LeadWonLevel")
-  products            Product[]            @relation("ProductLevel")
-  curriculumTemplates CurriculumTemplate[] @relation("CurriculumLevel")
-  programMilestones   ProgramMilestone[]   @relation("MilestoneLevel")
-  pendingJoiners      GnPendingJoiner[]    @relation("JoinerLevel")
-  pendingPayments     PendingPayment[]     @relation("PendingPaymentLevel")
+  enrollments         Enrollment[]           @relation("EnrollmentLevel")
+  batches             Batch[]                @relation("BatchLevel")
+  wonLeads            Lead[]                 @relation("LeadWonLevel")
+  products            Product[]              @relation("ProductLevel")
+  curriculumTemplates CurriculumTemplate[]   @relation("CurriculumLevel")
+  programMilestones   ProgramMilestone[]     @relation("MilestoneLevel")
+  pendingJoiners      GnPendingJoiner[]      @relation("JoinerLevel")
+  pendingPayments     PendingPayment[]       @relation("PendingPaymentLevel")
+  weeklyTemplates     WeeklyReportTemplate[] @relation("WeeklyTemplateLevel")
 
   @@index([kind, active, order])
   @@map("level")
@@ -2564,6 +2570,8 @@ model Student {
   attendance         SessionAttendance[]
   resumes            Resume[]
   invoices           Invoice[]
+  weeklyResponses    WeeklyReportResponse[]
+  weeklyReviews      WeeklyReportReview[]
 
   @@index([fullName])
   @@map("student")
@@ -2652,6 +2660,7 @@ model Enrollment {
   bookOrders        BookOrder[]
   pendingPayments   PendingPayment[]
   invoices          Invoice[]
+  weeklyResponses   WeeklyReportResponse[]
 
   @@index([studentId])
   @@index([status, programLevel])
@@ -3078,39 +3087,47 @@ enum GnVideoProvider {
 /// portal login exists). That asymmetry is deliberate: a B2 seat IS the enrollment, whereas a
 /// GN student may sit in a batch for a level they were gifted or repeated.
 model Batch {
-  id                   String              @id @default(cuid())
+  id                   String                @id @default(cuid())
   /// Which business this cohort belongs to. Guards level-kind compatibility at the service
   /// layer (COACHING_TIER → B2, GERMAN_LEVEL/GERMAN_BUNDLE → GERMAN_NOTE).
-  line                 BatchLine           @default(GERMAN_NOTE)
+  line                 BatchLine             @default(GERMAN_NOTE)
   /// The founders' own label - "A1", "B10", "B26". Nullable because pre-existing rows have
   /// none, unique because it is the human key they use on calls and in the workbooks.
-  code                 String?             @unique
+  code                 String?               @unique
   name                 String // "A1 Evening - July 2026"
   level                String // Level.code - service-validated against `line`
-  levelRef             Level               @relation("BatchLevel", fields: [level], references: [code], onUpdate: Cascade, onDelete: Restrict)
+  levelRef             Level                 @relation("BatchLevel", fields: [level], references: [code], onUpdate: Cascade, onDelete: Restrict)
   tutorId              String?
-  tutor                User?               @relation("BatchTutor", fields: [tutorId], references: [id], onDelete: SetNull)
-  status               GnBatchStatus       @default(ACTIVE)
-  targetStrength       Int                 @default(8) // target class size (spec: ~8 per batch)
+  tutor                User?                 @relation("BatchTutor", fields: [tutorId], references: [id], onDelete: SetNull)
+  status               GnBatchStatus         @default(ACTIVE)
+  targetStrength       Int                   @default(8) // target class size (spec: ~8 per batch)
   /// ER v2 BATCH.start_date. Nullable: the GN batches that already exist were never asked for one.
   ///
   /// For a B2 cohort it is also the TIMETABLE ANCHOR - `generateTimetable` counts every
   /// curriculum week forward from here, so moving it is how a batch that slipped a week is
   /// re-dated. Generation refuses without one rather than guessing today.
-  startDate            DateTime?           @db.Date
-  endDate              DateTime?           @db.Date
+  startDate            DateTime?             @db.Date
+  endDate              DateTime?             @db.Date
   /// The curriculum this cohort's timetable was generated from (B2 coaching only - German
   /// Note keeps scheduling class by class). Kept after generation, SetNull on delete, so the
   /// batch page can say which programme it is running and offer to re-generate.
   curriculumTemplateId String?
-  curriculumTemplate   CurriculumTemplate? @relation(fields: [curriculumTemplateId], references: [id], onDelete: SetNull)
+  curriculumTemplate   CurriculumTemplate?   @relation(fields: [curriculumTemplateId], references: [id], onDelete: SetNull)
   /// The last row of the founders' timetable sheet: the day the 90-Day Sprint starts, which
   /// is the day AFTER the final live session rather than a fixed offset from `startDate`.
   /// Stored rather than derived because the founders move it by hand when a batch slips.
-  sprintStartDate      DateTime?           @db.Date
+  sprintStartDate      DateTime?             @db.Date
+  /// The weekly-report question set THIS cohort is asked, overriding the line/level default.
+  ///
+  /// Cohorts are not interchangeable: a Pflege-track German class and a B2 sprint cohort are
+  /// asked different things, and two cohorts on the same level can be running different
+  /// activities. Without this, the only lever was the level, which a founder cannot vary per
+  /// cohort. Null means "work it out from the line and level" - see `templateFor`.
+  weeklyTemplateId     String?
+  weeklyTemplate       WeeklyReportTemplate? @relation("BatchWeeklyTemplate", fields: [weeklyTemplateId], references: [id], onDelete: SetNull)
   notes                String?
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @updatedAt
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
 
   members        BatchMember[]
   enrollments    Enrollment[]
@@ -3125,11 +3142,13 @@ model Batch {
   conversionsA1  GnWorkshopConversion[] @relation("ConversionBatchA1")
   conversionsA2  GnWorkshopConversion[] @relation("ConversionBatchA2")
   conversionsB1  GnWorkshopConversion[] @relation("ConversionBatchB1")
+  weeklyCycles   WeeklyReportCycle[]
 
   @@index([status])
   @@index([tutorId])
   @@index([line, status])
   @@index([curriculumTemplateId])
+  @@index([weeklyTemplateId])
   @@map("batch")
 }
 
@@ -4279,6 +4298,17 @@ enum WhatsAppKind {
   /// whose access window has closed is a complaint, not a reminder.
   CLASS_CATCH_UP
 
+  // ── Weekly report (src/server/weekly-report-cycles.ts). Three kinds rather than one
+  // because WATI binds exactly one template per kind, and these three say different
+  // things: here is this week's form / you have not filled it yet / you have now missed
+  // it. Collapsing them would force one wording to serve an invitation and a chase.
+  /// Opening message to every student on the roster - the week's form is open, here is the link.
+  WEEKLY_REPORT_LINK
+  /// Mid-window nudge to the students who have not submitted yet. Same link.
+  WEEKLY_REPORT_REMINDER
+  /// After the window closed with no submission - the Red Flag System's "missed 1 form" rung.
+  WEEKLY_REPORT_MISSING
+
   // ── Stage messages: one per LeadStage, sent every time a lead enters it (lib/stage-messages.ts).
   STAGE_NEW_LEAD
   STAGE_WHATSAPP_SENT
@@ -4326,17 +4356,17 @@ model WhatsAppMessage {
   // Optional links to whatever this message was about (all SetNull - a message row must
   // survive deletion of the lead/student it referenced, like the rest of the audit tables).
   leadId           String?
-  lead             Lead?           @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  lead             Lead?              @relation(fields: [leadId], references: [id], onDelete: SetNull)
   studentId        String?
-  student          Student?        @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  student          Student?           @relation(fields: [studentId], references: [id], onDelete: SetNull)
   bookingRequestId String?
-  bookingRequest   BookingRequest? @relation(fields: [bookingRequestId], references: [id], onDelete: SetNull)
+  bookingRequest   BookingRequest?    @relation(fields: [bookingRequestId], references: [id], onDelete: SetNull)
   pendingPaymentId String?
-  pendingPayment   PendingPayment? @relation(fields: [pendingPaymentId], references: [id], onDelete: SetNull)
+  pendingPayment   PendingPayment?    @relation(fields: [pendingPaymentId], references: [id], onDelete: SetNull)
   agreementId      String?
-  agreement        Agreement?      @relation(fields: [agreementId], references: [id], onDelete: SetNull)
+  agreement        Agreement?         @relation(fields: [agreementId], references: [id], onDelete: SetNull)
   bookOrderId      String?
-  bookOrder        BookOrder?      @relation(fields: [bookOrderId], references: [id], onDelete: SetNull)
+  bookOrder        BookOrder?         @relation(fields: [bookOrderId], references: [id], onDelete: SetNull)
   /// The class this message is about (CLASS_REMINDER / CLASS_REMINDER_COACH).
   ///
   /// This is what makes the reminder ladder idempotent WITHOUT a second table: "which rungs has
@@ -4345,7 +4375,13 @@ model WhatsAppMessage {
   /// `class_reminder` table would have been a parallel record of sends that could disagree with
   /// the one the WhatsApp screen shows.
   classSessionId   String?
-  classSession     ClassSession?   @relation(fields: [classSessionId], references: [id], onDelete: SetNull)
+  classSession     ClassSession?      @relation(fields: [classSessionId], references: [id], onDelete: SetNull)
+  /// The cohort-week a weekly-report message is about. Exactly the same job as
+  /// `classSessionId` above: "has this student already had this week's link" is a count of rows
+  /// on (weeklyCycleId, studentId, kind), which is durable state the cron can trust across
+  /// restarts. A separate sent-log table would have been a second record of the same fact.
+  weeklyCycleId    String?
+  weeklyCycle      WeeklyReportCycle? @relation(fields: [weeklyCycleId], references: [id], onDelete: SetNull)
 
   sentById String? // the admin/user who triggered a manual send (null = automatic)
   sentBy   User?   @relation("WhatsAppSentBy", fields: [sentById], references: [id], onDelete: SetNull)
@@ -4361,6 +4397,7 @@ model WhatsAppMessage {
   @@index([agreementId])
   @@index([bookOrderId])
   @@index([classSessionId, kind])
+  @@index([weeklyCycleId, kind])
   @@index([watiMessageId])
   @@index([toNumber])
   @@map("whatsapp_message")
@@ -5865,7 +5902,7 @@ model Improvement {
   /// "how much is this holding you up", and overwriting it to mark something urgent would
   /// destroy the one honest signal this module collects about impact. Who pressed it and when
   /// is in the activity log (`logActivity`), not here.
-  urgent         Boolean @default(false)
+  urgent Boolean @default(false)
 
   devNote        String?
   /// Shown to the reporter on FIXED / DECLINED. The internal reasoning stays in `devNote`.
@@ -5943,8 +5980,8 @@ model ImprovementRecording {
 
   /// AUDIO or SCREEN. Not derivable from the bytes: `audio/webm` and `video/webm` share the same
   /// Matroska header, so this is what decides which player the triage screen renders.
-  kind  ImprovementRecordingKind
-  bytes Bytes
+  kind     ImprovementRecordingKind
+  bytes    Bytes
   /// The container as SNIFFED from the bytes on upload, never as the request claimed, combined
   /// with `kind`. This value becomes the `Content-Type` of a response, so a client-supplied one
   /// would be a scripting hole.
@@ -5955,7 +5992,7 @@ model ImprovementRecording {
   seconds  Int
   /// False when a SCREEN recording was made without the microphone - the person declined it, or
   /// the device has none. Worth storing so triage knows to watch rather than wait for a voice.
-  hasAudio Boolean @default(true)
+  hasAudio Boolean                  @default(true)
 
   /// Who recorded it, kept for the same reason `Improvement.reporterRole` is: "whose voice is
   /// this?" must stay answerable after the report is reassigned or the person has left.
@@ -5984,7 +6021,7 @@ model ImprovementAttachment {
   reportId String
   report   Improvement @relation(fields: [reportId], references: [id], onDelete: Cascade)
 
-  bytes Bytes
+  bytes    Bytes
   /// REBUILT from the uploader's name, never stored as given: the base is reduced to a safe
   /// character set and the extension comes from the sniff. It is interpolated into a
   /// `Content-Disposition` header and rendered on the triage screen, so a crafted name is the
@@ -6008,4 +6045,280 @@ model ImprovementAttachment {
   /// The triage screen lists one report's files in upload order; nothing queries them globally.
   @@index([reportId, createdAt])
   @@map("improvement_attachment")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────
+// THE WEEKLY REPORT - what the student said about their own week, and what the tutor
+// said about it.
+//
+// ── Where this comes from ────────────────────────────────────────────────────────────
+// Delivery ran this on a Google Sheet ("B2 CONSULTANTS - STUDENT MASTER TRACKER"). Its
+// Sprint Tracker tab is one row per student per week with the student's six form answers
+// in columns F-L and the delivery person's verdict in columns M-P; its Red Flag System
+// tab is the rule set that turns those numbers into Green/Yellow/Red. These models are
+// that sheet, with the rollups removed.
+//
+// ── Why nothing here stores a rollup ─────────────────────────────────────────────────
+// The sheet also carried `Weekly Form Streak`, `Last Form Date`, `Weeks Silent` and
+// `Flag Status` as columns someone typed in every Monday, and they were therefore only
+// as true as the last person who remembered. All four are functions of the rows below,
+// so they are derived in lib/weekly-flags.ts and stored nowhere - the same reasoning the
+// Agreement state engine applies to its eight states.
+//
+// ── Not to be confused with lib/weekly-report.ts ─────────────────────────────────────
+// That file is the older WEEKLY PROGRESS REPORT: a derived read of what the records say
+// a student did, bucketed by sprint week, storing nothing. Its own header describes the
+// pair exactly - "what the records say, beside what the student said". This is the said
+// half, and the two are shown side by side rather than merged.
+// ─────────────────────────────────────────────────────────────────────────────────────
+
+enum WeeklyQuestionKind {
+  NUMBER
+  SCALE
+  SINGLE_SELECT
+  MULTI_SELECT
+  YES_NO
+  TEXT
+  LONG_TEXT
+}
+
+/// What a question MEANS, as opposed to what it looks like. The dashboard needs to total
+/// "applications this week" across a cohort and the flag engine needs to compare it with
+/// a target, and neither can do that from a label the founder is free to reword. A
+/// question tagged APPLICATIONS keeps its meaning through any rename; one tagged OTHER is
+/// collected and shown but never scored.
+enum WeeklyMetric {
+  APPLICATIONS
+  INTERVIEWS
+  NETWORKING
+  LINKEDIN_POSTS
+  LEARNING_HOURS
+  BLOCKERS
+  OTHER
+}
+
+enum WeeklyCycleStatus {
+  OPEN
+  CLOSED
+}
+
+enum WeeklyFlag {
+  GREEN
+  YELLOW
+  RED
+}
+
+/// The Sprint Tracker's "Delivery Person Action" column, verbatim.
+enum WeeklyAction {
+  NONE
+  MESSAGE_SENT
+  CALL_SCHEDULED
+  ESCALATED
+}
+
+/// Who put the answers in. A tutor transcribing a reply that arrived over WhatsApp is a
+/// real and common case, and a dashboard that showed it as the student's own submission
+/// would overstate how many students are actually filling the form in.
+enum WeeklyResponseSource {
+  STUDENT
+  STAFF
+}
+
+model WeeklyReportTemplate {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  /// Which business this template is written for. A German Note cohort and a B2 sprint
+  /// cohort are not asked the same questions.
+  line        BatchLine
+  /// Narrower still: a template may be pinned to one Level (ELITE asks about OIC sessions,
+  /// GUIDED does not). Null means it serves every level on its line.
+  levelCode   String?
+  levelRef    Level?    @relation("WeeklyTemplateLevel", fields: [levelCode], references: [code], onUpdate: Cascade, onDelete: SetNull)
+  active      Boolean   @default(true)
+
+  createdById String?
+  createdBy   User?    @relation("WeeklyTemplateAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  questions WeeklyReportQuestion[]
+  cycles    WeeklyReportCycle[]
+  batches   Batch[]                @relation("BatchWeeklyTemplate")
+
+  @@index([line, active])
+  @@map("weekly_report_template")
+}
+
+model WeeklyReportQuestion {
+  id            String               @id @default(cuid())
+  templateId    String
+  template      WeeklyReportTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  /// Stable across rewordings - `applications` stays `applications` however the label reads.
+  key           String
+  /// Bumped when a live question's wording or options change, rather than editing in place.
+  /// An answer pins the exact `questionId` it was given to, so a chart drawn six months from
+  /// now still reads each answer against the question that was actually asked. Same device as
+  /// QualificationQuestion, and for the same reason.
+  version       Int                  @default(1)
+  kind          WeeklyQuestionKind
+  metric        WeeklyMetric         @default(OTHER)
+  label         String
+  helpText      String?
+  required      Boolean              @default(true)
+  orderIndex    Int                  @default(0)
+  /// [{ value, label }] for the SELECT kinds; null otherwise.
+  options       Json?
+  /// Lets the respondent type an answer the list does not offer. The live sheet already had
+  /// free text appearing in its blockers column, so this is a description of what happens
+  /// rather than a nicety.
+  allowOther    Boolean              @default(false)
+  min           Int?
+  max           Int?
+  /// The weekly goal this question is measured against - 10 applications, 7 posts. Read by
+  /// the flag engine; null means the answer is collected but not scored.
+  targetNumeric Int?
+  active        Boolean              @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  answers WeeklyReportAnswer[]
+
+  @@unique([templateId, key, version])
+  @@index([templateId, active, orderIndex])
+  @@map("weekly_report_question")
+}
+
+model WeeklyReportCycle {
+  id         String               @id @default(cuid())
+  batchId    String
+  batch      Batch                @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  templateId String
+  template   WeeklyReportTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+
+  /// ISO week key, "2026-W44". The key rather than the batch week number because every
+  /// cohort reports on the same calendar week, which is the only way the dashboard can put
+  /// two cohorts that started months apart on one row.
+  isoWeek         String
+  weekStart       DateTime @db.Date
+  weekEnd         DateTime @db.Date
+  /// Week 1, 2, 3 ... counted from `Batch.startDate`. A label, not a key: it is what the
+  /// tutor and the curriculum call this week. Null when the batch has no start date.
+  batchWeekNumber Int?
+
+  status   WeeklyCycleStatus @default(OPEN)
+  opensAt  DateTime
+  /// After this, a submission still lands but is marked `late` - the sheet's own third
+  /// value for "Form Submitted?" beside Yes and No.
+  closesAt DateTime
+
+  /// When the opening message actually went out, as opposed to when the cycle opened. Null
+  /// means nobody has been told the form exists yet.
+  sentAt     DateTime?
+  openedById String?
+  openedBy   User?     @relation("WeeklyCycleOpener", fields: [openedById], references: [id], onDelete: SetNull)
+  closedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  responses        WeeklyReportResponse[]
+  reviews          WeeklyReportReview[]
+  whatsappMessages WhatsAppMessage[]
+
+  /// THE IDEMPOTENCY GUARD. The cron opens cycles on a timer and a founder can open one by
+  /// hand; without this a double tick would hand a cohort two links for the same week and
+  /// split its answers across two rows.
+  @@unique([batchId, isoWeek])
+  @@index([status, closesAt])
+  @@index([batchId, weekStart])
+  @@map("weekly_report_cycle")
+}
+
+model WeeklyReportResponse {
+  id           String            @id @default(cuid())
+  cycleId      String
+  cycle        WeeklyReportCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  /// Keyed on the STUDENT, not the enrollment. A German Note seat arrives through
+  /// BatchMember and has no Enrollment at all, so an enrollment key would quietly exclude
+  /// a whole business line. SessionAttendance made the same choice for the same reason.
+  studentId    String
+  student      Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  /// Recorded when there is one, because the B2 side's level, coach and sprint dates hang
+  /// off it. Nullable, and nothing may depend on it being present.
+  enrollmentId String?
+  enrollment   Enrollment?       @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+
+  source      WeeklyResponseSource @default(STUDENT)
+  enteredById String?
+  enteredBy   User?                @relation("WeeklyResponseEnterer", fields: [enteredById], references: [id], onDelete: SetNull)
+
+  submittedAt DateTime @default(now())
+  /// Set at submit time against the cycle's `closesAt`, not derived on read: whether this
+  /// was late is a fact about the moment it arrived, and re-deriving it would change the
+  /// answer if the founder later moved the deadline.
+  late        Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  answers WeeklyReportAnswer[]
+
+  @@unique([cycleId, studentId])
+  @@index([studentId, submittedAt])
+  @@map("weekly_report_response")
+}
+
+model WeeklyReportAnswer {
+  id         String               @id @default(cuid())
+  responseId String
+  response   WeeklyReportResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  questionId String
+  question   WeeklyReportQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  /// The answer as given: a string, a number, or an array for MULTI_SELECT. Canonical.
+  value   Json
+  /// The same answer as an integer when it is countable, so a cohort total is one grouped
+  /// query rather than a parse of every row. Null for text and for selects that carry no
+  /// number. Written only from `value`, never independently.
+  numeric Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([responseId, questionId])
+  @@index([questionId])
+  @@map("weekly_report_answer")
+}
+
+model WeeklyReportReview {
+  id        String            @id @default(cuid())
+  cycleId   String
+  cycle     WeeklyReportCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  /// The tutor's OVERRIDE, not the flag. Null means "the derived flag is right", which is
+  /// the common case; a value means a human disagreed with the rules and the dashboard says
+  /// so, showing both. Storing the derived flag here too would create a second copy free to
+  /// go stale the moment a threshold changes in Console.
+  flag             WeeklyFlag?
+  action           WeeklyAction @default(NONE)
+  followUpNeeded   Boolean      @default(false)
+  note             String?
+  /// Off by default. A remark written for the delivery team is not automatically a remark
+  /// written for the student, and the portal shows it only when someone has said it is.
+  shareWithStudent Boolean      @default(false)
+
+  reviewedById String
+  reviewedBy   User     @relation("WeeklyReviewer", fields: [reviewedById], references: [id], onDelete: Cascade)
+  reviewedAt   DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cycleId, studentId])
+  @@index([studentId, reviewedAt])
+  @@map("weekly_report_review")
 }

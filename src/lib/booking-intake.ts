@@ -208,18 +208,60 @@ export const BANT_ANSWER_SCORES: Record<string, Record<string, number>> = {
  */
 export const BANT_MAX = 4;
 
-/** Above this average the verdict is Confirm. */
-export const BANT_CONFIRM_ABOVE = 2.4;
-/** At or above this average (and not above BANT_CONFIRM_ABOVE) the verdict is Doubt; below it, Cancel. */
-export const BANT_DOUBT_FROM = 1.6;
+/**
+ * THE THREE CUTOFFS, AND WHY THEY TAKE AN ARGUMENT NOW.
+ *
+ * These decide who gets called and - with auto-disqualify on - who is turned away with an email.
+ * They are a sales judgement, and the founders have already moved them once: the scale went from
+ * 0-5 to 0-4 on 22/09/2026 and every threshold was multiplied by 0.8. That took a code change, a
+ * deploy and the `20260922180000_bant_scale_out_of_4` data migration, which is the wrong cost for
+ * a number somebody wants to try at 2.2 for a fortnight.
+ *
+ * So the cutoffs are config (`qualificationConfig.thresholds`, Console → Sales ops →
+ * Qualification) and every function that applies them takes them as an argument, defaulting to
+ * the shipped values below. The default IS today's behaviour, so nothing moved on the day this
+ * shipped - see `qualification-thresholds.test.ts`.
+ *
+ * ── What is deliberately NOT config ────────────────────────────────────────────────────────
+ * `BANT_MAX`. The scale is not a threshold: changing it does not rescale the scores already
+ * stored on every lead and booking, so a founder who "tried 5" would silently reinterpret every
+ * historical verdict against a scale it was never scored on. A rescale is a migration plus a
+ * restate - the thing that happened in September - and it stays one. The panel says so.
+ */
+export type BantThresholds = {
+  /** Above this average the verdict is Confirm. */
+  confirmAbove: number;
+  /** At or above this (and not above `confirmAbove`) the verdict is Doubt; below it, Cancel. */
+  doubtFrom: number;
+  /** A dimension counts as "met" - the boolean the pipeline ranking consumes - at or above this. */
+  dimensionMetAt: number;
+};
 
-/** A dimension counts as "met" (the boolean the pipeline ranking consumes) at ≥2.4/4. */
-export const DIMENSION_MET_AT = 2.4;
+/** The shipped cutoffs. Changing these changes the DEFAULT, not what a configured install does. */
+export const DEFAULT_BANT_THRESHOLDS: BantThresholds = {
+  confirmAbove: 2.4,
+  doubtFrom: 1.6,
+  dimensionMetAt: 2.4,
+};
 
-/** Verdict thresholds on the 0-4 average: >2.4 confirm · 1.6-2.4 doubt · <1.6 cancel. */
-export function bantVerdictFor(avg: number): "CONFIRM" | "DOUBT" | "CANCEL" {
-  if (avg > BANT_CONFIRM_ABOVE) return "CONFIRM";
-  if (avg >= BANT_DOUBT_FROM) return "DOUBT";
+/**
+ * Kept as named constants because three screens interpolate them into their own copy
+ * ("Confirm (avg > 2.4)"), and a tooltip is allowed to quote the default.
+ *
+ * ⚠ A screen that shows a figure a founder has CHANGED must read `thresholds` off the config and
+ * not these - see `bookings/page.tsx`, which does. Do not reach for these in new display code.
+ */
+export const BANT_CONFIRM_ABOVE = DEFAULT_BANT_THRESHOLDS.confirmAbove;
+export const BANT_DOUBT_FROM = DEFAULT_BANT_THRESHOLDS.doubtFrom;
+export const DIMENSION_MET_AT = DEFAULT_BANT_THRESHOLDS.dimensionMetAt;
+
+/** Verdict thresholds on the 0-`BANT_MAX` average. Shipped default: >2.4 confirm · 1.6-2.4 doubt · <1.6 cancel. */
+export function bantVerdictFor(
+  avg: number,
+  thresholds: BantThresholds = DEFAULT_BANT_THRESHOLDS,
+): "CONFIRM" | "DOUBT" | "CANCEL" {
+  if (avg > thresholds.confirmAbove) return "CONFIRM";
+  if (avg >= thresholds.doubtFrom) return "DOUBT";
   return "CANCEL";
 }
 
@@ -277,7 +319,10 @@ export const SCORED_QUESTION_KEYS = [
   "whenStartGermany",
 ] as const;
 
-export function computeBant(input: BantInput): BantResult {
+export function computeBant(
+  input: BantInput,
+  thresholds: BantThresholds = DEFAULT_BANT_THRESHOLDS,
+): BantResult {
   const budget = Math.max(answerScore("readyToInvest", input.readyToInvest), answerScore("currentIncome", input.currentIncome));
   const authority = answerScore("decisionMaking", input.decisionMaking);
   /**
@@ -294,7 +339,7 @@ export function computeBant(input: BantInput): BantResult {
   const timeline = answerScore("whenStartGermany", input.whenStartGermany);
 
   const dims = [budget, authority, need, timeline];
-  const met = dims.map((d) => d >= DIMENSION_MET_AT);
+  const met = dims.map((d) => d >= thresholds.dimensionMetAt);
   /**
    * The average is over the six QUESTIONS, not the four dimensions (founder decision,
    * 20/08/2026). Budget therefore carries two votes and Authority one, which is the weighting
@@ -317,7 +362,7 @@ export function computeBant(input: BantInput): BantResult {
     bantTimeline: met[3],
     bantScore: met.filter(Boolean).length,
     bantAvg,
-    bantVerdict: bantVerdictFor(bantAvg),
+    bantVerdict: bantVerdictFor(bantAvg, thresholds),
   };
 }
 

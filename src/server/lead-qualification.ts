@@ -5,6 +5,7 @@ import { computeBant, type BantInput, type BantResult } from "@/lib/booking-inta
 import { scoreFromAnswers } from "@/lib/qualification";
 import { mapInboundAnswers, type InboundMapping } from "@/lib/qualification-inbound";
 import { getQualificationQuestions } from "./qualification";
+import { getQualificationConfig } from "./founder-config";
 
 /**
  * Scoring a lead AT OPT-IN - Application Logic §4.3 stage 1.
@@ -112,9 +113,15 @@ export async function scoreLeadAtOptIn(
       return { scored: false, skipped: "manual-score-exists", bant: null, mapping };
     }
 
+    /**
+     * The founder's cutoffs apply to an opt-in score exactly as they do to a booking's. These
+     * two paths write to the SAME `Lead.bantVerdict` column, so a cutoff honoured in one and not
+     * the other would mean a prospect's verdict depended on which door they came through.
+     */
+    const { thresholds } = await getQualificationConfig();
     const bant = questions.length > 0
-      ? scoreFromAnswers(mapping.answers, questions)
-      : computeBant(mapping.answers as BantInput);
+      ? scoreFromAnswers(mapping.answers, questions, thresholds)
+      : computeBant(mapping.answers as BantInput, thresholds);
 
     await writeScore(leadId, payload, mapping, bant, questions.length > 0);
     return { scored: true, skipped: null, bant, mapping };

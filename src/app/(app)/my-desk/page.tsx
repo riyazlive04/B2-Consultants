@@ -1,5 +1,6 @@
 import { ClipboardList, Phone } from "lucide-react";
 import { requireSection } from "@/lib/rbac";
+import { hasCapability } from "@/lib/capabilities";
 import { getDeskIdentity, getTelecallerDesk } from "@/server/telecaller-desk-metrics";
 import { getL1Desk } from "@/server/l1-desk-metrics";
 import { getL2Desk } from "@/server/l2-desk-metrics";
@@ -120,7 +121,9 @@ export default async function MyDeskPage() {
     return (
       <div className="space-y-6">
         {header(who.name, who.roleTitle, "who is on my calendar today, and who hasn't shown?")}
-        <L2Desk desk={l2} />
+        {/* `routeDiscoveryCall` refuses the Highly Qualified verdict without `outreach.qualify`,
+            so the routing form is told up front rather than failing on submit. */}
+        <L2Desk desk={l2} canQualify={hasCapability(session.role, session.capabilities, "outreach.qualify")} />
         <OwnCommission data={commission} />
       </div>
     );

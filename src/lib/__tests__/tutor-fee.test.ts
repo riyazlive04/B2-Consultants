@@ -90,11 +90,51 @@ describe("tutor fee - config", () => {
     assert.equal(tutorRatePerHeadRupees("A1", 4, coerceTutorFeeConfig(undefined)), 8000);
   });
 
-  test("a partial config is rejected wholesale rather than half-applied", () => {
-    // Half a rate table is worse than none: it would pay some levels from the founder's
-    // intent and others from a default nobody chose.
-    const partial = coerceTutorFeeConfig({ thresholdStudents: 4, ratesByLevel: { A1: { atOrAbove: 1, below: 2 } } });
-    assert.deepEqual(partial, DEFAULT_TUTOR_FEE_CONFIG);
+  /**
+   * ── THIS TEST'S PREMISE CHANGED ON 1 NOV 2026, AND THE NEW RULE IS STRICTER ────────────────
+   *
+   * It used to assert that a card listing only A1 was rejected wholesale, on the reasoning that
+   * "half a rate table is worse than none: it would pay some levels from the founder's intent and
+   * others from a default nobody chose."
+   *
+   * That was right while `ratesByLevel` had three FIXED keys, because a missing key meant "we do
+   * not know what this level pays" and the old lookup filled it from the shipped config.
+   *
+   * The card is now keyed by level code, and a missing key means something definite: **this level
+   * carries no trainer fee.** That is exactly the state every level other than A1/A2/B1 was
+   * already in - it is how GN_B2 stayed out of the cost table - and it is now the founder's
+   * statement rather than a hardcoded one. So a one-row card is not half a table; it is a
+   * complete answer that happens to be short.
+   *
+   * The thing the old test was protecting is still protected, more strongly: nothing is ever paid
+   * from a default nobody chose, because an unpriced level is SKIPPED. That is asserted below
+   * against `computeTutorFee`, which is the function every caller actually goes through.
+   */
+  test("a card listing one level prices that level and no other", () => {
+    const oneRow = coerceTutorFeeConfig({
+      thresholdStudents: 4,
+      ratesByLevel: { A1: { atOrAbove: 1, below: 2 } },
+    });
+    assert.equal(oneRow.thresholdStudents, 4, "the founder's threshold is kept");
+    assert.deepEqual(oneRow.ratesByLevel, { A1: { atOrAbove: 1, below: 2 } });
+    assert.equal(tutorRatePerHeadRupees("A1", 4, oneRow), 1, "A1 is paid from the card");
+  });
+
+  test("a card whose SHAPE is wrong still falls back wholesale", () => {
+    // A band missing `below`, or a level code that is not one, is not a short answer - it is an
+    // unreadable one, and an unreadable rate table must not price anything.
+    for (const bad of [
+      { thresholdStudents: 4, ratesByLevel: { A1: { atOrAbove: 1 } } },
+      { thresholdStudents: 4, ratesByLevel: { "gn a1": { atOrAbove: 1, below: 2 } } },
+      { thresholdStudents: 4, ratesByLevel: { A1: 7000 } },
+      { thresholdStudents: 0, ratesByLevel: { A1: { atOrAbove: 1, below: 2 } } },
+    ]) {
+      assert.deepEqual(
+        coerceTutorFeeConfig(bad),
+        DEFAULT_TUTOR_FEE_CONFIG,
+        `kept an unreadable card: ${JSON.stringify(bad)}`,
+      );
+    }
   });
 });
 

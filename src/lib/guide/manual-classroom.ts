@@ -3,6 +3,7 @@ import { consoleHref, type GuideManual } from "./manual-types";
 /* Shared click paths, so the same Console panel is always named the same way. */
 const C_DAILY = ["Sidebar", "Admin", "Founder Console", "Delivery & team", "Daily Targets"];
 const C_GAME = ["Sidebar", "Admin", "Founder Console", "Delivery & team", "Gamification"];
+const C_WEEKLY = ["Sidebar", "Admin", "Founder Console", "Delivery & team", "Weekly reports"];
 const C_ALERTS = ["Sidebar", "Admin", "Founder Console", "System", "Alerts & Chasing"];
 const C_BOARD = ["Sidebar", "Admin", "Founder Console", "System", "Leaderboard"];
 const C_STOP = ["Sidebar", "Admin", "Founder Console", "System", "Why students stop"];
@@ -741,6 +742,47 @@ export const MANUAL_CLASSROOM: GuideManual[] = [
           route: "/my-journey",
           caption: "The weekly sprint strip and this week's check-in.",
           highlight: { text: "Weekly sprint", label: "Your sprint weeks" },
+        },
+      },
+      {
+        id: "weekly-report",
+        name: "My weekly reports",
+        where: ["Sidebar", "My Work", "My Journey"],
+        href: "/my-journey",
+        what: "The short form your coach reads before your next session, and your own answers from the weeks before.",
+        use: [
+          "Find My weekly reports. When a week is open the form is already there - press Fill it in if it is folded away.",
+          "Answer every question marked with a star. It takes about four minutes.",
+          "Use the last box to tell your coach anything the numbers do not say.",
+          "Press Send my report. You can press Change my answers and send it again any time while the week is still open.",
+          "Read the weeks below to see what you told your coach before, in your own figures.",
+        ],
+        logic: [
+          "This is the only place a weekly report is filled in. You are already signed in, so there is nothing to type to prove who you are and no link to find.",
+          "A week opens on Friday morning and closes on Sunday night by default. After that it is still accepted and marked late - a late answer is worth more than no answer.",
+          "Amending does not change when the report arrived. A Friday answer corrected on Monday is still a Friday answer.",
+          "What you report is what your coach's screen shows. The flags they see - green, yellow, red - are worked out from these answers and from the weeks before.",
+          "You do not see your own flag, your streak or your coach's notes here, unless your coach ticked a note as one to share with you.",
+          "A question your cohort was never asked shows as nothing rather than as a zero.",
+        ],
+        controls: [
+          {
+            setting: "When the week opens and closes, and the questions you are asked",
+            where: C_WEEKLY,
+            href: consoleHref("delivery", "weekly-report"),
+            who: ["ADMIN"],
+            default: "Opens Friday 10:00, closes Sunday 21:00 IST",
+            effect: "Set by the admin. A change applies to the next week opened, never to one already answered.",
+          },
+        ],
+        watchOut: [
+          "If no form appears, either the week has not been opened for your cohort yet or your record has no portal login attached to it. Ask your coach.",
+        ],
+        shot: {
+          file: "my-journey-weekly-report.png",
+          route: "/my-journey",
+          caption: "This week's report, answered in place, with the weeks you have already sent below it.",
+          highlight: { text: "My weekly reports", label: "Your weekly form" },
         },
       },
       {
@@ -2030,6 +2072,196 @@ export const MANUAL_CLASSROOM: GuideManual[] = [
       {
         q: "Who sees the Automations block?",
         a: "Everyone except students. It reads the same live list as Founder Console, System, Not armed.",
+      },
+    ],
+  },
+  {
+    section: "weekly-reports",
+    overview:
+      "Weekly Reports is the delivery team's instrument for one question: did this student tell us anything about last week, and is it getting better or worse. Students answer a short form on their own dashboard; the tutor or head coach records what they did about it. Everything else on the screen - the flags, the streaks, the weeks of silence - is worked out from those answers rather than typed in.",
+    engines: ["weeklyReport", "whatsapp"],
+    features: [
+      {
+        id: "this-week",
+        name: "This week",
+        where: ["Sidebar", "Classroom", "Weekly Reports", "This week"],
+        href: "/weekly-reports?tab=0",
+        what: "One row per student: what they reported, the flag it earns them, and your review beside it.",
+        use: [
+          "Pick a cohort and a week. On open you get the newest week, because the Monday question is about the week that just finished.",
+          "Press Open this week to put the form on every student's dashboard, then Ask the cohort to WhatsApp everyone on the roster that it is waiting for them.",
+          "Use Question set to pick what THIS cohort is asked. Two cohorts on the same level can be running different activities, so the set is a per-cohort choice; it applies to the next week you open.",
+          "Press Remind non-responders part-way through the week to chase only the people who have not answered.",
+          "Press Review on a row to record the action you took, whether it still needs a follow-up, and a note.",
+          "Set the flag by hand only when you disagree with the rules. Leave it on Use the derived flag the rest of the time.",
+        ],
+        logic: [
+          "There is one way in: the student signs in and answers on their own My Journey page. The session is the identity check, so there is nothing for them to type and nothing anyone can forward - a message that leaks out of a cohort's group chat lets nobody answer as anybody. The WhatsApp message carries a link to the portal, not to a form.",
+          "A cohort is asked the set chosen for it, or failing that the set pinned to its level, or failing that its line's general set. A cycle pins the set it was opened with, so rewording a question later never changes what an answered week was asked.",
+          "A submission after the deadline still counts and is marked Late. The founders' own sheet had three values for this - Yes, No and Late - because a late answer is worth more than no answer.",
+          "A student can amend their answers until the week closes. The time it first arrived is kept, so a Friday answer corrected on Monday does not become a late one.",
+          "The flag reads the student's whole run of weeks, not just this one. A single missed report is a yellow immediately, with no grace period; two in a row, no applications for two weeks, or a full ghost window of silence is a red.",
+          "Coming back from a red takes two clean weeks. One good week shows as yellow, which is the founders' own rule: yellow is the interim.",
+          "Elite is held to a tighter line than Guided by default - two silent weeks rather than three, and the founder hears about a yellow.",
+          "A dash in a number column means that question was never asked of this cohort. It is not a zero, and no rule reads it as one - a zero is a real and serious answer, and it is what the red-flag rules look for.",
+          "Streak, last report date and weeks silent are all derived on read. Nothing on this screen is a stored rollup, which is exactly what went stale on the spreadsheet this replaced.",
+          "Nobody is messaged twice for the same week. A manual send and the engine's own send are de-duplicated against each other through the message log.",
+        ],
+        controls: [
+          {
+            setting: "When the week opens and closes, and whether anything is sent at all",
+            where: ["Sidebar", "Admin", "Founder Console", "Delivery & team", "Weekly reports"],
+            href: "/console?area=delivery&panel=weekly-report",
+            who: ["ADMIN"],
+            default: "Opens Friday 10:00, closes Sunday 21:00 IST. Engine off, dry run on.",
+            effect: "Forward only: weeks already open keep the deadline they were created with, because whether a report was late is a fact about the moment it arrived.",
+          },
+          {
+            setting: "The red-flag thresholds - applications, networking, posts, ghost weeks",
+            where: ["Sidebar", "Admin", "Founder Console", "Delivery & team", "Weekly reports"],
+            href: "/console?area=delivery&panel=weekly-report",
+            who: ["ADMIN"],
+            default: "10 applications, 7 contacts, 7 posts a week; yellow below 5 on either; 3 silent weeks on Guided, 2 on Elite.",
+            effect: "Applies everywhere at once, including to past weeks: the flags are derived on read, so lowering a target re-colours the history too. A flag somebody set by hand is not touched.",
+          },
+          {
+            setting: "The questions each cohort is asked",
+            where: ["Sidebar", "Admin", "Founder Console", "Delivery & team", "Weekly reports"],
+            href: "/console?area=delivery&panel=weekly-report",
+            who: ["ADMIN"],
+            default: "Two question sets: a B2 sprint report and a shorter German Note check-in.",
+            effect: "Editing a live question mints a new version rather than changing the old one, so answers already given still read against the question that was actually asked.",
+          },
+          {
+            setting: "The WhatsApp templates that tell the cohort their week is open",
+            where: ["Sidebar", "Marketing", "WhatsApp", "Settings"],
+            href: "/whatsapp?tab=1",
+            who: ["ADMIN"],
+            default: "Not bound - nothing can be sent until an approved template is bound to each of the three touchpoints.",
+            effect: "A touchpoint with no bound template refuses the send and logs it as skipped rather than sending a blank message.",
+          },
+        ],
+        watchOut: [
+          "While the dry run is on, the engine opens every cohort's week and writes a full skipped row per student. The screen fills up and looks alive, and not one student has been sent anything.",
+          "A student whose record has no portal login cannot answer at all, and the only symptom is a week with no submission - which looks exactly like a student ignoring you. The screen counts them for you; send their login from the student's record.",
+        ],
+        shot: {
+          file: "weekly-reports-this-week.png",
+          route: "/weekly-reports?tab=0",
+          caption: "This week: who answered, what they said, and the flag it earns them.",
+          // NOT "Send the link": that button reads "Send again" once the week has gone out, so
+          // the capture failed on exactly the state a seeded demo is usually left in. The
+          // question-set picker is on the screen in every state of the cycle.
+          highlight: { text: "Question set", label: "Which questions this cohort is asked" },
+        },
+      },
+      {
+        id: "needs-attention",
+        name: "Needs attention",
+        where: ["Sidebar", "Classroom", "Weekly Reports", "Needs attention"],
+        href: "/weekly-reports?tab=1",
+        what: "Every yellow and red across the cohorts you run, worst first, with the chase message already written.",
+        use: [
+          "Read down the list: it is sorted red first, then by how long the student has been silent.",
+          "Read the Why column before you message anybody - it says which rule fired.",
+          "Press Copy message to take the chase wording, check the bracketed bits, and send it from your own WhatsApp.",
+        ],
+        logic: [
+          "The list is derived from the submissions every time you open it. The spreadsheet this replaces asked a person to copy the yellow and red students across by hand every week.",
+          "Tell the founder appears on a row when the rules say it must be escalated: any red, and a yellow on a level configured to copy the founder in.",
+          "The chase wording comes from the founders' own message templates, filled in with this student's figures and the targets the flag was actually derived from.",
+          "The message is for copying, not sending. An approved WhatsApp template cannot carry anything this long or this personal, so this is what you paste into a real conversation.",
+        ],
+        watchOut: [
+          "A placeholder left in square brackets means the app had no value for it. Fill it in before you send, or do not send that line.",
+        ],
+        shot: {
+          file: "weekly-reports-attention.png",
+          route: "/weekly-reports?tab=1",
+          caption: "Needs attention: every yellow and red, worst first, with the reason that fired.",
+          highlight: { text: "Copy message", label: "The chase wording, already filled in" },
+        },
+      },
+      {
+        id: "weekly-pulse",
+        name: "Weekly pulse",
+        where: ["Sidebar", "Classroom", "Weekly Reports", "Weekly pulse"],
+        href: "/weekly-reports?tab=2",
+        what: "Submissions and self-reported output, week by week, across every cohort you run.",
+        use: [
+          "Read the top chart for whether people are answering at all, and the bottom one for whether their output is rising.",
+          "Hover a column or point for the week's full figures.",
+        ],
+        logic: [
+          "Grouped by calendar week, not by cohort week, so two cohorts that started months apart both contribute to the same Monday.",
+          "A gap in the line is a week nobody was asked a countable question. It is drawn as a break rather than a zero, because a zero there would read as a collapse in activity that never happened.",
+          "These figures are what students typed into their own form. The Leaderboard scores measured activity instead, so the two will not always agree - and that is the point of having both.",
+        ],
+        shot: {
+          file: "weekly-reports-pulse.png",
+          route: "/weekly-reports?tab=2",
+          caption: "The weekly pulse: who answered, and what they reported.",
+          highlight: { text: "Who answered", label: "Reports in against reports missing" },
+        },
+      },
+      {
+        id: "history",
+        name: "History",
+        where: ["Sidebar", "Classroom", "Weekly Reports", "History"],
+        href: "/weekly-reports?tab=3",
+        what: "One row per student, their whole run of weeks across the page - the view that shows somebody going quiet.",
+        use: [
+          "Read a row left to right: oldest week first, one letter per week.",
+          "Hover a letter for that week's flag and the reasons behind it.",
+          "Use the four columns on the right for the summary: streak, weeks silent, last report and the flag now.",
+        ],
+        logic: [
+          "The grid holds the same answers as This week, read the other way round - down a student rather than across a cohort.",
+          "A dot means no report was ever asked for that week, which is different from a week they missed.",
+          "The four right-hand columns are the ones the old spreadsheet kept by hand: Weekly Form Streak, Weeks Silent, Last Form Date and Flag Status.",
+        ],
+        shot: {
+          file: "weekly-reports-history.png",
+          route: "/weekly-reports?tab=3",
+          caption: "History: every student's run of weeks, with the streak and silence worked out.",
+          highlight: { text: "Streak", label: "Derived, never typed in" },
+        },
+      },
+    ],
+    related: [
+      { section: "coaching", why: "The cohorts and students this screen reports on are the ones you run from there." },
+      { section: "attendance", why: "The other half of whether a student is engaged. Attendance has its own signal, and this screen deliberately does not re-derive it." },
+      { section: "leaderboard", why: "Scores measured activity, where this screen records what the student said. Read together, the gap between them is itself a signal." },
+      { section: "my-journey", why: "Where a student with a login answers the form, sees their own weeks back, and reads any review note marked as shareable." },
+    ],
+    faq: [
+      {
+        q: "A student says they cannot answer their week.",
+        a: "Check the week is still open, then check their record has a portal login attached - without one there is nowhere for them to answer. The screen counts the students in that position above the table.",
+      },
+      {
+        q: "Nothing is being sent.",
+        a: "Three things have to be true: the engine is on in Console, the dry run is off, and an approved WhatsApp template is bound to each weekly touchpoint. The notice at the top of the screen says which one is missing.",
+      },
+      {
+        q: "A student answered but still shows as missing.",
+        a: "They may have answered against a different week. Check the week picker, and check whether they submitted after the deadline - a late answer shows as Late, not as Missing.",
+      },
+      {
+        q: "Can I fill the form in for a student who replied over WhatsApp?",
+        a: "Not yet. For now, record what they said in the review note on their row so the next person reading the cohort can see it.",
+      },
+      {
+        q: "A student says they cannot find the form.",
+        a: "It is on their My Journey page, under My weekly reports, whenever the week is open. If it is not there, either the week has not been opened for their cohort or their record has no portal login attached.",
+      },
+      {
+        q: "This cohort is doing something different from the rest of its level.",
+        a: "Make a question set for it in Founder Console, Delivery and team, Weekly reports, then pick it under Question set on this screen. It applies to the next week you open, not to weeks already answered.",
+      },
+      {
+        q: "Why is a student yellow when their numbers look fine?",
+        a: "Open the row and read the reasons. The most common cause is the second yellow week running, which escalates, or a recovery still in progress after a red.",
       },
     ],
   },

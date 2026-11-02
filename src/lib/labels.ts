@@ -206,6 +206,22 @@ export const LEAD_STAGE_LABELS: Record<string, string> = {
  * sends a DISCO_COMPLETED lead to the Pre-Qualified & Confirmed column instead, so the column the
  * admin just mapped never receives a single card.
  */
+/**
+ * THE STAGES THAT MEAN "A DISCOVERY CALL IS BOOKED".
+ *
+ * Two, and the reason is history. A booking used to jump a lead straight to `DISCO_BOOKED`
+ * ("Pre-Qualified & Confirmed"); `submitBooking` now writes `STRATEGY_CALL_BOOKED` instead,
+ * because picking a slot is not the same as having been qualified (see the long note on
+ * `HOLDS_THROUGH_BOOKING` in booking-actions.ts). `DISCO_BOOKED` is still reached by hand and by
+ * older rows, so both count.
+ *
+ * Exported because two METRICS asked "did a call get booked?" and both asked it of
+ * `DISCO_BOOKED` alone - so Pipeline's "Calls booked" tile and the appointment setter's
+ * auto-captured daily log each missed every booking made the normal way, through the public page.
+ * Counting is always DISTINCT BY LEAD, so a prospect who passed through both stages is one call.
+ */
+export const BOOKED_CALL_STAGES = ["STRATEGY_CALL_BOOKED", "DISCO_BOOKED"] as const;
+
 export const COLUMN_OWNING_STAGES: readonly string[] = [
   "NEW_LEAD",
   "WHATSAPP_SENT",

@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { istToday, toDateInputValue } from "@/lib/dates";
 import { hasCapability, requireSection } from "@/lib/rbac";
 import { getStudentDetail } from "@/server/students-metrics";
+import { getActiveLevels } from "@/server/levels";
+import { B2_LEVEL_KINDS, levelOptions } from "@/lib/levels";
 import { getWeeklyReports } from "@/server/weekly-report";
 import { getPersonJourney } from "@/server/onboarding-metrics";
 import { JourneyRail } from "@/components/journey/JourneyRail";
@@ -50,6 +52,8 @@ export default async function StudentDetailPage({ params }: { params: { id: stri
         canSeat={hasCapability(session.role, session.capabilities, "batches.manage")}
         todayKey={toDateInputValue(istToday())}
         weeklyReports={weeklyReports}
+        // The live catalogue, so a founder-added coaching tier is enrollable here too.
+        levelOptions={levelOptions(await getActiveLevels(), B2_LEVEL_KINDS)}
       />
     </div>
   );

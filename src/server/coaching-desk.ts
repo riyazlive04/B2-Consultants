@@ -321,9 +321,17 @@ export const getCoachingDesk = cache(
         };
 
         if (!pre && start >= now && start <= weekAhead) upcoming.push(view);
-        // Only a class this person can actually mark lands in the to-do list. A chore you are
-        // not allowed to do is not a chore, it is a dead end.
-        if (past && e._count.attendance === 0 && view.canMark) {
+        /**
+         * Only a class this person can actually mark lands in the to-do list. A chore you are
+         * not allowed to do is not a chore, it is a dead end.
+         *
+         * And a CALLED-OFF class is the same kind of dead end. The query above deliberately
+         * selects `status` rather than filtering on it, because the week should still read
+         * honestly - but the note there already said a called-off class "owes nothing", and this
+         * push was not honouring it. A cancelled class has no register to take and never will,
+         * so it sat in "Registers to take" permanently.
+         */
+        if (past && e.status === "SCHEDULED" && e._count.attendance === 0 && view.canMark) {
           needsRegister.push(view);
         }
       }

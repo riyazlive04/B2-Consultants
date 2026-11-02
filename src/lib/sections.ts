@@ -13,9 +13,35 @@
  *  or hand it to a non-admin - otherwise the only way back is a database edit.
  */
 
+import { hasCapability, type CapabilityKey, type CapabilityOverrides } from "./capabilities";
+
 export type AppRole = "ADMIN" | "HEAD" | "USER" | "STUDENT" | "TUTOR" | "COACH";
 
-export const APP_ROLES: readonly AppRole[] = ["ADMIN", "HEAD", "USER", "STUDENT", "TUTOR", "COACH"] as const;
+export const APP_ROLES = ["ADMIN", "HEAD", "USER", "STUDENT", "TUTOR", "COACH"] as const satisfies readonly AppRole[];
+
+/**
+ * The one place a role is given a name a human reads.
+ *
+ * Every role picker in the app is built from this, and every schema that accepts a role validates
+ * against `APP_ROLES`. That is not tidiness: a picker that offers only SOME of the roles silently
+ * rewrites the ones it cannot represent. A `<select>` whose value is absent from its options falls
+ * back to the FIRST option, so a form listing only Admin/Head/User turned a coach into an Admin the
+ * moment their profile was opened and saved.
+ */
+export const APP_ROLE_LABELS: Record<AppRole, string> = {
+  ADMIN: "Admin",
+  HEAD: "Head coach",
+  USER: "Telecaller",
+  STUDENT: "Student",
+  TUTOR: "Tutor",
+  COACH: "Coach",
+};
+
+/** Role options for a `<Select>`/`SegmentedControl`, in the order `APP_ROLES` declares. */
+export const APP_ROLE_OPTIONS: { value: AppRole; label: string }[] = APP_ROLES.map((value) => ({
+  value,
+  label: APP_ROLE_LABELS[value],
+}));
 
 /** Icon names the console offers. `section-icons.tsx` maps each to a lucide component
  *  and is typed against this list, so adding a name here without a component fails the build. */
@@ -157,6 +183,25 @@ type SectionCatalogueEntry = {
    * confirmation on the very section it exists to protect.
    */
   readonly sensitive?: boolean;
+  /**
+   * A SECTION WHOSE ROLE GRANT IS NOT THE WHOLE ANSWER.
+   *
+   * `roles` says the founder's layout offers this screen to that role. This says the screen then
+   * refuses anyone who does not also hold the named capability, so the nav must not offer it to
+   * them either.
+   *
+   * It exists because `batches` had both settings and they disagreed. The section listed
+   * `["ADMIN", "HEAD"]`; /batches bounces anyone without `batches.manage`, which defaults to
+   * ADMIN and is deliberately a per-person grant (see `batch-membership.test.ts` - handing it to
+   * every head coach is a product call nobody has made). So a head coach saw "Batches & Plans" in
+   * their sidebar and was thrown back to the dashboard by it, with nothing naming the tickbox
+   * that would have helped.
+   *
+   * One of the two had to give way, and hiding the item is the one that takes no permission away:
+   * the grant still works the moment it is made, and `roles` still decides whether the screen is
+   * on offer at all. ADMIN is unaffected - `hasCapability` gives the founder everything.
+   */
+  readonly needsCapability?: CapabilityKey;
   /**
    * OFF THE RAIL, STILL OPEN.
    *
@@ -334,7 +379,7 @@ export const SECTION_CATALOGUE = [
    * away rather than shown a read-only shell. So widening the section widens who can SEE
    * cohorts, which is the thing a head coach was missing.
    */
-  { key: "batches", label: "Batches & Plans", href: "/batches", phase: 2, icon: "calendar-range", group: "Classroom", roles: ["ADMIN", "HEAD"] },
+  { key: "batches", label: "Batches & Plans", href: "/batches", phase: 2, icon: "calendar-range", group: "Classroom", roles: ["ADMIN", "HEAD"], needsCapability: "batches.manage" },
   /**
    * THE SPRINT LEADERBOARD - and the only section in the catalogue a student and their coach
    * both open to look at the same thing.
@@ -355,6 +400,33 @@ export const SECTION_CATALOGUE = [
    * than hiding them in the page.
    */
   { key: "leaderboard", label: "Leaderboard", href: "/leaderboard", phase: 2, icon: "medal", group: "Classroom", roles: ["ADMIN", "HEAD", "COACH", "TUTOR", "STUDENT"] },
+  /**
+   * THE WEEKLY REPORT - the one screen that answers "did this student tell us anything about
+   * last week, and is it getting better or worse".
+   *
+   * It replaces a Google Sheet the delivery person worked through every Monday: open each
+   * sprint student, see whether their form arrived, copy the numbers into two tabs, re-read the
+   * red-flag rules by eye, paste a WhatsApp template. Every part of that is now derived, which
+   * is the point - the rule "a single missed form moves Green to Yellow immediately, no grace
+   * period" is not a rule that survives being applied by hand on a busy week.
+   *
+   * ── Why it is its own section and not a tab on My Teaching ─────────────────────────────
+   * My Teaching answers "what am I running today". This answers "who is slipping", across every
+   * cohort at once, and it is opened on a different day by a different person for a different
+   * reason - the head coach on Friday, not the tutor before a class. Burying it as a tab would
+   * also leave the founders' Monday routine with no door of its own, which is what made the
+   * sheet survive this long.
+   *
+   * Same four roles as Attendance, and for the same reason: this is the delivery team's own
+   * instrument. STUDENT is deliberately NOT here - a student sees their own weeks on
+   * /my-journey, where they cannot see anybody else's. Adding them would make this the second
+   * screen where a student sees a classmate, and unlike the leaderboard nobody asked for that.
+   *
+   * This takes Classroom to five items for ADMIN and HEAD and four for COACH and TUTOR, which
+   * is the ceiling named at the top of this file. The next thing that wants to live here has to
+   * displace something or split the group.
+   */
+  { key: "weekly-reports", label: "Weekly Reports", href: "/weekly-reports", phase: 2, icon: "clipboard-list", group: "Classroom", roles: ["ADMIN", "HEAD", "COACH", "TUTOR"] },
   { key: "arena", label: "Arena", href: "/arena", phase: 2, icon: "trophy", group: "My Work", roles: ["ADMIN", "HEAD", "USER"] },
   // Help belongs beside your own work, not in an admin drawer. It is also what keeps this group
   // non-empty for a Tutor or a Student, who would otherwise be left with a single item.
@@ -627,6 +699,14 @@ export type SectionSetting = {
   group: SectionGroup;
   order: number;
   enabled: boolean;
+  /**
+   * Listed in the sidebar? Absent = use the catalogue's own answer (`offRail`).
+   *
+   * Separate from `enabled`, which answers whether the ROUTE opens. The two were one field, and
+   * conflating them is what made every Sections save re-add Outreach to the rail - see
+   * `resolveSections` and `sectionSettingSchema`.
+   */
+  onRail?: boolean;
   roles: AppRole[];
 };
 
@@ -659,6 +739,11 @@ export type ResolvedSection = SectionSetting & {
    * Code truth, never read from the saved config - see `sensitive` on the catalogue entry.
    */
   sensitive: boolean;
+  /**
+   * The capability this screen refuses without, on top of the role grant. Code truth, never read
+   * from the saved config - see `needsCapability` on the catalogue entry.
+   */
+  needsCapability: CapabilityKey | null;
 };
 
 /**
@@ -675,6 +760,7 @@ export function resolveSections(config: SectionsConfig | null): ResolvedSection[
     const offRailByCode = "offRail" in base && base.offRail === true;
     const personal = "personal" in base && base.personal === true;
     const sensitive = "sensitive" in base && base.sensitive === true;
+    const needsCapability = "needsCapability" in base ? base.needsCapability ?? null : null;
     return {
       key: base.key,
       href: base.href,
@@ -687,6 +773,9 @@ export function resolveSections(config: SectionsConfig | null): ResolvedSection[
       // Same reasoning, same reason it is not read from the config: a founder who could switch
       // this off would be switching off the confirmation that protects the money screens.
       sensitive,
+      // Also code truth: the page's own guard is what refuses, so a config that said otherwise
+      // would only put the item back in a sidebar that leads nowhere.
+      needsCapability,
       label: s?.label?.trim() || base.label,
       icon: s?.icon ?? base.icon,
       group: s?.group ?? base.group,
@@ -694,9 +783,19 @@ export function resolveSections(config: SectionsConfig | null): ResolvedSection[
       // A locked section is never off and never leaves ADMIN, whatever the JSON says.
       // A code-hidden section ships off by default, but an explicit config override still wins.
       enabled: locked ? true : (s?.enabled ?? !hiddenByCode),
-      // Nav-only. A founder who explicitly enables the section in Console puts it back on the
-      // rail too - an explicit "on" should mean what it says.
-      offRail: locked ? false : (s?.enabled === true ? false : offRailByCode),
+      /**
+       * Nav-only, and answered by its OWN field rather than by `enabled`.
+       *
+       * This read `s?.enabled === true ? false : offRailByCode`, meaning to honour a founder who
+       * deliberately switched the section on. It could not tell that apart from the Sections
+       * panel saving every row it renders: an off-rail section is enabled (reachable, just not
+       * listed), so every save put Outreach back on the sidebar - and renaming some unrelated
+       * section re-added a nav item nobody had asked for.
+       *
+       * `onRail` is the explicit answer; absent means "use the catalogue's", which is both the
+       * default and the repair for a config a stray save has already moved.
+       */
+      offRail: locked ? false : (s?.onRail === undefined ? offRailByCode : !s.onRail),
       roles: locked ? ["ADMIN"] : (s?.roles ?? [...base.roles]),
     };
   }).sort((a, b) => a.order - b.order || a.key.localeCompare(b.key));
@@ -722,15 +821,28 @@ export function sectionAllowed(
   s: ResolvedSection,
   role: AppRole,
   overrides: SectionOverrides | null,
+  /**
+   * This person's capability overrides, for a section carrying `needsCapability`.
+   *
+   * Optional so the many callers that ask a pure question about the LAYOUT ("does this role's
+   * default list include Finance?") need not carry a second permission model. A caller deciding
+   * what one real person sees - the sidebar, `requireSection`, the command palette - passes it,
+   * because without it a section the page will refuse is still offered.
+   */
+  capabilities?: CapabilityOverrides | null,
 ): boolean {
   if (!s.enabled) return false;
   // Ahead of the ADMIN bypass on purpose - see `personal` on the catalogue entry.
   if (s.personal) return role === "STUDENT";
   if (role === "ADMIN") return true;
   if (s.locked) return false;
+  // The role grant first, then the capability: a section nobody's role offers is not opened by
+  // holding a key, and a section the page refuses is not listed because the role allows it.
   const override = overrides?.[s.key];
-  if (override !== undefined) return override;
-  return s.roles.includes(role);
+  const byRole = override !== undefined ? override : s.roles.includes(role);
+  if (!byRole) return false;
+  if (s.needsCapability && !hasCapability(role, capabilities ?? null, s.needsCapability)) return false;
+  return true;
 }
 
 /** Which sections this user actually sees, given the founder's layout. */
@@ -738,8 +850,9 @@ export function effectiveSectionKeys(
   sections: ResolvedSection[],
   role: AppRole,
   overrides: SectionOverrides | null,
+  capabilities?: CapabilityOverrides | null,
 ): Set<SectionKey> {
-  return new Set(sections.filter((s) => sectionAllowed(s, role, overrides)).map((s) => s.key));
+  return new Set(sections.filter((s) => sectionAllowed(s, role, overrides, capabilities)).map((s) => s.key));
 }
 
 /**

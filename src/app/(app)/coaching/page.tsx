@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CalendarRange, ClipboardCheck, GraduationCap, Languages, School, Users, Video } from "lucide-react";
-import { requireSection } from "@/lib/rbac";
+import { canOpenSection, requireSection } from "@/lib/rbac";
+import { attendanceBandForPct, type AttendanceBand } from "@/lib/attendance";
 import { getCoachingDesk } from "@/server/coaching-desk";
 import { getAttendanceBoard } from "@/server/attendance-board";
 import { getStudentLifecycleConfig } from "@/server/founder-config";
@@ -27,6 +28,13 @@ export const dynamic = "force-dynamic";
  * returns the cohorts you lead and the students you coach, so granting the section to someone
  * who teaches nothing shows them an honest empty desk rather than somebody else's week.
  */
+/** The band, as the text colour this table uses. One place, so the three screens agree. */
+const ATTENDANCE_TEXT: Record<AttendanceBand, string> = {
+  good: "text-ink-2",
+  warn: "text-warn",
+  bad: "text-risk",
+};
+
 export default async function CoachingPage() {
   const session = await requireSection("coaching");
   /*
@@ -59,13 +67,24 @@ export default async function CoachingPage() {
     and call the total "waiting on you", so a coach working their queue found half of it was not
     theirs to action.
   */
+  /**
+   * ── WHOSE VERDICT IT ACTUALLY IS ─────────────────────────────────────────────────────────────
+   *
+   * `saveSprintWeek` is ADMIN or HEAD, and the student record it is saved on (`/students/[id]`)
+   * opens to ADMIN, HEAD and USER. A COACH has neither - so this desk was telling a coach that N
+   * check-ins were "waiting on your verdict" and sending them to a screen that bounces them, to
+   * use a form that would refuse them. The queue is real and worth showing them; whose move it is
+   * was the part that was wrong.
+   */
+  const canRecordVerdict = session.role === "ADMIN" || session.role === "HEAD";
+  const canOpenStudentRecord = await canOpenSection("students", session.role, session.overrides);
   const awaitingMe = desk.students.filter((s) => s.sprintWeekDue?.state === "AWAITING_COACH").length;
   const chasing = desk.students.filter((s) => s.sprintWeekDue?.state === "OVERDUE").length;
   const concerning = desk.students.filter((s) => isConcerning(s.unansweredStreak)).length;
   /**
    * Registers marked but never published - work that is done and counting for nothing.
    *
-   * Zeroed when the founder has switched the publish step OFF in Console → Attendance: with it
+   * Zeroed when the founder has switched the publish step OFF in Console → System → Alerts & Chasing: with it
    * off, marks are visible to students the moment they are taken, so there is nothing withheld
    * and a banner would be telling a coach to go and do something that no longer exists.
    */
@@ -250,10 +269,17 @@ export default async function CoachingPage() {
                   {desk.students.length > 0 && (awaitingMe > 0 || chasing > 0) && (
                     <p className="rounded-field bg-surface-2 px-3 py-2 text-xs text-ink-2">
                       {awaitingMe > 0 && (
-                        <>
-                          {awaitingMe} check-in{awaitingMe === 1 ? "" : "s"} waiting on your verdict - record the
-                          week&apos;s actual on the student&apos;s record.
-                        </>
+                        canRecordVerdict ? (
+                          <>
+                            {awaitingMe} check-in{awaitingMe === 1 ? "" : "s"} waiting on your verdict - record the
+                            week&apos;s actual on the student&apos;s record.
+                          </>
+                        ) : (
+                          <>
+                            {awaitingMe} check-in{awaitingMe === 1 ? " has been" : "s have been"} answered and
+                            {awaitingMe === 1 ? " is" : " are"} waiting on the head coach&apos;s verdict.
+                          </>
+                        )
                       )}
                       {awaitingMe > 0 && chasing > 0 && " "}
                       {chasing > 0 && (
@@ -283,9 +309,15 @@ export default async function CoachingPage() {
                       {desk.students.map((s) => (
                         <Tr key={s.enrollmentId}>
                           <Td>
-                            <Link href={`/students/${s.studentId}`} className="hover:underline">
+                            {/* A coach cannot open the Students section, so the name is plain text
+                                for them rather than a link that bounces to the dashboard. */}
+                            {canOpenStudentRecord ? (
+                              <Link href={`/students/${s.studentId}`} className="hover:underline">
+                                <StudentName name={s.name} code={s.code} />
+                              </Link>
+                            ) : (
                               <StudentName name={s.name} code={s.code} />
-                            </Link>
+                            )}
                             {s.batchName && <span className="block text-caption text-muted">{s.batchName}</span>}
                           </Td>
                           <Td>
@@ -306,7 +338,11 @@ export default async function CoachingPage() {
                             {s.attendancePct === null ? (
                               <span className="text-muted">-</span>
                             ) : (
-                              <span className={s.attendancePct < 50 ? "text-risk" : s.attendancePct < 75 ? "text-warn" : "text-ink-2"}>
+                              /* The founder's thresholds, shared with every other screen that
+                                 colours an attendance percentage. This was 75/50 while the
+                                 Attendance cards used 80/60, so the same figure was amber here
+                                 and green there. */
+                              <span className={ATTENDANCE_TEXT[attendanceBandForPct(s.attendancePct, attendance.bands)]}>
                                 {s.attendancePct}%
                               </span>
                             )}
@@ -337,7 +373,9 @@ export default async function CoachingPage() {
                                 Week {s.sprintWeekDue.weekIndex}
                                 <span className="block text-caption text-muted">
                                   {s.sprintWeekDue.state === "AWAITING_COACH"
-                                    ? "your verdict"
+                                    ? canRecordVerdict
+                                      ? "your verdict"
+                                      : "answered - awaiting verdict"
                                     : s.sprintWeekDue.state === "OVERDUE"
                                       ? `unanswered since ${formatDate(s.sprintWeekDue.weekEnd)}`
                                       : `open until ${formatDate(s.sprintWeekDue.weekEnd)}`}
@@ -395,9 +433,13 @@ export default async function CoachingPage() {
                       <ul className="divide-y divide-line">
                         {desk.recentDepartures.map((d) => (
                           <li key={d.enrollmentId} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2 first:pt-0 last:pb-0">
-                            <Link href={`/students/${d.studentId}`} className="hover:underline">
+                            {canOpenStudentRecord ? (
+                              <Link href={`/students/${d.studentId}`} className="hover:underline">
+                                <StudentName name={d.name} code={d.code} />
+                              </Link>
+                            ) : (
                               <StudentName name={d.name} code={d.code} />
-                            </Link>
+                            )}
                             <span className="text-caption text-muted">
                               {d.programLevel} · stopped {formatDate(d.whenYmd)}
                               {d.byName ? ` by ${d.byName}` : ""}

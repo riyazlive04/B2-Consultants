@@ -41,7 +41,7 @@ export default async function SectionManualPage({ params }: { params: { section:
   if (!isSectionKey(params.section)) notFound();
   const key = params.section;
 
-  const accessible = await visibleSections(session.role, session.overrides);
+  const accessible = await visibleSections(session.role, session.overrides, session.capabilities);
   const section = accessible.find((s) => s.key === key);
   const manual = manualFor(key);
   if (!section || !manual) notFound();

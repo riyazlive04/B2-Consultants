@@ -3,8 +3,32 @@ import { prisma } from "./prisma";
 
 const FX_API_URL = process.env.FX_API_URL ?? "https://api.frankfurter.app";
 
-/** Last-resort rate if the API is down and the cache is empty (flagged in UI as stale). */
+/**
+ * Last-resort rate if the API is down AND the cache is empty (flagged in UI as stale).
+ *
+ * The number itself is the founder's - `cashTargets.fxFallbackInrPerEur` - because a hardcoded 90
+ * has been roughly 20% below the real rate for most of this app's life, and the one morning this
+ * path is taken is the morning every euro figure on every screen is quietly wrong. This constant
+ * remains as the floor of the floor: the value used when even the config cannot be read, which is
+ * the same failure that got us here.
+ */
 const FALLBACK_INR_PER_EUR = new Prisma.Decimal("90");
+
+/**
+ * The configured last-resort rate, or the constant above if the config is unreadable.
+ *
+ * Read lazily and only on the failure path. The happy path must not pay a settings lookup for a
+ * number it will never use - and this function is called on every money screen.
+ */
+async function fallbackRate(): Promise<Prisma.Decimal> {
+  try {
+    const { getCashTargetsConfig } = await import("@/server/founder-config");
+    const { fxFallbackInrPerEur } = await getCashTargetsConfig();
+    return new Prisma.Decimal(fxFallbackInrPerEur);
+  } catch {
+    return FALLBACK_INR_PER_EUR;
+  }
+}
 
 function utcDateOnly(d = new Date()): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
@@ -62,7 +86,7 @@ export async function getTodayInrPerEur(): Promise<FxResult> {
     // API down → newest cached rate; else hard fallback, marked stale either way.
     const latest = await prisma.fxRate.findFirst({ orderBy: { date: "desc" } });
     if (latest) return { rate: latest.inrPerEur, date: latest.date, stale: true };
-    return { rate: FALLBACK_INR_PER_EUR, date: today, stale: true };
+    return { rate: await fallbackRate(), date: today, stale: true };
   }
 }
 

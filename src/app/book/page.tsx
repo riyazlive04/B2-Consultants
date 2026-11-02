@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { formatDate, formatDateTimeInZone } from "@/lib/format";
+import { oneSlotPerInstant } from "@/lib/slot-pool";
 import { getBookingRulesConfig } from "@/server/founder-config";
 import { BookingForm, type SlotOption } from "./_components/BookingForm";
 
@@ -39,16 +40,29 @@ export default async function BookPage() {
    * Whose diary this is, for "…with Asma" in the header.
    *
    * The most common owner across the open slots rather than the first: one covered slot handed to
-   * someone else should not rename the whole page.
+   * someone else should not rename the whole page. Tallied by id, because the id is also what
+   * decides which row survives a clash below - a name cannot do that job.
    */
-  const hostTally = new Map<string, number>();
+  const hostTally = new Map<string, { name: string; n: number }>();
   for (const s of slots) {
-    const n = s.assignedTo?.name;
-    if (n) hostTally.set(n, (hostTally.get(n) ?? 0) + 1);
+    const name = s.assignedTo?.name;
+    if (!s.assignedToId || !name) continue;
+    const held = hostTally.get(s.assignedToId);
+    hostTally.set(s.assignedToId, { name, n: (held?.n ?? 0) + 1 });
   }
-  const hostName = [...hostTally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  const host = [...hostTally.entries()].sort((a, b) => b[1].n - a[1].n)[0] ?? null;
+  const hostName = host?.[1].name ?? null;
 
-  const slotOptions: SlotOption[] = slots.map((s) => ({
+  /**
+   * One button per bookable TIME, not per row.
+   *
+   * This page is the shared pool: it asks for every OPEN slot whatever its owner, which is right
+   * - a prospect here books "a discovery call", not a particular coach. But it rendered a button
+   * per row, so as soon as two coaches' horizons overlapped the same time appeared twice ("18:00
+   * 18:00 18:45 18:45"), identical and indistinguishable. The header names one host, so when two
+   * rows share an instant the host's own slot is the one kept. Nothing bookable is lost.
+   */
+  const slotOptions: SlotOption[] = oneSlotPerInstant(slots, host?.[0]).map((s) => ({
     id: s.id,
     day: formatDate(s.startsAt),
     time: istTime.format(s.startsAt),

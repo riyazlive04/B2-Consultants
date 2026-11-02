@@ -117,6 +117,42 @@ export function CommissionSection({
             ))}
           </div>
         )}
+        {/*
+          ── SETTLED, OR STILL MOVING ───────────────────────────────────────────────────────
+          Every figure above is derived from the rates stored RIGHT NOW, so a rate change
+          restates every past month. A month that has been signed off has a snapshot of what was
+          actually agreed, and the two used to look identical on screen - which is how "the
+          numbers for June changed" became a mystery rather than a consequence.
+        */}
+        {report.recorded && (
+          <p
+            className={`mt-3 rounded-field px-3 py-2 text-xs font-medium ${
+              report.recorded.drifted ? "bg-watch-soft text-watch" : "bg-surface-2 text-muted"
+            }`}
+          >
+            {report.recorded.drifted ? (
+              <>
+                Signed off at{" "}
+                <b className="font-semibold">{formatInrMinor(report.recorded.totalInrMinor, { compact: true })}</b> on{" "}
+                {formatDate(report.recorded.recordedAt)}. The figures above now come to{" "}
+                <b className="font-semibold">{formatInrMinor(report.liveTotalInrMinor, { compact: true })}</b> -
+                a rate or a payment has changed since. The signed-off amount is what was paid
+                {report.recorded.posted ? " and what the books carry" : ""}; re-record the run to adopt the new one.
+              </>
+            ) : (
+              <>
+                Signed off on {formatDate(report.recorded.recordedAt)} at this amount
+                {report.recorded.posted ? ", and recorded as owed in the books" : ""}.
+              </>
+            )}
+          </p>
+        )}
+        {!report.recorded && report.totals.length > 0 && (
+          <p className="mt-3 text-xs text-muted">
+            Provisional - worked out from the rates set today, so it moves if a rate or a payment
+            does. Recording the payout run fixes the figure for {periodLabel.toLowerCase()}.
+          </p>
+        )}
         {report.unattributed > 0 && (
           <p className="mt-3 rounded-field bg-watch-soft px-3 py-2 text-xs font-medium text-watch">
             {report.unattributed} payment{report.unattributed === 1 ? "" : "s"} without call attribution -

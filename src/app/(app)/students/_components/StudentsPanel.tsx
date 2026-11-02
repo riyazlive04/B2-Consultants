@@ -16,11 +16,12 @@ import { StudentName } from "@/components/ui/StudentName";
 import { safeAction } from "@/lib/action-guard";
 import { PhoneField } from "@/components/ui/PhoneField";
 
-const B2_LEVEL_OPTIONS = [
-  { value: "SOLO", label: "Solo (lifetime, self-paced)" },
-  { value: "GUIDED", label: "Guided (90 days)" },
-  { value: "ELITE", label: "Elite (120 days)" },
-];
+/*
+ * The three B2 tiers used to be hardcoded here. They come from the live `Level` catalogue now
+ * (kind COACHING_TIER / OTHER), because a founder can add one - and a tier they had added was
+ * offered everywhere in the app except the form that enrols a student into it. See the note on
+ * `activeLevels` in students/page.tsx.
+ */
 
 // The coach picker's options - see the matching note in StudentDetailClient.
 //
@@ -43,12 +44,18 @@ export function StudentsPanel({
   today,
   coaches,
   defaultCoach,
+  levelOptions,
 }: {
   rows: StudentListRow[];
   isAdmin: boolean;
   today: string;
   coaches: { id: string; name: string }[];
   defaultCoach: string;
+  /**
+   * The B2 programme tiers, from the live `Level` catalogue rather than a copy of the three
+   * seeded ones - so a tier the founder adds can actually be enrolled into.
+   */
+  levelOptions: { value: string; label: string }[];
 }) {
   const coachOptions = [
     { value: "", label: "- none -" },
@@ -106,7 +113,10 @@ export function StudentsPanel({
       danger: true,
     });
     if (!ok) return;
-    await deleteStudent(row.id);
+    // `deleteStudent` is Admin-only, so a Head coach got "Student deleted" over a student who
+    // was still there.
+    const res = await safeAction(() => deleteStudent(row.id));
+    if (!res.ok) return toast(res.error, "error");
     toast("Student deleted");
   };
 
@@ -182,7 +192,7 @@ export function StudentsPanel({
               <PhoneField name="phone" />
             </Field>
             <Field label="Programme level">
-              <Select name="programLevel" options={B2_LEVEL_OPTIONS} defaultValue="GUIDED" />
+              <Select name="programLevel" options={levelOptions} defaultValue={levelOptions.some((o) => o.value === "GUIDED") ? "GUIDED" : levelOptions[0]?.value ?? ""} />
             </Field>
             <Field label="Enrolment date" hint="Date they paid and started">
               <TextInput type="date" name="enrollmentDate" required defaultValue={today} />

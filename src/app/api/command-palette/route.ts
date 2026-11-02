@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ACTIVE } from "@/lib/soft-delete";
 import { resolveSections, sectionAllowed, type AppRole, type SectionOverrides } from "@/lib/sections";
+import type { CapabilityOverrides } from "@/lib/capabilities";
 import { getSectionsConfig } from "@/server/founder-config";
 
 /**
@@ -27,13 +28,16 @@ export async function GET() {
   const role = (session.user as { role?: string }).role as AppRole;
   const row = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { sectionAccess: true },
+    // `capabilities` too: a section carrying `needsCapability` is refused by its page without the
+    // key, so the palette must not offer its records either.
+    select: { sectionAccess: true, capabilities: true },
   });
   const overrides = (row?.sectionAccess as SectionOverrides | null) ?? null;
+  const capabilities = (row?.capabilities as CapabilityOverrides | null) ?? null;
   const sections = resolveSections(await getSectionsConfig());
   const allowed = (key: string) => {
     const section = sections.find((s) => s.key === key);
-    return !!section && sectionAllowed(section, role, overrides);
+    return !!section && sectionAllowed(section, role, overrides, capabilities);
   };
 
   const [contacts, students, opportunities, invoices] = await Promise.all([

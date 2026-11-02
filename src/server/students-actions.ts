@@ -13,6 +13,8 @@ import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
 import { sendLoginCredentials } from "./login-credentials";
 import { allocateStudentCode, lineForLevel } from "./student-code";
+import { isKnownLevel } from "./levels";
+import { B2_LEVEL_KINDS } from "@/lib/levels";
 import { getDeliveryDefaults, getStudentLifecycleConfig } from "./founder-config";
 import {
   decideDiscontinue,
@@ -22,6 +24,7 @@ import {
 import { normalizeStudentCode } from "@/lib/student-code";
 import { Prisma } from "@prisma/client";
 import { linkOrphanMoneyToStudent } from "./student-money-link";
+import { createStudentFromLead } from "./student-from-lead";
 import { nameKey } from "@/lib/name-key";
 
 /**
@@ -45,7 +48,22 @@ async function requireAdminOrHead() {
 
 // ── Student profile + enrollment ───────────────────────────────
 
-const B2_LEVELS = ["SOLO", "GUIDED", "ELITE"] as const; // German Note excluded (PRD2 §4)
+/**
+ * The three SEEDED coaching tiers, kept for `derivedDuration` only - NOT as the list of what may
+ * be enrolled into.
+ *
+ * ── Why the enum went ─────────────────────────────────────────────────────────────────────────
+ * `enrollmentSchema` validated `programLevel` against these three, so a coaching tier the founder
+ * added in Programs → Programmes could be created, priced, given a curriculum and sold - and then
+ * refused by the one form that enrols somebody into it, with "Invalid input". Levels are a
+ * founder-editable catalogue (`Level`, kind COACHING_TIER), and `createLevel` accepts that kind,
+ * so the fixed list here was the last place that had not noticed.
+ *
+ * Validation is now `isKnownLevel(code, B2_LEVEL_KINDS)` - the live catalogue, restricted to B2's
+ * own kinds, which is the same check the income form already makes. German Note stays excluded
+ * (PRD2 §4) because its kinds are not in `B2_LEVEL_KINDS`.
+ */
+const SEEDED_B2_LEVELS = ["SOLO", "GUIDED", "ELITE"] as const;
 
 /** A duplicate `code` is the one failure these actions can cause, and it must read as English. */
 const DUPLICATE_CODE = "That student ID is already taken - every student needs their own.";
@@ -87,20 +105,33 @@ const studentSchema = z.object({
 });
 
 const enrollmentSchema = z.object({
-  programLevel: z.enum(B2_LEVELS),
+  /**
+   * Shape only - the VALUE is checked against the live level catalogue in the action, because a
+   * zod enum cannot ask the database. See `SEEDED_B2_LEVELS`.
+   */
+  programLevel: z.string().trim().min(1, "Pick a programme level"),
   enrollmentDate: z.string().min(10),
   totalSessionsPlanned: z.string().trim().regex(/^\d{0,4}$/).optional(),
   assignedCoach: z.string().trim().optional(),
   closerId: z.string().trim().optional(), // L3 closer (User id) for the commission split
 });
 
-/** Duration + end date derive from level (PRD2 §4.1): Guided 90d, Elite 120d, Solo lifetime. */
-function derivedDuration(level: (typeof B2_LEVELS)[number], start: Date) {
-  if (level === "SOLO") return { duration: "LIFETIME" as const, programEndDate: null };
-  const days = level === "GUIDED" ? 90 : 120;
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + days);
-  return { duration: level === "GUIDED" ? ("DAYS_90" as const) : ("DAYS_120" as const), programEndDate: end };
+/**
+ * Duration + end date derive from level (PRD2 §4.1): Guided 90d, Elite 120d, Solo lifetime.
+ *
+ * `ProgramDuration` has exactly those three values, and `Level` carries no duration of its own -
+ * so a tier the founder adds has no 90/120 rule to read. It gets LIFETIME and no end date, which
+ * is the honest answer ("no fixed programme end recorded") rather than a guessed 90 days that
+ * would put a real end date, a tracker and an at-risk countdown on somebody's enrolment.
+ */
+function derivedDuration(level: string, start: Date) {
+  if (level === "GUIDED" || level === "ELITE") {
+    const days = level === "GUIDED" ? 90 : 120;
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + days);
+    return { duration: level === "GUIDED" ? ("DAYS_90" as const) : ("DAYS_120" as const), programEndDate: end };
+  }
+  return { duration: "LIFETIME" as const, programEndDate: null };
 }
 
 /**
@@ -132,6 +163,11 @@ export async function createStudent(form: FormData): Promise<ActionResult> {
   const e = enrollmentSchema.safeParse(Object.fromEntries(form));
   if (!s.success) return { ok: false, error: firstError(s.error) };
   if (!e.success) return { ok: false, error: firstError(e.error) };
+  // The live catalogue, restricted to B2's own kinds - so a coaching tier the founder added is
+  // enrollable, and a German Note level still is not. See `SEEDED_B2_LEVELS`.
+  if (!(await isKnownLevel(e.data.programLevel, B2_LEVEL_KINDS))) {
+    return { ok: false, error: "That programme level no longer exists - pick another." };
+  }
 
   const start = parseDateInput(e.data.enrollmentDate);
   const { duration, programEndDate } = derivedDuration(e.data.programLevel, start);
@@ -212,45 +248,11 @@ export async function createStudent(form: FormData): Promise<ActionResult> {
 export async function convertLeadToStudent(
   leadId: string,
 ): Promise<ActionResult & { studentId?: string }> {
+  // The Contacts door, which is Admin. The work itself lives in `createStudentFromLead` so the
+  // agreement door can do it under ITS permission instead of being re-guarded here - see that
+  // function's header.
   const session = await requireAdmin();
-  const lead = await prisma.lead.findUnique({
-    where: { id: leadId },
-    select: { id: true, name: true, email: true, phone: true, industry: true, leadSource: true },
-  });
-  if (!lead) return { ok: false, error: "Lead not found" };
-
-  const existing = await prisma.student.findFirst({ where: { leadId }, select: { id: true } });
-  if (existing) return { ok: true, studentId: existing.id };
-
-  const student = await prisma.student.create({
-    data: {
-      code: await allocateStudentCode(),
-      fullName: lead.name,
-      email: lead.email || null,
-      phone: lead.phone || null,
-      industry: lead.industry || null,
-      leadSource: lead.leadSource,
-      leadId: lead.id,
-    },
-  });
-
-  // The same backfill every other door runs. It used to link income only here, so a converted
-  // lead's instalment plan stayed detached and "paid so far" read zero against it.
-  const linked = await linkOrphanMoneyToStudent({ studentId: student.id, fullName: student.fullName });
-
-  await logActivity(session, {
-    action: "student.convert",
-    section: "students",
-    entityType: "Student",
-    entityId: student.id,
-    summary: `Converted lead ${lead.name} into a student`,
-    meta: { leadId: lead.id, incomeEntriesLinked: linked.incomes, plansLinked: linked.pendingPayments },
-  });
-  revalidatePath("/students");
-  revalidatePath("/contacts");
-  revalidatePath(`/contacts/${lead.id}`);
-  revalidatePath("/finance");
-  return { ok: true, studentId: student.id };
+  return createStudentFromLead(session, leadId);
 }
 
 export async function updateStudent(id: string, form: FormData): Promise<ActionResult> {
@@ -317,6 +319,10 @@ export async function addEnrollment(studentId: string, form: FormData): Promise<
   const session = await requireAdmin();
   const e = enrollmentSchema.safeParse(Object.fromEntries(form));
   if (!e.success) return { ok: false, error: firstError(e.error) };
+  // Same catalogue check as `createStudent` - see the note there.
+  if (!(await isKnownLevel(e.data.programLevel, B2_LEVEL_KINDS))) {
+    return { ok: false, error: "That programme level no longer exists - pick another." };
+  }
   const start = parseDateInput(e.data.enrollmentDate);
   const { duration, programEndDate } = derivedDuration(e.data.programLevel, start);
   // Same founder default as createStudent - see the note there.

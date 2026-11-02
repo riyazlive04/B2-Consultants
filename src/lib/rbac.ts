@@ -31,13 +31,37 @@ export function sectionsFor(
   sections: ResolvedSection[],
   role: AppRole,
   overrides: SectionOverrides | null,
+  /** Needed for a section carrying `needsCapability` - see `sectionAllowed`. */
+  capabilities?: CapabilityOverrides | null,
 ): ResolvedSection[] {
-  return sections.filter((s) => sectionAllowed(s, role, overrides));
+  return sections.filter((s) => sectionAllowed(s, role, overrides, capabilities));
 }
 
 /** The nav for this user, in the founder's order. */
-export async function visibleSections(role: AppRole, overrides: SectionOverrides | null) {
-  return sectionsFor(resolveSections(await getSectionsConfig()), role, overrides);
+export async function visibleSections(
+  role: AppRole,
+  overrides: SectionOverrides | null,
+  capabilities?: CapabilityOverrides | null,
+) {
+  return sectionsFor(resolveSections(await getSectionsConfig()), role, overrides, capabilities);
+}
+
+/**
+ * "Could this person open that section?" - WITHOUT redirecting.
+ *
+ * `requireSection` is the guard for a page you are on; this is the question a page asks about
+ * ANOTHER section, so it can decide how much to show. Reports is the case it was added for: the
+ * workbench can report over invoices, and whether a viewer may see invoice money is exactly
+ * "can they open Finance", not "can they open Reports".
+ */
+export async function canOpenSection(
+  key: SectionKey,
+  role: AppRole,
+  overrides: SectionOverrides | null,
+  capabilities?: CapabilityOverrides | null,
+): Promise<boolean> {
+  const section = resolveSections(await getSectionsConfig()).find((s) => s.key === key);
+  return !!section && sectionAllowed(section, role, overrides, capabilities);
 }
 
 /**
@@ -94,7 +118,7 @@ export const requireSession = cache(async () => {
 export async function requireSection(key: SectionKey) {
   const session = await requireSession();
   const section = resolveSections(await getSectionsConfig()).find((s) => s.key === key);
-  if (!section || !sectionAllowed(section, session.role, session.overrides)) {
+  if (!section || !sectionAllowed(section, session.role, session.overrides, session.capabilities)) {
     // A self-scoped page refused to a staff account is not a permissions boundary, and saying
     // "you don't have access" sends the founder looking for a switch that would not help. The
     // toast reads this to say what is actually true: the page belongs to a student.

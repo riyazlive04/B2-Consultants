@@ -62,9 +62,23 @@ export async function runAgreementReminders(): Promise<ReminderRun> {
       expiresAt: true,
       leadId: true,
       studentId: true,
-      // Only the reminder events, and only their meta - never the whole trail of every agreement.
+      /**
+       * Only the reminder events, and only their meta - never the whole trail of every agreement.
+       *
+       * ── BOTH OUTCOMES, WHICH IS THE WHOLE POINT OF RECORDING THE FAILED ONE ─────────────
+       * This read `type: "DELIVERY_SENT"` alone. A failed send records DELIVERY_SKIPPED, so
+       * `alreadyNudged` could never see it and the sweep tried again the next morning, and every
+       * morning after - the exact behaviour the comment beside `recordAgreementEvent` says it
+       * prevents ("recording the attempt turns that into one visible failure on the trail instead
+       * of a message attempted every morning forever"). The attempt WAS recorded; the reader was
+       * looking at one of the two rows it could be.
+       *
+       * It matters most in the case that caused it: a reminder that fails for want of a bound
+       * WATI template fails identically tomorrow, so the retry was pure noise - a daily failed
+       * send against a real customer's number, and a delivery-health alert that never cleared.
+       */
       events: {
-        where: { type: "DELIVERY_SENT" },
+        where: { type: { in: ["DELIVERY_SENT", "DELIVERY_SKIPPED"] } },
         select: { meta: true },
       },
     },

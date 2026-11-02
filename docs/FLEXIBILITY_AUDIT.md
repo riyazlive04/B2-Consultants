@@ -1,6 +1,31 @@
 # B2 Consultants — Application Flexibility Audit
 ## What a founder can change without a developer, and what is hardcoded
 
+> ## ⚠ SUPERSEDED FOR THE "NOT FLEXIBLE" LISTS — read this first (1 Nov 2026)
+>
+> This audit is from **17 July 2026** and its Part 1 is substantially out of date. Much of what it
+> lists as hardcoded has since become founder-editable config, including: **commission rates**
+> (`commissionRules`), the **monthly revenue/cash target** (`cashTargets`), **programme and German
+> levels with their prices, book and tutor costs** (the `Level` catalogue + `Product`), **payment
+> types** (`paymentTypes`), **expense categories with their own P&L accounts**
+> (`expenseCategories`), **invoice numbering, tax per currency and issuer** (`invoiceSettings`),
+> **instalment plan surcharges** (`instalmentPlans`), **call distribution** (`callDistribution`),
+> the **early-warning radar thresholds and the Stuck day limit** (`studentLifecycle`), **attendance
+> windows and absence notices** (`attendance`), **dunning** (`dunning`), **tutor fee rates**
+> (`tutorFee`), and the **outreach SOP's switches, SLAs, caps and first-call mode**
+> (`outreachConfig`). There are now ~40 config documents and 34 Console panels.
+>
+> **Testing against Part 1 as written will produce false findings.** The current, verified register
+> lives in **`docs/TEST_PLAN_FULL_2026-11.md` Part 4** — §4.1 is every config document with the
+> screens each one must move, and §4.3 is the genuinely still-hardcoded list. Case FLEX-077 owns
+> re-running this audit's method and either rewriting this file or retiring it.
+>
+> **What is still worth reading here, unchanged:** "The governing rule" and "The six patterns behind
+> every finding" below. Values and membership are flexible; structure is code. The six patterns —
+> especially *"looks like config, is a bare `const`"*, *no effective-dating*, *config with no UI*,
+> and *the same figure re-hardcoded in several places* — are the diagnosis this app keeps needing,
+> and §4.2 of the test plan is built directly on them.
+
 *App-wide sweep (17 Jul 2026) of every business rule, rate, threshold, enum and magic number, classified by how it can be changed. Method: five parallel code audits across Finance, Sales/CRM, Outreach/Messaging, LMS/Gamification, and Access/Config-infrastructure, with file:line evidence.*
 
 ---

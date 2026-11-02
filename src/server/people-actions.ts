@@ -11,6 +11,8 @@ import { formatIstMinutes } from "@/lib/config-schema";
 import { activityDate } from "@/lib/activity-actions";
 import { blankToUndefined, intInRange, optionalRule, rule } from "@/lib/field-rules";
 import { teamStatusClosesLogin } from "@/lib/termination-policy";
+import { APP_ROLES } from "@/lib/sections";
+import { lastAdminError } from "./admin-rails";
 import { getDailyLogEod } from "./founder-config";
 import { logActivity, diffFields } from "./activity-log";
 import { LOG_FIELD_UNIT } from "@/lib/labels";
@@ -32,15 +34,27 @@ const profileSchema = z.object({
   fullName: rule("name"),
   // NOT `name`: a role title legitimately carries digits ("Level 2 Coach").
   roleTitle: z.string().trim().min(1, "Role title is required"),
-  dashboardRole: z.enum(["ADMIN", "HEAD", "USER"]),
+  /**
+   * Validated against the WHOLE role list, not the three this form used to offer. A profile can
+   * legitimately hold COACH, TUTOR or STUDENT, and while those were absent from both the picker
+   * and this enum, opening such a profile and saving it wrote ADMIN onto their login - the
+   * `<select>` fell back to its first option. See `APP_ROLE_LABELS`.
+   */
+  dashboardRole: z.enum(APP_ROLES),
   email: rule("email"),
   phone: optionalRule("phone"),
   dateJoined: z.string().optional(),
   keyResponsibilities: optionalRule("text"),
   status: z.enum(["ACTIVE", "ON_LEAVE", "INACTIVE"]),
   logVariant: z.enum(["DISCOVERY_SPECIALIST", "APPOINTMENT_SETTER", "DELIVERY_COACH"]),
-  // First-call rotation (client notes: 80/20 split, Asma off Saturdays)
-  firstCallSharePct: blankToUndefined(intInRange(0, 100, "Share must be")),
+  /**
+   * NOT `firstCallSharePct`. That column has ONE editor now: Console → Call Distribution, which
+   * edits the whole roster at once and previews the split the engine will actually produce. This
+   * form used to write it too, from a box that could not see anybody else's share - so two
+   * screens owned one number and the profile form was the one that could silently undo a split.
+   * The field is read-only on the org chart; dropping it from the schema means a stale or
+   * hand-made submission cannot write it either.
+   */
   worksSaturdays: z.string().optional(), // checkbox
   // How many calls a day this person is expected to make - drives the My Desk bar and the
   // once-a-day greeting. Blank/0 = no target, which hides the bar rather than showing 0/0.
@@ -73,7 +87,6 @@ export async function saveTeamProfile(id: string | null, form: FormData): Promis
     keyResponsibilities: d.keyResponsibilities || null,
     status: d.status,
     logVariant: d.logVariant,
-    firstCallSharePct: Math.min(100, d.firstCallSharePct?.trim() ? parseInt(d.firstCallSharePct, 10) : 0),
     worksSaturdays: d.worksSaturdays === "on",
     dailyCallTarget: Math.min(999, d.dailyCallTarget?.trim() ? parseInt(d.dailyCallTarget, 10) : 0),
     monthlyPayInrMinor: d.monthlyPayInr?.trim() ? majorStringToMinor(d.monthlyPayInr) : BigInt(0),
@@ -113,6 +126,25 @@ export async function saveTeamProfile(id: string | null, form: FormData): Promis
     profileUserId ?? (await prisma.user.findUnique({ where: { email: d.email }, select: { id: true } }))?.id ?? null;
   const closingUserId = linkedUserId && teamStatusClosesLogin(d.status) ? linkedUserId : null;
 
+  /**
+   * THIS FORM CHANGES A LOGIN'S ROLE, so it carries the same two rails Users & access has.
+   *
+   * The tail of this action syncs `User.role` to the Dashboard role picked here. That makes the
+   * org chart a second door onto the most privileged setting in the app, and a door without rails
+   * is how the last Admin demotes themselves to Telecaller with nobody left to put it back.
+   * Checked BEFORE anything is written, so a refusal leaves the profile as it was.
+   */
+  if (linkedUserId && d.dashboardRole !== "ADMIN") {
+    const current = await prisma.user.findUnique({ where: { id: linkedUserId }, select: { role: true } });
+    if (current?.role === "ADMIN") {
+      if (linkedUserId === session.user.id) {
+        return { ok: false, error: "You cannot remove your own Admin role" };
+      }
+      const err = await lastAdminError(linkedUserId, d.dashboardRole);
+      if (err) return { ok: false, error: err };
+    }
+  }
+
   if (closingUserId) {
     /**
      * The rails `suspendUser` has, checked BEFORE anything is written so a refusal leaves the
@@ -141,7 +173,24 @@ export async function saveTeamProfile(id: string | null, form: FormData): Promis
 
   if (id) {
     const before = await prisma.teamProfile.findUnique({ where: { id } });
-    await prisma.$transaction([prisma.teamProfile.update({ where: { id }, data }), ...closeLogin]);
+    /**
+     * ── THE EMAIL IS THE LINK CONTROL, SO SAVING HAS TO MAKE IT ONE ───────────────────────
+     *
+     * `TeamProfile.userId` is what joins the org record to the login, and the Edit-access dialog
+     * tells an admin to "link it on Team & org chart". There is no link BUTTON there and there
+     * should not be one - the join is the email address, and this form edits it. But only the
+     * CREATE branch below ever wrote `userId`: correcting an existing profile's email to match a
+     * login left `userId` null, so the dialog's instruction was followed and nothing happened.
+     *
+     * Forward-only and never unset: a profile already linked keeps its link (`profileUserId`
+     * wins above), and an email that matches nobody leaves `userId` exactly as it was. So this
+     * can attach a profile to its login; it can never silently detach one.
+     */
+    const linkNow = !profileUserId && linkedUserId ? { userId: linkedUserId } : {};
+    await prisma.$transaction([
+      prisma.teamProfile.update({ where: { id }, data: { ...data, ...linkNow } }),
+      ...closeLogin,
+    ]);
     const diff = before
       ? diffFields<Record<string, unknown>>(before, data)
       : { changed: [], before: {}, after: {} };

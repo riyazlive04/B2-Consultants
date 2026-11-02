@@ -45,7 +45,10 @@ export async function sendWhatsAppFreeTextAction(leadId: string, form: FormData)
   if (!text) return { ok: false, message: "Message is required" };
   const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { name: true, phone: true } });
   if (!lead?.phone) return { ok: false, message: "No phone number for this contact" };
-  const out = await sendFreeFormMessage(lead.phone, text, session.user.id);
+  // `{ leadId }` is what puts this reply in the thread it is a reply to. Without it the message
+  // was stored with a null `leadId`, and the inbox - which threads on exactly that column -
+  // never showed it. See `sendFreeFormMessage`.
+  const out = await sendFreeFormMessage(lead.phone, text, session.user.id, { leadId });
   if (out.sent && out.messageId) {
     await logActivity(session, {
       action: "whatsapp.send",

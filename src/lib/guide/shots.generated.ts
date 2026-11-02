@@ -14,4 +14,2123 @@ export type CapturedShot = {
   hotspot?: { x: number; y: number; w: number; h: number };
 };
 
-export const MANUAL_SHOTS: Record<string, CapturedShot> = {};
+export const MANUAL_SHOTS: Record<string, CapturedShot> = {
+  "activity-feed.png": {
+    "src": "/guide/manual/activity-feed.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 56.4,
+      "w": 5.8,
+      "h": 4.9
+    }
+  },
+  "activity-filters.png": {
+    "src": "/guide/manual/activity-filters.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 91.2,
+      "y": 50.2,
+      "w": 5.4,
+      "h": 5.3
+    }
+  },
+  "activity-headline-counts.png": {
+    "src": "/guide/manual/activity-headline-counts.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 73.3,
+      "y": 25.7,
+      "w": 24,
+      "h": 2.9
+    }
+  },
+  "activity-table.png": {
+    "src": "/guide/manual/activity-table.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 63.7,
+      "w": 11.6,
+      "h": 5.6
+    }
+  },
+  "agreements-agreement-page.png": {
+    "src": "/guide/manual/agreements-agreement-page.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 19.5,
+      "y": 35.2,
+      "w": 32.1,
+      "h": 4.4
+    }
+  },
+  "agreements-bulk.png": {
+    "src": "/guide/manual/agreements-bulk.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 34.9,
+      "y": 19.3,
+      "w": 9.2,
+      "h": 4.9
+    }
+  },
+  "agreements-list.png": {
+    "src": "/guide/manual/agreements-list.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 87,
+      "y": 12.2,
+      "w": 11.3,
+      "h": 5.3
+    }
+  },
+  "agreements-new.png": {
+    "src": "/guide/manual/agreements-new.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 19.8,
+      "y": 31.7,
+      "w": 77.1,
+      "h": 3.1
+    }
+  },
+  "agreements-templates.png": {
+    "src": "/guide/manual/agreements-templates.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 22.4,
+      "y": 9.8,
+      "w": 21.3,
+      "h": 5.1
+    }
+  },
+  "arena-badges.png": {
+    "src": "/guide/manual/arena-badges.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 32.9,
+      "w": 9.1,
+      "h": 3.6
+    }
+  },
+  "arena-leaderboard.png": {
+    "src": "/guide/manual/arena-leaderboard.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 91.2,
+      "y": 24.7,
+      "w": 5.1,
+      "h": 3.6
+    }
+  },
+  "arena-quests.png": {
+    "src": "/guide/manual/arena-quests.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 21.5,
+      "y": 32.9,
+      "w": 12.2,
+      "h": 4
+    }
+  },
+  "arena-recent-xp.png": {
+    "src": "/guide/manual/arena-recent-xp.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 18.4,
+      "y": 82.4,
+      "w": 79.9,
+      "h": 7.1
+    }
+  },
+  "attendance-catch-up.png": {
+    "src": "/guide/manual/attendance-catch-up.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 34.8,
+      "w": 34.1,
+      "h": 3.6
+    }
+  },
+  "attendance-cohorts.png": {
+    "src": "/guide/manual/attendance-cohorts.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 53.6,
+      "w": 16.9,
+      "h": 3.6
+    }
+  },
+  "attendance-never-marked.png": {
+    "src": "/guide/manual/attendance-never-marked.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 63.4,
+      "y": 38.8,
+      "w": 7.7,
+      "h": 2.9
+    }
+  },
+  "attendance-open-attendance.png": {
+    "src": "/guide/manual/attendance-open-attendance.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 23.1,
+      "y": 38.8,
+      "w": 8.8,
+      "h": 2.9
+    }
+  },
+  "attendance-publish.png": {
+    "src": "/guide/manual/attendance-publish.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 32.8,
+      "w": 11.8,
+      "h": 3.6
+    }
+  },
+  "attendance-register.png": {
+    "src": "/guide/manual/attendance-register.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 43.3,
+      "y": 38.8,
+      "w": 9.3,
+      "h": 2.9
+    }
+  },
+  "batches-coaching-cohorts.png": {
+    "src": "/guide/manual/batches-coaching-cohorts.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 88.4,
+      "y": 30,
+      "w": 9.9,
+      "h": 5.3
+    }
+  },
+  "batches-german-note-cohorts.png": {
+    "src": "/guide/manual/batches-german-note-cohorts.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 18.3,
+      "y": 30,
+      "w": 47.2,
+      "h": 4
+    }
+  },
+  "batches-plans.png": {
+    "src": "/guide/manual/batches-plans.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 88.1,
+      "y": 33.6,
+      "w": 10.2,
+      "h": 4.9
+    }
+  },
+  "batches-resources.png": {
+    "src": "/guide/manual/batches-resources.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 18.3,
+      "y": 61.6,
+      "w": 12.1,
+      "h": 2.9
+    }
+  },
+  "batches-roster.png": {
+    "src": "/guide/manual/batches-roster.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 89.3,
+      "y": 60.6,
+      "w": 9,
+      "h": 4.9
+    }
+  },
+  "batches-setup.png": {
+    "src": "/guide/manual/batches-setup.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 23.9,
+      "w": 47.3,
+      "h": 3.6
+    }
+  },
+  "batches-timetable.png": {
+    "src": "/guide/manual/batches-timetable.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 89,
+      "y": 60.6,
+      "w": 9.4,
+      "h": 4.9
+    }
+  },
+  "bookings-bant-verdicts.png": {
+    "src": "/guide/manual/bookings-bant-verdicts.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 83.5,
+      "y": 23.1,
+      "w": 7.7,
+      "h": 2.9
+    }
+  },
+  "bookings-booking-requests.png": {
+    "src": "/guide/manual/bookings-booking-requests.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 66,
+      "y": 61,
+      "w": 3.8,
+      "h": 2.9
+    }
+  },
+  "bookings-cancelled-slots.png": {
+    "src": "/guide/manual/bookings-cancelled-slots.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 79,
+      "y": 62.6,
+      "w": 7.9,
+      "h": 2.9
+    }
+  },
+  "bookings-confirm-or-cancel.png": {
+    "src": "/guide/manual/bookings-confirm-or-cancel.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 19.8,
+      "y": 88.9,
+      "w": 77.1,
+      "h": 3.6
+    }
+  },
+  "bookings-manage-availability.png": {
+    "src": "/guide/manual/bookings-manage-availability.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 18.3,
+      "y": 22.7,
+      "w": 8.2,
+      "h": 4.2
+    }
+  },
+  "bookings-public-booking-page.png": {
+    "src": "/guide/manual/bookings-public-booking-page.jpg",
+    "width": 1440,
+    "height": 900
+  },
+  "bookings-sss-calendar.png": {
+    "src": "/guide/manual/bookings-sss-calendar.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 78.1,
+      "y": 54.8,
+      "w": 10.7,
+      "h": 5.3
+    }
+  },
+  "bookings-this-week.png": {
+    "src": "/guide/manual/bookings-this-week.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 19.8,
+      "y": 56.3,
+      "w": 16.7,
+      "h": 3.6
+    }
+  },
+  "cash-cash-position.png": {
+    "src": "/guide/manual/cash-cash-position.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 54.9,
+      "w": 8.7,
+      "h": 5.3
+    }
+  },
+  "cash-owners-equity.png": {
+    "src": "/guide/manual/cash-owners-equity.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 32.9,
+      "w": 21.9,
+      "h": 3.6
+    }
+  },
+  "cash-payables.png": {
+    "src": "/guide/manual/cash-payables.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 90,
+      "y": 32.9,
+      "w": 8.3,
+      "h": 5.3
+    }
+  },
+  "cash-receivables.png": {
+    "src": "/guide/manual/cash-receivables.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 32.9,
+      "w": 9.4,
+      "h": 2.9
+    }
+  },
+  "cash-runway.png": {
+    "src": "/guide/manual/cash-runway.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 32.9,
+      "w": 18.7,
+      "h": 3.1
+    }
+  },
+  "cash-top-numbers.png": {
+    "src": "/guide/manual/cash-top-numbers.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 69.9,
+      "y": 27.3,
+      "w": 9.6,
+      "h": 2.7
+    }
+  },
+  "coaching-cohorts.png": {
+    "src": "/guide/manual/coaching-cohorts.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 23.1,
+      "y": 23.1,
+      "w": 8.4,
+      "h": 2.9
+    }
+  },
+  "coaching-my-students.png": {
+    "src": "/guide/manual/coaching-my-students.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 77.3,
+      "y": 42,
+      "w": 11.5,
+      "h": 7.6
+    }
+  },
+  "coaching-summary.png": {
+    "src": "/guide/manual/coaching-summary.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 83.5,
+      "y": 23.1,
+      "w": 10.6,
+      "h": 2.9
+    }
+  },
+  "coaching-to-mark.png": {
+    "src": "/guide/manual/coaching-to-mark.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 19.5,
+      "y": 52.6,
+      "w": 10.5,
+      "h": 4.9
+    }
+  },
+  "console-access-matrix.png": {
+    "src": "/guide/manual/console-access-matrix.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 75,
+      "w": 11.4,
+      "h": 3.6
+    }
+  },
+  "console-agreements.png": {
+    "src": "/guide/manual/console-agreements.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 66.2,
+      "w": 13.9,
+      "h": 3
+    }
+  },
+  "console-alerts.png": {
+    "src": "/guide/manual/console-alerts.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 32.9,
+      "w": 76.5,
+      "h": 3.6
+    }
+  },
+  "console-availability.png": {
+    "src": "/guide/manual/console-availability.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 18.3,
+      "y": 37,
+      "w": 80,
+      "h": 3.6
+    }
+  },
+  "console-call-distribution.png": {
+    "src": "/guide/manual/console-call-distribution.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 22,
+      "y": 32.9,
+      "w": 19.2,
+      "h": 3.1
+    }
+  },
+  "console-cash-targets.png": {
+    "src": "/guide/manual/console-cash-targets.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 64.1,
+      "w": 34.3,
+      "h": 3.6
+    }
+  },
+  "console-commission.png": {
+    "src": "/guide/manual/console-commission.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 45.6,
+      "w": 18.7,
+      "h": 8.2
+    }
+  },
+  "console-confirm-loop.png": {
+    "src": "/guide/manual/console-confirm-loop.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 22,
+      "y": 50.7,
+      "w": 26.2,
+      "h": 3.1
+    }
+  },
+  "console-daily-targets.png": {
+    "src": "/guide/manual/console-daily-targets.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 22,
+      "y": 76.3,
+      "w": 11.2,
+      "h": 3.1
+    }
+  },
+  "console-delivery-defaults.png": {
+    "src": "/guide/manual/console-delivery-defaults.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 38.9,
+      "w": 7.3,
+      "h": 3.6
+    }
+  },
+  "console-expense-categories.png": {
+    "src": "/guide/manual/console-expense-categories.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 74.3,
+      "w": 14.1,
+      "h": 4.9
+    }
+  },
+  "console-gamification.png": {
+    "src": "/guide/manual/console-gamification.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 86.8,
+      "y": 38.9,
+      "w": 9.8,
+      "h": 5.3
+    }
+  },
+  "console-goals.png": {
+    "src": "/guide/manual/console-goals.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 41.8,
+      "w": 24.7,
+      "h": 2.7
+    }
+  },
+  "console-improvements.png": {
+    "src": "/guide/manual/console-improvements.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 54.6,
+      "w": 31.7,
+      "h": 8.2
+    }
+  },
+  "console-instalment-plans.png": {
+    "src": "/guide/manual/console-instalment-plans.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 57.8,
+      "w": 76.5,
+      "h": 2.7
+    }
+  },
+  "console-invoicing.png": {
+    "src": "/guide/manual/console-invoicing.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 39.8,
+      "w": 76.5,
+      "h": 3.6
+    }
+  },
+  "console-lead-webhook.png": {
+    "src": "/guide/manual/console-lead-webhook.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 21.1,
+      "y": 47.2,
+      "w": 21.4,
+      "h": 3.1
+    }
+  },
+  "console-leaderboard.png": {
+    "src": "/guide/manual/console-leaderboard.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 39.8,
+      "w": 76.5,
+      "h": 3.6
+    }
+  },
+  "console-maintenance.png": {
+    "src": "/guide/manual/console-maintenance.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 32.9,
+      "w": 76.5,
+      "h": 3.6
+    }
+  },
+  "console-not-armed.png": {
+    "src": "/guide/manual/console-not-armed.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 45.8,
+      "w": 18.3,
+      "h": 2.7
+    }
+  },
+  "console-operations.png": {
+    "src": "/guide/manual/console-operations.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 22,
+      "y": 59.4,
+      "w": 17.1,
+      "h": 3.1
+    }
+  },
+  "console-payment-types.png": {
+    "src": "/guide/manual/console-payment-types.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 71.8,
+      "w": 12.1,
+      "h": 4.9
+    }
+  },
+  "console-per-person.png": {
+    "src": "/guide/manual/console-per-person.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 48.9,
+      "w": 71.7,
+      "h": 3.6
+    }
+  },
+  "console-qualification.png": {
+    "src": "/guide/manual/console-qualification.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 88.3,
+      "y": 32.9,
+      "w": 8.3,
+      "h": 4.7
+    }
+  },
+  "console-rewards.png": {
+    "src": "/guide/manual/console-rewards.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 84.4,
+      "y": 38.9,
+      "w": 12.2,
+      "h": 5.3
+    }
+  },
+  "console-sections.png": {
+    "src": "/guide/manual/console-sections.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 41.8,
+      "w": 31.7,
+      "h": 2.7
+    }
+  },
+  "console-student-lifecycle.png": {
+    "src": "/guide/manual/console-student-lifecycle.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 85.1,
+      "w": 9.6,
+      "h": 4.9
+    }
+  },
+  "console-tutor-fee.png": {
+    "src": "/guide/manual/console-tutor-fee.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 47.3,
+      "w": 76.5,
+      "h": 8.2
+    }
+  },
+  "console-tutor-fees.png": {
+    "src": "/guide/manual/console-tutor-fees.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 83.6,
+      "y": 45.7,
+      "w": 13,
+      "h": 4.7
+    }
+  },
+  "console-zoom.png": {
+    "src": "/guide/manual/console-zoom.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.8,
+      "y": 70.7,
+      "w": 37.5,
+      "h": 3.1
+    }
+  },
+  "contacts-archived.png": {
+    "src": "/guide/manual/contacts-archived.jpg",
+    "width": 1440,
+    "height": 900
+  },
+  "contacts-companies.png": {
+    "src": "/guide/manual/contacts-companies.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 87.8,
+      "y": 29.4,
+      "w": 10.6,
+      "h": 5.3
+    }
+  },
+  "contacts-contacts-list.png": {
+    "src": "/guide/manual/contacts-contacts-list.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 89.5,
+      "y": 35.2,
+      "w": 8.8,
+      "h": 4.9
+    }
+  },
+  "contacts-custom-fields.png": {
+    "src": "/guide/manual/contacts-custom-fields.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 89.7,
+      "y": 29.4,
+      "w": 8.7,
+      "h": 5.3
+    }
+  },
+  "contacts-tasks.png": {
+    "src": "/guide/manual/contacts-tasks.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 89.8,
+      "y": 29.4,
+      "w": 8.5,
+      "h": 5.3
+    }
+  },
+  "conversations-inbox.png": {
+    "src": "/guide/manual/conversations-inbox.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 18.6,
+      "y": 17.4,
+      "w": 5,
+      "h": 4.9
+    }
+  },
+  "conversations-settings.png": {
+    "src": "/guide/manual/conversations-settings.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 48.7,
+      "y": 64.6,
+      "w": 7.5,
+      "h": 5.3
+    }
+  },
+  "conversations-templates.png": {
+    "src": "/guide/manual/conversations-templates.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 87.7,
+      "y": 24.1,
+      "w": 10.6,
+      "h": 5.3
+    }
+  },
+  "dashboard-progress.png": {
+    "src": "/guide/manual/dashboard-progress.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 77.3,
+      "y": 31.7,
+      "w": 7.3,
+      "h": 3.6
+    }
+  },
+  "finance-archived.png": {
+    "src": "/guide/manual/finance-archived.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 49.5,
+      "y": 88,
+      "w": 6.4,
+      "h": 4.9
+    }
+  },
+  "finance-commission.png": {
+    "src": "/guide/manual/finance-commission.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 41.8,
+      "y": 88,
+      "w": 7.9,
+      "h": 4.9
+    }
+  },
+  "finance-currency-toggle.png": {
+    "src": "/guide/manual/finance-currency-toggle.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 93.5,
+      "y": 41.1,
+      "w": 4.6,
+      "h": 4.4
+    }
+  },
+  "finance-expenses.png": {
+    "src": "/guide/manual/finance-expenses.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 32.9,
+      "w": 8.5,
+      "h": 5.3
+    }
+  },
+  "finance-income.png": {
+    "src": "/guide/manual/finance-income.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 32.9,
+      "w": 8.1,
+      "h": 5.3
+    }
+  },
+  "finance-pending-payments.png": {
+    "src": "/guide/manual/finance-pending-payments.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 32.9,
+      "w": 76.5,
+      "h": 3.6
+    }
+  },
+  "finance-period-and-business.png": {
+    "src": "/guide/manual/finance-period-and-business.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 49,
+      "y": 18.4,
+      "w": 6.1,
+      "h": 4.9
+    }
+  },
+  "finance-review-charts.png": {
+    "src": "/guide/manual/finance-review-charts.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 45.8,
+      "y": 32.9,
+      "w": 25.1,
+      "h": 2.7
+    }
+  },
+  "finance-team-payments.png": {
+    "src": "/guide/manual/finance-team-payments.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 32.9,
+      "w": 34.1,
+      "h": 3.6
+    }
+  },
+  "forms-form-list.png": {
+    "src": "/guide/manual/forms-form-list.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 90.4,
+      "y": 17,
+      "w": 7.9,
+      "h": 4.9
+    }
+  },
+  "funnel-ghosted-blueprint.png": {
+    "src": "/guide/manual/funnel-ghosted-blueprint.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 18.3,
+      "y": 32.9,
+      "w": 80,
+      "h": 3.6
+    }
+  },
+  "funnel-metrics-table.png": {
+    "src": "/guide/manual/funnel-metrics-table.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 19.5,
+      "y": 32.9,
+      "w": 10.2,
+      "h": 3
+    }
+  },
+  "funnel-source-attribution.png": {
+    "src": "/guide/manual/funnel-source-attribution.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 18.3,
+      "y": 32.8,
+      "w": 80,
+      "h": 3.6
+    }
+  },
+  "funnel-this-month.png": {
+    "src": "/guide/manual/funnel-this-month.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 52.3,
+      "y": 41.3,
+      "w": 6.1,
+      "h": 3.1
+    }
+  },
+  "funnel-trend.png": {
+    "src": "/guide/manual/funnel-trend.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 77.3,
+      "w": 33.2,
+      "h": 3.6
+    }
+  },
+  "funnel-weekly-snapshot.png": {
+    "src": "/guide/manual/funnel-weekly-snapshot.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 19.8,
+      "y": 32.8,
+      "w": 10.5,
+      "h": 4
+    }
+  },
+  "funnels-ab-test.png": {
+    "src": "/guide/manual/funnels-ab-test.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 47.4,
+      "w": 15.1,
+      "h": 3.6
+    }
+  },
+  "funnels-funnel-list.png": {
+    "src": "/guide/manual/funnels-funnel-list.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 89.8,
+      "y": 17,
+      "w": 8.5,
+      "h": 4.9
+    }
+  },
+  "funnels-global-header-footer.png": {
+    "src": "/guide/manual/funnels-global-header-footer.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 24.5,
+      "y": 26.3,
+      "w": 9.8,
+      "h": 4.4
+    }
+  },
+  "funnels-page-canvas.png": {
+    "src": "/guide/manual/funnels-page-canvas.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 38.5,
+      "y": 61.7,
+      "w": 7.9,
+      "h": 4.9
+    }
+  },
+  "funnels-steps.png": {
+    "src": "/guide/manual/funnels-steps.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 91.4,
+      "y": 14.7,
+      "w": 7,
+      "h": 5.3
+    }
+  },
+  "funnels-templates.png": {
+    "src": "/guide/manual/funnels-templates.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 56.1,
+      "w": 15.1,
+      "h": 4.9
+    }
+  },
+  "german-note-community.png": {
+    "src": "/guide/manual/german-note-community.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 25.1,
+      "y": 20.7,
+      "w": 7.6,
+      "h": 4.9
+    }
+  },
+  "german-note-costs.png": {
+    "src": "/guide/manual/german-note-costs.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 76,
+      "y": 36,
+      "w": 13.4,
+      "h": 4.5
+    }
+  },
+  "german-note-financials.png": {
+    "src": "/guide/manual/german-note-financials.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 18.3,
+      "y": 27.3,
+      "w": 80,
+      "h": 4
+    }
+  },
+  "german-note-manage-batches.png": {
+    "src": "/guide/manual/german-note-manage-batches.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 88.4,
+      "y": 30,
+      "w": 9.9,
+      "h": 5.3
+    }
+  },
+  "german-note-manage-members.png": {
+    "src": "/guide/manual/german-note-manage-members.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 18.3,
+      "y": 29.8,
+      "w": 80,
+      "h": 4
+    }
+  },
+  "german-note-manage-tutors.png": {
+    "src": "/guide/manual/german-note-manage-tutors.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 18.3,
+      "y": 29.8,
+      "w": 51.6,
+      "h": 4
+    }
+  },
+  "german-note-members.png": {
+    "src": "/guide/manual/german-note-members.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 22.4,
+      "y": 13.1,
+      "w": 9.6,
+      "h": 5.1
+    }
+  },
+  "german-note-workshop.png": {
+    "src": "/guide/manual/german-note-workshop.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 18.3,
+      "y": 46.4,
+      "w": 80,
+      "h": 4
+    }
+  },
+  "guide-index.png": {
+    "src": "/guide/manual/guide-index.jpg",
+    "width": 1440,
+    "height": 900
+  },
+  "guide-manual.png": {
+    "src": "/guide/manual/guide-manual.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 38.4,
+      "y": 32.9,
+      "w": 58.2,
+      "h": 3.1
+    }
+  },
+  "guide-rules-map.png": {
+    "src": "/guide/manual/guide-rules-map.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 22.4,
+      "y": 13.1,
+      "w": 10.5,
+      "h": 5.1
+    }
+  },
+  "guide-walkthroughs.png": {
+    "src": "/guide/manual/guide-walkthroughs.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 21.5,
+      "y": 32.9,
+      "w": 31.5,
+      "h": 4
+    }
+  },
+  "improvements-filing.png": {
+    "src": "/guide/manual/improvements-filing.jpg",
+    "width": 1440,
+    "height": 900
+  },
+  "improvements-headline-numbers.png": {
+    "src": "/guide/manual/improvements-headline-numbers.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 80,
+      "y": 25.7,
+      "w": 17.3,
+      "h": 2.9
+    }
+  },
+  "improvements-queue.png": {
+    "src": "/guide/manual/improvements-queue.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 37.2,
+      "w": 11.4,
+      "h": 3.6
+    }
+  },
+  "improvements-report-detail.png": {
+    "src": "/guide/manual/improvements-report-detail.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 66.1,
+      "y": 32.9,
+      "w": 29.4,
+      "h": 2.9
+    }
+  },
+  "improvements-triage.png": {
+    "src": "/guide/manual/improvements-triage.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 65.1,
+      "y": 32.9,
+      "w": 7.8,
+      "h": 4.9
+    }
+  },
+  "improvements-where-reports-come-from.png": {
+    "src": "/guide/manual/improvements-where-reports-come-from.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 70.3,
+      "w": 16.9,
+      "h": 3.6
+    }
+  },
+  "leaderboard-standings.png": {
+    "src": "/guide/manual/leaderboard-standings.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 21.2,
+      "w": 5.4,
+      "h": 3.6
+    }
+  },
+  "my-desk-owner-task-list.png": {
+    "src": "/guide/manual/my-desk-owner-task-list.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 23.7,
+      "y": 45.3,
+      "w": 71.1,
+      "h": 3.6
+    }
+  },
+  "my-journey-badges.png": {
+    "src": "/guide/manual/my-journey-badges.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 71.3,
+      "w": 76.5,
+      "h": 3.1
+    }
+  },
+  "my-journey-journey.png": {
+    "src": "/guide/manual/my-journey-journey.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 64.3,
+      "y": 37.2,
+      "w": 4.4,
+      "h": 2.7
+    }
+  },
+  "my-journey-weekly-report.png": {
+    "src": "/guide/manual/my-journey-weekly-report.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 32.9,
+      "w": 36,
+      "h": 3.6
+    }
+  },
+  "onboarding-add-someone.png": {
+    "src": "/guide/manual/onboarding-add-someone.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 59.6,
+      "w": 27.4,
+      "h": 3.6
+    }
+  },
+  "onboarding-in-flight.png": {
+    "src": "/guide/manual/onboarding-in-flight.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 22.1,
+      "w": 9.5,
+      "h": 2.9
+    }
+  },
+  "onboarding-needs-completing.png": {
+    "src": "/guide/manual/onboarding-needs-completing.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 40.2,
+      "y": 22.1,
+      "w": 9.7,
+      "h": 2.9
+    }
+  },
+  "onboarding-reached-class.png": {
+    "src": "/guide/manual/onboarding-reached-class.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 80.5,
+      "y": 22.1,
+      "w": 14,
+      "h": 2.9
+    }
+  },
+  "onboarding-stuck.png": {
+    "src": "/guide/manual/onboarding-stuck.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 60.3,
+      "y": 22.1,
+      "w": 13.4,
+      "h": 2.9
+    }
+  },
+  "opportunities-add-opportunity.png": {
+    "src": "/guide/manual/opportunities-add-opportunity.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 86.5,
+      "y": 31,
+      "w": 11.8,
+      "h": 5.3
+    }
+  },
+  "opportunities-board.png": {
+    "src": "/guide/manual/opportunities-board.jpg",
+    "width": 1440,
+    "height": 900
+  },
+  "opportunities-how-cards-move.png": {
+    "src": "/guide/manual/opportunities-how-cards-move.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 58.6,
+      "w": 10.6,
+      "h": 3.6
+    }
+  },
+  "opportunities-manage-board.png": {
+    "src": "/guide/manual/opportunities-manage-board.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 65.1,
+      "y": 31,
+      "w": 10.9,
+      "h": 5.3
+    }
+  },
+  "opportunities-speed-to-lead.png": {
+    "src": "/guide/manual/opportunities-speed-to-lead.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 76,
+      "y": 31,
+      "w": 10.5,
+      "h": 5.3
+    }
+  },
+  "outreach-closed.png": {
+    "src": "/guide/manual/outreach-closed.jpg",
+    "width": 1440,
+    "height": 900
+  },
+  "outreach-due-now.png": {
+    "src": "/guide/manual/outreach-due-now.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 30.3,
+      "w": 16.1,
+      "h": 3.1
+    }
+  },
+  "outreach-in-flight.png": {
+    "src": "/guide/manual/outreach-in-flight.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 80.5,
+      "y": 30.3,
+      "w": 16.1,
+      "h": 5.3
+    }
+  },
+  "outreach-key-metrics.png": {
+    "src": "/guide/manual/outreach-key-metrics.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 41.6,
+      "y": 40.6,
+      "w": 7.6,
+      "h": 4.9
+    }
+  },
+  "outreach-response-time-at-risk.png": {
+    "src": "/guide/manual/outreach-response-time-at-risk.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 43.3,
+      "y": 22.1,
+      "w": 9.9,
+      "h": 4.9
+    }
+  },
+  "outreach-scheduled.png": {
+    "src": "/guide/manual/outreach-scheduled.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 60.3,
+      "y": 30.3,
+      "w": 16.1,
+      "h": 3.1
+    }
+  },
+  "outreach-settings.png": {
+    "src": "/guide/manual/outreach-settings.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 21.7,
+      "y": 49.6,
+      "w": 62.4,
+      "h": 3.6
+    }
+  },
+  "payments-archived.png": {
+    "src": "/guide/manual/payments-archived.jpg",
+    "width": 1440,
+    "height": 900
+  },
+  "payments-estimates.png": {
+    "src": "/guide/manual/payments-estimates.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 88.9,
+      "y": 50.3,
+      "w": 9.4,
+      "h": 4.9
+    }
+  },
+  "payments-invoices.png": {
+    "src": "/guide/manual/payments-invoices.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 89.5,
+      "y": 50.3,
+      "w": 8.8,
+      "h": 4.9
+    }
+  },
+  "payments-new-invoice.png": {
+    "src": "/guide/manual/payments-new-invoice.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 74.2,
+      "y": 84.3,
+      "w": 24.2,
+      "h": 5.3
+    }
+  },
+  "payments-products.png": {
+    "src": "/guide/manual/payments-products.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 88.1,
+      "y": 50.3,
+      "w": 10.2,
+      "h": 5.3
+    }
+  },
+  "payments-subscriptions.png": {
+    "src": "/guide/manual/payments-subscriptions.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 86.2,
+      "y": 50.3,
+      "w": 12.1,
+      "h": 5.3
+    }
+  },
+  "people-access-dialog.png": {
+    "src": "/guide/manual/people-access-dialog.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 72.9,
+      "y": 66.6,
+      "w": 6.6,
+      "h": 4.9
+    }
+  },
+  "people-duplicates.png": {
+    "src": "/guide/manual/people-duplicates.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 39.6,
+      "y": 19.8,
+      "w": 7.1,
+      "h": 4.9
+    }
+  },
+  "people-offboard.png": {
+    "src": "/guide/manual/people-offboard.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 54.1,
+      "y": 44.8,
+      "w": 6,
+      "h": 4.9
+    }
+  },
+  "people-okrs.png": {
+    "src": "/guide/manual/people-okrs.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 90.6,
+      "y": 26.4,
+      "w": 7.7,
+      "h": 5.3
+    }
+  },
+  "people-team-org-chart.png": {
+    "src": "/guide/manual/people-team-org-chart.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 87.3,
+      "y": 26.4,
+      "w": 11.1,
+      "h": 5.3
+    }
+  },
+  "people-users-access.png": {
+    "src": "/guide/manual/people-users-access.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 89.3,
+      "y": 26.7,
+      "w": 9,
+      "h": 5.3
+    }
+  },
+  "pipeline-aging.png": {
+    "src": "/guide/manual/pipeline-aging.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 76.3,
+      "y": 56.1,
+      "w": 21.9,
+      "h": 5.4
+    }
+  },
+  "pipeline-archived.png": {
+    "src": "/guide/manual/pipeline-archived.jpg",
+    "width": 1440,
+    "height": 900
+  },
+  "pipeline-board.png": {
+    "src": "/guide/manual/pipeline-board.jpg",
+    "width": 1440,
+    "height": 900
+  },
+  "pipeline-call-these-first.png": {
+    "src": "/guide/manual/pipeline-call-these-first.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 60.3,
+      "y": 32.9,
+      "w": 28.5,
+      "h": 3.6
+    }
+  },
+  "pipeline-discovery-call-outcomes.png": {
+    "src": "/guide/manual/pipeline-discovery-call-outcomes.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 32.9,
+      "w": 9.3,
+      "h": 4.9
+    }
+  },
+  "pipeline-first-call-split.png": {
+    "src": "/guide/manual/pipeline-first-call-split.jpg",
+    "width": 1440,
+    "height": 900
+  },
+  "pipeline-hand-out-leads.png": {
+    "src": "/guide/manual/pipeline-hand-out-leads.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 23.1,
+      "y": 32.9,
+      "w": 73.8,
+      "h": 3.6
+    }
+  },
+  "pipeline-leads.png": {
+    "src": "/guide/manual/pipeline-leads.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 32.9,
+      "w": 6.7,
+      "h": 5.3
+    }
+  },
+  "pipeline-monthly-revenue-target.png": {
+    "src": "/guide/manual/pipeline-monthly-revenue-target.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 40.4,
+      "w": 12.2,
+      "h": 3.6
+    }
+  },
+  "pipeline-pipeline-value.png": {
+    "src": "/guide/manual/pipeline-pipeline-value.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 19.8,
+      "y": 65.9,
+      "w": 6.2,
+      "h": 3.1
+    }
+  },
+  "programs-curriculum-dates.png": {
+    "src": "/guide/manual/programs-curriculum-dates.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 45.8,
+      "w": 13.1,
+      "h": 8.2
+    }
+  },
+  "programs-curriculum.png": {
+    "src": "/guide/manual/programs-curriculum.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 88.1,
+      "y": 28.7,
+      "w": 10.2,
+      "h": 4.9
+    }
+  },
+  "programs-programme-price.png": {
+    "src": "/guide/manual/programs-programme-price.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 26.5,
+      "y": 39.3,
+      "w": 6.5,
+      "h": 3.1
+    }
+  },
+  "programs-programmes.png": {
+    "src": "/guide/manual/programs-programmes.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 86.7,
+      "y": 28.7,
+      "w": 11.7,
+      "h": 5.3
+    }
+  },
+  "reports-campaign-attribution.png": {
+    "src": "/guide/manual/reports-campaign-attribution.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 21.5,
+      "y": 72,
+      "w": 27.8,
+      "h": 4
+    }
+  },
+  "reports-chart.png": {
+    "src": "/guide/manual/reports-chart.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 80,
+      "w": 12.8,
+      "h": 3.6
+    }
+  },
+  "reports-group-table.png": {
+    "src": "/guide/manual/reports-group-table.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 35.1,
+      "w": 31.2,
+      "h": 3.6
+    }
+  },
+  "reports-report-controls.png": {
+    "src": "/guide/manual/reports-report-controls.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 86.1,
+      "y": 47.8,
+      "w": 10.5,
+      "h": 4.9
+    }
+  },
+  "sites-websites.png": {
+    "src": "/guide/manual/sites-websites.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 46.2,
+      "w": 6.8,
+      "h": 3.6
+    }
+  },
+  "students-all-students.png": {
+    "src": "/guide/manual/students-all-students.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 88.4,
+      "y": 32.8,
+      "w": 9.9,
+      "h": 5.3
+    }
+  },
+  "students-book-orders.png": {
+    "src": "/guide/manual/students-book-orders.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 89.3,
+      "y": 69.4,
+      "w": 9,
+      "h": 5.3
+    }
+  },
+  "students-overview.png": {
+    "src": "/guide/manual/students-overview.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 23.1,
+      "y": 39.6,
+      "w": 11.5,
+      "h": 4.9
+    }
+  },
+  "students-tracker.png": {
+    "src": "/guide/manual/students-tracker.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 78.1,
+      "y": 32.8,
+      "w": 3.8,
+      "h": 6.9
+    }
+  },
+  "students-weekly-update.png": {
+    "src": "/guide/manual/students-weekly-update.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 32.8,
+      "w": 59.1,
+      "h": 3.6
+    }
+  },
+  "telecaller-assign.png": {
+    "src": "/guide/manual/telecaller-assign.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 39.5,
+      "w": 9,
+      "h": 5.3
+    }
+  },
+  "telecaller-payouts.png": {
+    "src": "/guide/manual/telecaller-payouts.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 18.3,
+      "y": 49.4,
+      "w": 80,
+      "h": 4
+    }
+  },
+  "telecaller-summary-cards.png": {
+    "src": "/guide/manual/telecaller-summary-cards.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 23.1,
+      "y": 23.1,
+      "w": 8.2,
+      "h": 2.9
+    }
+  },
+  "telecaller-the-team.png": {
+    "src": "/guide/manual/telecaller-the-team.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 38.5,
+      "y": 44.3,
+      "w": 4.9,
+      "h": 4.9
+    }
+  },
+  "weekly-reports-attention.png": {
+    "src": "/guide/manual/weekly-reports-attention.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 89.6,
+      "y": 72.3,
+      "w": 7.4,
+      "h": 5.6
+    }
+  },
+  "weekly-reports-history.png": {
+    "src": "/guide/manual/weekly-reports-history.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 61.7,
+      "y": 74.5,
+      "w": 8.4,
+      "h": 5.6
+    }
+  },
+  "weekly-reports-pulse.png": {
+    "src": "/guide/manual/weekly-reports-pulse.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 20.1,
+      "y": 65.3,
+      "w": 29.3,
+      "h": 3.6
+    }
+  },
+  "weekly-reports-this-week.png": {
+    "src": "/guide/manual/weekly-reports-this-week.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 56.4,
+      "y": 66.2,
+      "w": 17.9,
+      "h": 2.9
+    }
+  },
+  "whatsapp-domain-gate.png": {
+    "src": "/guide/manual/whatsapp-domain-gate.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 23.1,
+      "y": 61.8,
+      "w": 27.8,
+      "h": 3.6
+    }
+  },
+  "whatsapp-general-and-links.png": {
+    "src": "/guide/manual/whatsapp-general-and-links.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 19.8,
+      "y": 32.8,
+      "w": 77.1,
+      "h": 3.6
+    }
+  },
+  "whatsapp-history.png": {
+    "src": "/guide/manual/whatsapp-history.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 34.1,
+      "y": 43.3,
+      "w": 5.7,
+      "h": 2.9
+    }
+  },
+  "whatsapp-optouts-test.png": {
+    "src": "/guide/manual/whatsapp-optouts-test.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 19.8,
+      "y": 32.8,
+      "w": 36.5,
+      "h": 3.6
+    }
+  },
+  "whatsapp-reminder-schedule.png": {
+    "src": "/guide/manual/whatsapp-reminder-schedule.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 19.8,
+      "y": 32.8,
+      "w": 77.1,
+      "h": 3.6
+    }
+  },
+  "whatsapp-sending-status.png": {
+    "src": "/guide/manual/whatsapp-sending-status.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 87.1,
+      "y": 13.2,
+      "w": 11.2,
+      "h": 4
+    }
+  },
+  "whatsapp-stage-messages.png": {
+    "src": "/guide/manual/whatsapp-stage-messages.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 21.1,
+      "y": 42.4,
+      "w": 38.5,
+      "h": 3.1
+    }
+  },
+  "whatsapp-templates.png": {
+    "src": "/guide/manual/whatsapp-templates.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 82.2,
+      "y": 32.8,
+      "w": 14.7,
+      "h": 4.2
+    }
+  },
+  "whatsapp-test-mode.png": {
+    "src": "/guide/manual/whatsapp-test-mode.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 19.8,
+      "y": 32.8,
+      "w": 12.5,
+      "h": 2.7
+    }
+  }
+};

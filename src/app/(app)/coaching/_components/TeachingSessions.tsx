@@ -170,7 +170,7 @@ export function SessionRow({ s }: { s: DeskSessionView }) {
                 name="accessDays"
                 defaultValue=""
                 options={[
-                  { value: "", label: "Use the house default (Console → Attendance)" },
+                  { value: "", label: "Use the house default (Console → System → Alerts & Chasing)" },
                   ...RECORDING_ACCESS_DAY_CHOICES.filter((d) => d !== 0).map((d) => ({
                     value: String(d),
                     label: `${d} days`,

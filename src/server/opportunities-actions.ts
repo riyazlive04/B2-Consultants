@@ -18,6 +18,8 @@ import { applySynamateStages } from "./pipeline-reshape";
 import type { OpportunityStatus, LeadStage, PaymentPlan } from "@prisma/client";
 import type { ActionResult } from "./finance-actions";
 import { archiveData, restoreData } from "@/lib/soft-delete";
+import { findDuplicateLead } from "./lead-intake";
+import { pickFirstCaller } from "./assignment";
 
 /**
  * Mutations for the Opportunities Kanban (Synamate "Pipelines"). Moving a card into a stage that
@@ -191,13 +193,53 @@ export async function createOpportunity(form: FormData): Promise<ActionResult> {
   const stage = await prisma.pipelineStage.findUnique({ where: { id: d.stageId } });
   if (!stage || stage.pipelineId !== d.pipelineId) return { ok: false, error: "Invalid stage" };
 
+  /**
+   * ── THE INLINE "NEW CONTACT" IS A THIRD DOOR ONTO `Lead`, AND IT BEHAVED LIKE A SIDE ENTRANCE.
+   *
+   * Capture (`upsertIntakeLead`) dedupes on the normalized phone, and Contacts → Add
+   * (`createContact`) both dedupes and hands the new contact an owner from the first-call
+   * rotation. This path did neither: typing a prospect the business already has split them across
+   * two Lead rows - their calls, bookings, owner and commission with them - and the row it made
+   * carried a null `assignedToId`, so the person appeared on nobody's desk.
+   *
+   * Both are resolved here, before the transaction, for the same reason `createContact` does it
+   * outside its own: a refusal must leave no half-made contact behind.
+   */
+  const inlineName = d.newName?.trim();
+  const inlinePhone = d.newPhone?.trim();
+  let resolvedLeadId = d.leadId?.trim() || "";
+  let restoredContact = false;
+
+  if (!resolvedLeadId && inlineName && inlinePhone) {
+    const dup = await findDuplicateLead({ phone: inlinePhone });
+    if (dup) {
+      if (dup.lead.deletedAt) {
+        // Re-entering an archived contact restores them rather than erroring on a row the rep
+        // cannot see anywhere in the app - the same choice `createContact` makes.
+        await prisma.lead.update({ where: { id: dup.lead.id }, data: restoreData });
+        resolvedLeadId = dup.lead.id;
+        restoredContact = true;
+      } else {
+        return {
+          ok: false,
+          error: `A contact with this phone number already exists - ${dup.lead.name}. Pick them from the contact list instead of adding a new one.`,
+        };
+      }
+    }
+  }
+
+  // A rotation misconfiguration returns null and must never block entry - an unassigned deal is
+  // better than a refused one. Only needed when this call is about to CREATE the contact.
+  const inlineOwnerId =
+    !resolvedLeadId && inlineName && inlinePhone ? await pickFirstCaller().catch(() => null) : null;
+
   const fx = await getTodayInrPerEur();
   const valueInrMinor = d.valueInr?.trim() ? majorStringToMinor(d.valueInr) : 0n;
   const valueEurMinor = inrMinorToEurMinor(valueInrMinor, fx.rate);
 
   const result = await prisma.$transaction(async (tx) => {
-    // Resolve the contact: existing lead, or create a new one inline.
-    let leadId = d.leadId?.trim() || "";
+    // Resolve the contact: an existing lead (picked, or matched/restored above), or a new one.
+    let leadId = resolvedLeadId;
     if (!leadId) {
       if (!d.newName || !d.newPhone) throw new Error("MISSING_CONTACT");
       const lead = await tx.lead.create({
@@ -208,6 +250,8 @@ export async function createOpportunity(form: FormData): Promise<ActionResult> {
           dateIn: new Date(),
           stage: "NEW_LEAD",
           enteredById: session.user.id,
+          // Same rotation every other door uses, so the contact lands on a desk.
+          assignedToId: inlineOwnerId,
         },
       });
       await tx.leadStageHistory.create({
@@ -237,7 +281,7 @@ export async function createOpportunity(form: FormData): Promise<ActionResult> {
         position: (max._max.position ?? -1) + 1,
       },
     });
-    return { leadId, oppId: opp.id, oppName: opp.name, leadName: lead.name, newContact: !d.leadId?.trim() };
+    return { leadId, oppId: opp.id, oppName: opp.name, leadName: lead.name, newContact: !resolvedLeadId };
   }).catch((e: Error) => {
     if (e.message === "MISSING_CONTACT") return "MISSING_CONTACT" as const;
     throw e;
@@ -258,9 +302,13 @@ export async function createOpportunity(form: FormData): Promise<ActionResult> {
       valueInr: valueInrMinor.toString(),
       source: d.source || null,
       newContact: result.newContact,
+      // A restored contact looks like a new one on this form but is not: the activity log is the
+      // only place that distinction survives.
+      restoredContact,
     },
   });
   revalidatePath("/opportunities");
+  revalidatePath("/contacts");
   revalidatePath(`/contacts/${result.leadId}`);
   return { ok: true };
 }

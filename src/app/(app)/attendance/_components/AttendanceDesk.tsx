@@ -23,6 +23,7 @@ import {
 import type { AttendanceBoard, BoardSessionView } from "@/server/attendance-board";
 import { CatchUpCard } from "./CatchUpCard";
 import { countdownLabel, MAX_WINDOW_MINUTES } from "@/lib/attendance-window";
+import { attendanceBandForPct } from "@/lib/attendance";
 import { AttendanceSheetModal } from "@/components/attendance/AttendanceSheet";
 import { Modal } from "@/components/ui/Modal";
 import { Btn, SegmentedControl } from "@/components/ui/controls";
@@ -80,7 +81,7 @@ export function AttendanceDesk({ board }: { board: AttendanceBoard }) {
       rows: board.unpublished,
       empty: board.publishRequired
         ? "Every marked register has been shown to its batch."
-        : "Publishing is switched off in Console → Attendance, so marks are visible as soon as they are taken.",
+        : "Publishing is switched off in Console → System → Alerts & Chasing, so marks are visible as soon as they are taken.",
     },
   ];
 
@@ -170,7 +171,8 @@ export function AttendanceDesk({ board }: { board: AttendanceBoard }) {
                   {b.attendancePct === null ? (
                     <Pill tone="neutral">Not marked</Pill>
                   ) : (
-                    <Pill tone={b.attendancePct >= 80 ? "good" : b.attendancePct >= 60 ? "warn" : "bad"}>
+                    /* The founder's thresholds, not a copy of them - `attendanceBandForPct`. */
+                    <Pill tone={attendanceBandForPct(b.attendancePct, board.bands)}>
                       {b.attendancePct}%
                     </Pill>
                   )}

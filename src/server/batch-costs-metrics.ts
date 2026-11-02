@@ -3,7 +3,7 @@ import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { getTutorFeeConfig } from "./founder-config";
 import { tutorRatePerHeadRupees, tutorFeeForBatchInrMinor } from "@/lib/tutor-fee";
-import type { TutorFeeLevel } from "@/lib/config-schema";
+import { tutorFeeLevelFromCode } from "@/lib/tutor-fee-record";
 
 /**
  * The per-batch tutor cost line (German Note → Manage → Costs).
@@ -27,12 +27,13 @@ export type BatchCostRow = {
   threshold: number;
 };
 
-/** Levels the tutor-fee table prices. A GN_A1 batch is priced as A1. */
-const LEVEL_TO_FEE_LEVEL: Record<string, TutorFeeLevel | undefined> = {
-  GN_A1: "A1",
-  GN_A2: "A2",
-  GN_B1: "B1",
-};
+/**
+ * Which levels the tutor-fee table prices is the FOUNDER'S card, not a table in here.
+ *
+ * This file held its own `GN_A1 → A1` map until 1 Nov 2026, a third copy of a rule that also
+ * lived in `tutorFeeLevelFromCode` and in the config's schema keys. Three copies of "which levels
+ * cost a trainer" is three places to forget B2 - and all three had.
+ */
 
 /**
  * The tutor cost of every active batch (spec Part 2 §5, test cases FIN-004/005).
@@ -60,7 +61,7 @@ export const getBatchCosts = cache(async (): Promise<BatchCostRow[]> => {
 
   const out: BatchCostRow[] = [];
   for (const b of batches) {
-    const feeLevel = LEVEL_TO_FEE_LEVEL[b.level];
+    const feeLevel = tutorFeeLevelFromCode(b.level, config);
     if (!feeLevel) continue; // unpriced level - say nothing rather than invent a rate
     const headcount = b._count.members;
     out.push({

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, Check, CircleDashed, Route } from "lucide-react";
-import { requireSection } from "@/lib/rbac";
+import { canOpenSection, requireSection } from "@/lib/rbac";
 import { getPersonJourney } from "@/server/onboarding-metrics";
 import { Card, CardTitle, EmptyState, Hint, PageHeader, Pill } from "@/components/ui/kit";
 import { JourneyRail } from "@/components/journey/JourneyRail";
@@ -49,7 +49,21 @@ export default async function OnboardingWizardPage({
 }: {
   searchParams?: { lead?: string; student?: string };
 }) {
-  await requireSection("onboarding");
+  const session = await requireSection("onboarding");
+
+  /**
+   * ── WHAT THIS VIEWER CAN ACTUALLY DO HERE ────────────────────────────────────────────────────
+   *
+   * Onboarding opens to ADMIN, HEAD and USER, but the two WRITES on this page do not:
+   * `createContact` needs the Contacts section (ADMIN, USER - so not a head coach), and
+   * `convertLeadToStudent` is Admin. Both guards REDIRECT rather than return an error, so a head
+   * coach who filled in step one was thrown out to the dashboard with no message at all.
+   *
+   * The wizard is mostly links on purpose - it orchestrates screens that already exist - and a
+   * step whose screen this person cannot use is named rather than offered.
+   */
+  const canAddContact = await canOpenSection("contacts", session.role, session.overrides);
+  const canMakeStudent = session.role === "ADMIN";
 
   const leadId = searchParams?.lead?.trim() || null;
   const studentId = searchParams?.student?.trim() || null;
@@ -143,7 +157,7 @@ export default async function OnboardingWizardPage({
         />
       )}
 
-      {!person && !leadId && !studentId && <StartPerson />}
+      {!person && !leadId && !studentId && <StartPerson canAddContact={canAddContact} />}
 
       {person && (
         <>
@@ -166,7 +180,16 @@ export default async function OnboardingWizardPage({
               title={<CardTitle icon={<ArrowRight size={17} />}>Next: create their student record</CardTitle>}
               subtitle="They have signed, so they can become a student. This is the step people used to miss - it was only on their contact record, and nothing pointed at it."
             >
-              <MakeStudentButton leadId={person.ids.leadId} name={person.name} />
+              {canMakeStudent ? (
+                <MakeStudentButton leadId={person.ids.leadId} name={person.name} />
+              ) : (
+                /* `convertLeadToStudent` is Admin-only. Naming the step and who does it is more
+                   use than a button that redirects this person off the wizard. */
+                <p className="text-body text-ink-2">
+                  Creating the student record is the founder&apos;s step. {person.name} stays on the
+                  board under this step until it is done, so nothing is lost by leaving it here.
+                </p>
+              )}
             </Card>
           )}
 

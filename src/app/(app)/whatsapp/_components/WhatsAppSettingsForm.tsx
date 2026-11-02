@@ -20,6 +20,7 @@ import {
 import { formatDuration, formatDurationList } from "@/lib/duration";
 import type { BookingRulesConfig, PublicLinksConfig } from "@/lib/config-schema";
 import { safeAction } from "@/lib/action-guard";
+import { SharedSettingNotice } from "@/components/ui/SharedSettingNotice";
 
 const inputCls =
   "w-full rounded-field border border-line bg-surface-2 px-3 py-1.5 text-sm outline-none transition-colors focus:border-accent focus:bg-surface";
@@ -320,8 +321,12 @@ export function WhatsAppSettingsForm({
             ── Confirm-or-cancel ─────────────────────────────────────────────────────────
             The one touchpoint here that does something IRREVERSIBLE to a prospect's booking,
             so it says plainly what "no reply" costs them. Its settings are stored with the
-            booking rules, not the WhatsApp cadence - the Bookings tab edits the same fields.
+            booking rules, not the WhatsApp cadence, and two other screens edit the same fields -
+            `SharedSettingNotice` is what says so, from the one list of doors.
           */}
+          <div className="mt-4">
+            <SharedSettingNotice setting="confirmLoop" self="whatsapp" />
+          </div>
           <ScheduleGroup
             title="Confirm-or-cancel (no reply → release the slot)"
             hint="Asks a booked prospect to reply YES, then frees the slot if they never do."
@@ -525,7 +530,7 @@ export function WhatsAppSettingsForm({
 
           <ScheduleGroup
             title="Recording not watched (student)"
-            hint="Nudges a student who missed a class and still has not watched the recording once the catch-up grace has run out (Console → Attendance, default 24h). Uses the rehearse switch set above."
+            hint="Nudges a student who missed a class and still has not watched the recording once the catch-up grace has run out (Console → System → Alerts & Chasing, default 24h). Uses the rehearse switch set above."
             name="classCatchUpEnabled"
             on={enabled.classCatchUpEnabled}
             onToggle={setOn("classCatchUpEnabled")}

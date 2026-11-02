@@ -20,7 +20,7 @@ import {
   type MetricCounts,
   type ScoreBreakdown,
 } from "@/lib/leaderboard";
-import { getLeaderboardConfig } from "./founder-config";
+import { getAttendanceConfig, getLeaderboardConfig } from "./founder-config";
 
 /**
  * THE SPRINT LEADERBOARD - the reads.
@@ -109,7 +109,21 @@ function istYmd(d: Date): string {
 }
 
 async function loadCohort(batchId: string | null, scopeAll: boolean): Promise<Cohort> {
-  const where = scopeAll || !batchId ? { status: "ACTIVE" as const } : { status: "ACTIVE" as const, batchId };
+  /**
+   * ── NO COHORT IS NOT THE SAME AS EVERY COHORT ────────────────────────────────────────────
+   *
+   * This read `scopeAll || !batchId`, which collapsed two unrelated cases. `scopeAll` is the
+   * founder's deliberate "rank the whole school" setting and belongs here. A null `batchId` is
+   * a student who has an active enrolment and has not been SEATED yet - and for them the board
+   * quietly became the global one: they were ranked against every active enrolment in the
+   * business, under a heading naming no cohort, against students months further through a
+   * programme they had not started.
+   *
+   * An unseated student has no cohort to be ranked in, so they get none. The caller already has
+   * an honest empty-cohort path, which says "no average yet" rather than showing a row of zeroes.
+   */
+  if (!scopeAll && !batchId) return { batchId, batchName: null, enrollments: [] };
+  const where = scopeAll ? { status: "ACTIVE" as const } : { status: "ACTIVE" as const, batchId };
   const rows = await prisma.enrollment.findMany({
     where,
     select: {
@@ -148,6 +162,8 @@ async function loadCohort(batchId: string | null, scopeAll: boolean): Promise<Co
 async function gatherCounts(
   cohort: Cohort,
   from: Date,
+  /** The founder's attendance rules - only `publishRequired` is read, by the register gate below. */
+  attendanceConfig: { publishRequired: boolean },
 ): Promise<Map<string, MetricCounts>> {
   const enrollmentIds = cohort.enrollments.map((e) => e.id);
   const studentIds = cohort.enrollments.map((e) => e.studentId);
@@ -166,9 +182,28 @@ async function gatherCounts(
   };
 
   const [attendance, tasks, sprintWeeks, applications, logged, watches] = await Promise.all([
-    // Classes attended. PRESENT and LATE both count - late means they were in the room.
+    /**
+     * Classes attended. PRESENT and LATE both count - late means they were in the room.
+     *
+     * PUBLISHED REGISTERS ONLY. Marking a register is private; publishing it is what makes it
+     * count - it is what fires the absence notices and moves every attendance percentage
+     * elsewhere in the app (`catch-up.ts` and `absence-notices.ts` both require it). Without the
+     * gate this board scored marks a tutor was still working on, so a student's rank moved on
+     * work nobody had signed off and could move back again when a mark was corrected - and a
+     * classmate whose tutor published promptly was ranked behind one whose tutor had not.
+     *
+     * Follows the founder's `publishRequired` switch, like every other reader: with publishing
+     * switched off a mark counts as soon as it is written, because then nothing is being withheld.
+     */
     prisma.sessionAttendance.findMany({
-      where: { studentId: { in: studentIds }, session: { delivery: "LIVE", startsAt: { gte: from } } },
+      where: {
+        studentId: { in: studentIds },
+        session: {
+          delivery: "LIVE",
+          startsAt: { gte: from },
+          ...(attendanceConfig.publishRequired ? { attendancePublishedAt: { not: null } } : {}),
+        },
+      },
       select: { studentId: true, status: true },
     }),
     // Coursework the coach set, ticked off by the student.
@@ -253,7 +288,9 @@ async function gatherCounts(
  */
 export const getLeaderboard = cache(
   async (batchId: string | null, viewerUserId: string | null): Promise<LeaderboardView> => {
-    const config = await getLeaderboardConfig();
+    // Read together: the board scores attendance, and whether a mark counts yet is the
+    // attendance config's call, not this board's (see the register gate in `gatherCounts`).
+    const [config, attendanceConfig] = await Promise.all([getLeaderboardConfig(), getAttendanceConfig()]);
     const cohort = await loadCohort(batchId, config.scope === "ALL");
     const todayYmd = toDateInputValue(istToday());
 
@@ -298,7 +335,7 @@ export const getLeaderboard = cache(
       };
     }
 
-    const counts = await gatherCounts(cohort, from);
+    const counts = await gatherCounts(cohort, from, attendanceConfig);
 
     const scored = cohort.enrollments.map((e) => {
       const own = counts.get(e.id) ?? {};

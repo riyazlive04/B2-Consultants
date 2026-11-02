@@ -5,11 +5,13 @@ import { istMonthInstantRange, istToday } from "@/lib/dates";
 import { aggInrMinor } from "@/lib/money";
 import { ACTIVE } from "@/lib/soft-delete";
 import { computeStudentJourney, type GamificationConfig, type StudentJourney } from "@/lib/gamification";
-import { getDeliveryDefaults, getGamificationConfig } from "./founder-config";
+import { getDeliveryDefaults, getGamificationConfig, getStudentLifecycleConfig } from "./founder-config";
 import { levelKinds, levelLabels } from "./levels";
 import { lineForKind, type BusinessLine } from "@/lib/business-line";
 import { lineForLevelKind } from "@/lib/batch";
 import { parseStudentCodeParts } from "@/lib/student-code";
+import { tally, type LevelTally } from "@/lib/level-tally";
+import { programDays } from "@/lib/milestones";
 
 /** Students dashboards (PRD2 §4): counts, 90/120 tracker, satisfaction, LTV. */
 
@@ -166,6 +168,8 @@ async function ltvByStudent(): Promise<Map<string, number>> {
 export async function getStudentsOverview() {
   const today = istToday();
   const config = await getGamificationConfig();
+  // The radar's definition of "worrying" - founder-editable, see studentLifecycleConfigSchema.
+  const lifecycle = await getStudentLifecycleConfig();
   // only compared against statusChangedAt (a timestamp) → use IST instants
   const month = istMonthInstantRange(today);
 
@@ -190,11 +194,18 @@ export async function getStudentsOverview() {
         discontinueReason: true,
       },
     }),
-    // Rich pass: ONLY the active Guided/Elite rows the 90/120 tracker actually
-    // renders. Previously the three journey collections were joined onto every
-    // enrollment ever - completed and dropped ones included - and thrown away.
+    /**
+     * Rich pass: ONLY the active rows the 90/120 tracker actually renders. Previously the three
+     * journey collections were joined onto every enrollment ever - completed and dropped ones
+     * included - and thrown away.
+     *
+     * The filter is DURATION, not a list of level names. It read
+     * `programLevel: { in: ["GUIDED", "ELITE"] }`, so a coaching tier the founders added with a
+     * 90- or 120-day duration never reached the tracker that exists to count its days. The
+     * schema says what the rule is: LIFETIME means "no end date, no tracker".
+     */
     prisma.enrollment.findMany({
-      where: { status: "ACTIVE", programLevel: { in: ["GUIDED", "ELITE"] } },
+      where: { status: "ACTIVE", duration: { not: "LIFETIME" } },
       include: {
         student: { select: { id: true, fullName: true } },
         milestoneLogs: { select: { date: true, previousMilestone: true, newMilestone: true } },
@@ -219,16 +230,22 @@ export async function getStudentsOverview() {
   const droppedThisMonthRows = enrollments.filter(
     (e) => e.status === "DROPPED" && e.statusChangedAt >= month.start && e.statusChangedAt < month.end,
   );
-  const byLevel = (rows: typeof enrollments) => ({
-    SOLO: rows.filter((e) => e.programLevel === "SOLO").length,
-    GUIDED: rows.filter((e) => e.programLevel === "GUIDED").length,
-    ELITE: rows.filter((e) => e.programLevel === "ELITE").length,
-  });
+  /**
+   * By level, keyed by the level CODE - not three named fields.
+   *
+   * Levels are a founder-editable catalogue, so this cannot know the codes. Three named fields
+   * meant a card counting every active enrolment sat above a popup listing three rows, and the
+   * two disagreed the moment a fourth tier existed. `levelTallyRows` builds the rows against the
+   * live catalogue at the screen. See lib/level-tally.ts.
+   */
+  const byLevel = (rows: typeof enrollments): LevelTally => {
+    const t: LevelTally = {};
+    for (const e of rows) tally(t, e.programLevel);
+    return t;
+  };
   const counts = {
     totalActive: activeStudentIds.size,
-    activeSolo: active.filter((e) => e.programLevel === "SOLO").length,
-    activeGuided: active.filter((e) => e.programLevel === "GUIDED").length,
-    activeElite: active.filter((e) => e.programLevel === "ELITE").length,
+    activeByLevel: byLevel(active),
     completedThisMonth: completedThisMonthRows.length,
     completedThisMonthByLevel: byLevel(completedThisMonthRows),
     droppedThisMonth: droppedThisMonthRows.length,
@@ -271,7 +288,10 @@ export async function getStudentsOverview() {
   // ── 90/120 tracker rows: ACTIVE Guided + Elite only (PRD2 §4.3) ──
   const tracker = trackerRows
     .map((e) => {
-      const totalDays = e.programLevel === "GUIDED" ? 90 : 120;
+      // The enrolment's OWN length, from the duration stored on it when it was created - not
+      // re-derived from the level name, which cannot know a tier added after this code was
+      // written. The query above admits no LIFETIME row, so `programDays` is never null here.
+      const totalDays = programDays(e.duration) ?? 120;
       const dayNumber = Math.min(Math.max(dayDiff(today, e.enrollmentDate) + 1, 1), totalDays);
       // Gamified journey (post-P3 layer): XP, stage title, momentum - derived, never stored
       const journey = journeyFor(today, config, e, e.milestoneLogs, e.signalChanges);
@@ -286,6 +306,24 @@ export async function getStudentsOverview() {
         currentMilestone: e.currentMilestone,
         signalColour: e.signalColour,
         daysSinceLastSession: e.lastSessionDate ? dayDiff(today, e.lastSessionDate) : null,
+        /**
+         * ── THE WEEKLY ROUND HAS TO SHOW WHAT IS ALREADY THERE ──────────────────────────
+         *
+         * These three were not on the row, so `TrackerBatchForm` rendered their boxes EMPTY
+         * while `updateTracker` writes a blank box as null. Touching a row to change one thing
+         * - a milestone, a signal - therefore wiped the student's last session date, the task
+         * their coach had set them and whether it was done, silently, for every row touched.
+         * The counters next to them were already protected ("a blank counter box means leave
+         * it"); these four had nothing.
+         *
+         * Carried rather than protected server-side, because a blank box must keep MEANING
+         * blank: "" is a real answer for Task done (not set), and a coach has to be able to
+         * clear a date they entered by mistake. A form that shows the current value and saves
+         * what is on screen does both - and a weekly round wants to see last week's task anyway.
+         */
+        lastSessionDate: e.lastSessionDate?.toISOString() ?? null,
+        lastTaskAssigned: e.lastTaskAssigned,
+        lastTaskCompleted: e.lastTaskCompleted,
         nextCheckInDate: e.nextCheckInDate?.toISOString() ?? null,
         programEndDate: e.programEndDate?.toISOString() ?? null,
         journeyXp: journey.xp,
@@ -313,23 +351,23 @@ export async function getStudentsOverview() {
     .map((t) => {
       const e = trackerRows.find((x) => x.id === t.enrollmentId)!;
       const flags: string[] = [];
-      if (t.daysSinceLastSession !== null && t.daysSinceLastSession > 14) {
+      if (t.daysSinceLastSession !== null && t.daysSinceLastSession > lifecycle.radarSilentDays) {
         flags.push(`${t.daysSinceLastSession} days since last session`);
-      } else if (t.daysSinceLastSession === null && t.dayNumber > 10) {
+      } else if (t.daysSinceLastSession === null && t.dayNumber > lifecycle.radarNoSessionByDay) {
         flags.push("No session recorded yet");
       }
       if (t.nextCheckInDate && new Date(t.nextCheckInDate) < today) {
         flags.push("Check-in overdue");
       }
       if (e.lastTaskCompleted === "NO") flags.push("Last task not done");
-      // pace: >50% of program elapsed but still in the first two milestones
-      if (t.pctComplete > 50 && MILESTONE_INDEX[t.currentMilestone] <= 1) {
+      // pace: past the configured share of the programme, still in the first two milestones
+      if (t.pctComplete > lifecycle.radarPaceElapsedPct && MILESTONE_INDEX[t.currentMilestone] <= 1) {
         flags.push(`${Math.round(t.pctComplete)}% elapsed, still ${t.currentMilestone === "ONBOARDING" ? "onboarding" : "on resume"}`);
       }
-      // guarantee window: <3 weeks left without interview-stage progress
+      // guarantee window: inside the configured run-in without interview-stage progress
       if (t.programEndDate) {
         const daysLeft = Math.floor((new Date(t.programEndDate).getTime() - today.getTime()) / 86400000);
-        if (daysLeft <= 21 && daysLeft >= 0 && MILESTONE_INDEX[t.currentMilestone] < 4) {
+        if (daysLeft <= lifecycle.radarEndgameDays && daysLeft >= 0 && MILESTONE_INDEX[t.currentMilestone] < 4) {
           flags.push(`${daysLeft} days left, not yet at interviews`);
         }
       }
@@ -352,13 +390,17 @@ export async function getStudentsOverview() {
 
   // ── LTV (PRD2 §4.6) ──
   const byId = new Map(students.map((s) => [s.id, s]));
-  const levelStudentIds = { SOLO: new Set<string>(), GUIDED: new Set<string>(), ELITE: new Set<string>() };
+  // One set of student ids per level code, built from the data rather than from three names -
+  // so a tier added this morning has an average paid, like every other tier.
+  const levelStudentIds = new Map<string, Set<string>>();
   const enrollCount = new Map<string, number>();
   for (const e of enrollments) {
     enrollCount.set(e.studentId, (enrollCount.get(e.studentId) ?? 0) + 1);
-    if (e.programLevel === "SOLO" || e.programLevel === "GUIDED" || e.programLevel === "ELITE") {
-      levelStudentIds[e.programLevel].add(e.studentId);
-    }
+    const key = e.programLevel?.trim() ?? "";
+    if (!key) continue;
+    const set = levelStudentIds.get(key) ?? new Set<string>();
+    set.add(e.studentId);
+    levelStudentIds.set(key, set);
   }
   const avgLtvFor = (ids: Set<string>) =>
     ids.size ? [...ids].reduce((sum, id) => sum + (ltv.get(id) ?? 0), 0) / ids.size : 0;
@@ -410,9 +452,10 @@ export async function getStudentsOverview() {
     momentumBoard,
     atRiskRadar,
     ltvSummary: {
-      avgSolo: avgLtvFor(levelStudentIds.SOLO),
-      avgGuided: avgLtvFor(levelStudentIds.GUIDED),
-      avgElite: avgLtvFor(levelStudentIds.ELITE),
+      /** code → average paid, in paise. Rendered against the live catalogue by the screen. */
+      avgByLevel: Object.fromEntries(
+        [...levelStudentIds].map(([code, ids]) => [code, avgLtvFor(ids)]),
+      ) as Record<string, number>,
       upgradeRatePct,
       highest,
     },
@@ -510,7 +553,8 @@ export async function getStudentDetail(id: string) {
     portalEmail: student.user?.email ?? null,
     ltvInr,
     enrollments: student.enrollments.map((e) => {
-      const totalDays = e.programLevel === "GUIDED" ? 90 : e.programLevel === "ELITE" ? 120 : null;
+      // The stored duration, for the reason given on the tracker pass above.
+      const totalDays = programDays(e.duration);
       return {
         id: e.id,
         // full gamified journey (XP, stage, momentum, badges) - Solo included, tracker aside

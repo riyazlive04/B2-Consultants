@@ -37,6 +37,7 @@ describe("the shipped defaults are the old hardcoded literals", () => {
       runwayHorizonMonths: 12, // the gauge's old /12
       payableBufferMultiple: 2, // the old `cash < 2 * payable` red rule
       burnWindowMonths: 3, // the old "last 3 calendar months"
+      fxFallbackInrPerEur: 90, // fx.ts FALLBACK_INR_PER_EUR
     });
   });
 
@@ -67,8 +68,58 @@ describe("a bad stored value can never take Cash Health down", () => {
       runwayHorizonMonths: 18,
       payableBufferMultiple: 1.5,
       burnWindowMonths: 6,
+      fxFallbackInrPerEur: 112,
     };
     assert.deepEqual(coerceCashTargetsConfig(mine), mine);
+  });
+
+  /**
+   * A config saved before the euro floor existed must keep every band the founder set. Without
+   * `.default()` on the new field the whole document would fail to parse and silently reset their
+   * revenue target and runway bands - which is a worse outcome than the problem the field solves.
+   */
+  test("a config stored before the euro floor existed keeps its bands and gains the default", () => {
+    const beforeTheField = {
+      monthlyRevenueTargetInrMinor: 150_000_000,
+      runwayGreenMonths: 9,
+      runwayAmberMonths: 4.5,
+      runwayHorizonMonths: 18,
+      payableBufferMultiple: 1.5,
+      burnWindowMonths: 6,
+    };
+    const got = coerceCashTargetsConfig(beforeTheField);
+    assert.equal(got.monthlyRevenueTargetInrMinor, 150_000_000, "the stored target survived");
+    assert.equal(got.runwayGreenMonths, 9, "the stored band survived");
+    assert.equal(got.burnWindowMonths, 6, "the stored window survived");
+    assert.equal(got.fxFallbackInrPerEur, 90, "the new field defaulted to the literal it replaced");
+  });
+
+  /**
+   * The floor is a rate, so zero and negatives are not "unset" - they are a division waiting to
+   * produce nonsense on every euro figure in the app.
+   */
+  test("a euro floor of zero or below is refused", () => {
+    for (const fxFallbackInrPerEur of [0, -1, -90]) {
+      assert.equal(
+        cashTargetsConfigSchema.safeParse({ ...DEFAULT_CASH_TARGETS_CONFIG, fxFallbackInrPerEur })
+          .success,
+        false,
+        `accepted a floor of ${fxFallbackInrPerEur}`,
+      );
+    }
+  });
+
+  test("a realistic floor is accepted, and the shipped default is still the old literal", () => {
+    assert.equal(
+      cashTargetsConfigSchema.safeParse({ ...DEFAULT_CASH_TARGETS_CONFIG, fxFallbackInrPerEur: 112 })
+        .success,
+      true,
+    );
+    assert.equal(
+      DEFAULT_CASH_TARGETS_CONFIG.fxFallbackInrPerEur,
+      90,
+      "the default must stay 90 - the value fx.ts hardcoded - so nothing moved when this shipped",
+    );
   });
 });
 

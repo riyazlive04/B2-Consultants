@@ -22,7 +22,12 @@ import { formatDate } from "@/lib/format";
 import { BOOKING_STATUS_LABELS, SLOT_HOLD_LABELS, SLOT_RELEASE_REASON_LABELS, slotTypeLabel } from "@/lib/labels";
 import { requireSection } from "@/lib/rbac";
 import { getBookableTeamMembers, getBookingsOverview, getWeekSlots, type WeekSlot } from "@/server/booking-metrics";
-import { getBookingCalendars, getBookingRulesConfig, getSssConfig } from "@/server/founder-config";
+import {
+  getBookingCalendars,
+  getBookingRulesConfig,
+  getQualificationConfig,
+  getSssConfig,
+} from "@/server/founder-config";
 import { getWhatsAppStatusMap } from "@/server/whatsapp";
 import { listSssSlots, listSssNeedsScheduling } from "@/server/sss-slots";
 import { listSlotReleases, releasesBySlotForWeek } from "@/server/slot-release";
@@ -125,7 +130,7 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
 
   const [
     { kpis, slots, bookings, openSlots },
-    weekSlots, teamMembers, rules, sssSlots, sssNeeds, sssConfig, slotPattern,
+    weekSlots, teamMembers, rules, qualConfig, sssSlots, sssNeeds, sssConfig, slotPattern,
     weekReleases, slotReleases,
   ] =
     await Promise.all([
@@ -133,6 +138,10 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
       getWeekSlots(weekStartUtc, weekEndUtc),
       getBookableTeamMembers(),
       getBookingRulesConfig(),
+      // The founder's BANT cutoffs. Read so the labels below quote the lines ACTUALLY in force
+      // rather than the shipped defaults - a card that says "Confirm (avg > 2.4)" while the
+      // console is set to 2.0 is telling the reader something untrue about their own numbers.
+      getQualificationConfig(),
       listSssSlots(weekStartUtc, weekEndUtc),
       listSssNeedsScheduling(),
       getSssConfig(),
@@ -144,6 +153,8 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
       releasesBySlotForWeek(weekStartUtc, weekEndUtc),
       listSlotReleases(),
     ]);
+  /** Shorthand: these three numbers are interpolated into five separate labels below. */
+  const bant = qualConfig.thresholds;
   /**
    * Depends on `bookings`, so it cannot join the batch above - but it must not be a bare
    * sequential `await` either. Against Supabase in Singapore every round trip costs ~205ms, and
@@ -308,20 +319,30 @@ export default async function BookingsPage({ searchParams }: { searchParams: { w
           label="Avg BANT score"
           value={kpis.avgWeighted !== null ? kpis.avgWeighted.toFixed(1) : kpis.avgBant.toFixed(1)}
           secondary={kpis.avgWeighted !== null ? "Weighted, out of 4 - this month" : "Out of 4 - this month"}
-          tooltip="Weighted average of the four BANT dimension scores. Above 2.4 = confirm the call, 1.6-2.4 = go but doubtful, below 1.6 = cancel recommended."
+          tooltip={`Weighted average of the four BANT dimension scores. Above ${bant.confirmAbove} = confirm the call, ${bant.doubtFrom}-${bant.confirmAbove} = go but doubtful, below ${bant.doubtFrom} = cancel recommended. Change these in Console - Sales ops - Qualification.`}
+          /*
+            ── THE CARD AND ITS OWN POPUP USED TO QUOTE DIFFERENT BANDS ──────────────────────
+            The verdict COUNTS below come from `bantVerdictFor`, which splits at 2.4 and 1.6 (the
+            founder's lines). The popup's labels said "avg > 3", "2-3" and "< 2", and the signal's
+            fallback branch tested >= 3 / >= 2 - so a card could show amber while its popup
+            counted the same bookings as confirmed, and the three numbers in the popup never
+            matched the bands printed beside them.
+
+            Everything here now reads the constants, so the labels cannot drift from the maths
+            again, and the fallback uses `bantSignal` - the same function the weighted branch
+            uses - rather than a second ladder.
+          */
           signal={
             kpis.bookedThisMonth === 0
               ? undefined
-              : kpis.avgWeighted !== null
-                ? bantSignal(kpis.avgWeighted)
-                : kpis.avgBant >= 3 ? "ok" : kpis.avgBant >= 2 ? "watch" : "risk"
+              : bantSignal(kpis.avgWeighted ?? kpis.avgBant, bant)
           }
           icon={<Target size={18} />}
           detail={{
             rows: [
-              { label: "Confirm (avg > 3)", value: kpis.verdicts.confirm },
-              { label: "Doubtful (avg 2-3)", value: kpis.verdicts.doubt },
-              { label: "Cancel (avg < 2)", value: kpis.verdicts.cancel },
+              { label: `Confirm (avg > ${bant.confirmAbove})`, value: kpis.verdicts.confirm },
+              { label: `Doubtful (avg ${bant.doubtFrom}-${bant.confirmAbove})`, value: kpis.verdicts.doubt },
+              { label: `Cancel (avg < ${bant.doubtFrom})`, value: kpis.verdicts.cancel },
             ],
           }}
         />

@@ -600,8 +600,15 @@ export type GameInputs = {
   users: Array<{ userId: string; name: string; roleTitle: string; variant: DailyLogVariant | null }>;
   /** one per submitted daily log */
   logs: Array<{ userId: string; dateKey: string; values: Record<string, number> }>;
-  /** lead stage transitions attributed to the user who made them */
-  stageMoves: Array<{ userId: string; dateKey: string; toStage: string; leadName: string }>;
+  /**
+   * Lead stage transitions attributed to the user who made them.
+   *
+   * `fromStage` rides along so a BACKWARD move can be told apart from a forward one - see
+   * `isForwardStageMove`. Null means the stage was being set for the first time.
+   */
+  stageMoves: Array<{
+    userId: string; dateKey: string; fromStage: string | null; toStage: string; leadName: string;
+  }>;
   /** discovery outcomes entered */
   outcomes: Array<{ userId: string; dateKey: string; highlyQualified: boolean }>;
   /** student milestone changes made by the user (previous null = first set) */
@@ -641,6 +648,64 @@ export type PlayerGame = {
 const MILESTONE_INDEX: Record<string, number> = Object.fromEntries(
   MILESTONE_ORDER.map((m, i) => [m, i]),
 );
+
+/**
+ * The funnel, in order, for deciding whether a stage move went FORWARD.
+ *
+ * ── WHY THIS IS NEEDED ───────────────────────────────────────────────────────────────────────
+ * Stage XP was paid on the `toStage` alone, whichever direction the card moved. So dragging a
+ * lead back from WON to PROPOSAL_SENT paid 20 XP, and back to DEPOSIT_PAID paid 60 - and moving
+ * one lead back and forth between two rewarded stages farmed XP indefinitely. Arena's own "How
+ * XP works" says "Corrections and backward moves earn nothing", and milestone moves had always
+ * honoured that (`forwardMoves` below); pipeline moves never did.
+ *
+ * The order is `LeadStage`'s own declaration order, which IS the funnel order. The branch and
+ * terminal stages are included so they have a position at all - a move INTO them pays nothing in
+ * the shipped rules anyway (`STAGE_MOVED` has no entry, so `if (!xp) continue` fires first), and
+ * a founder who adds one gets the same forward-only treatment as every other stage.
+ *
+ * DISCO_NOT_BOOKED sits where the enum puts it, beside DISCO_BOOKED: it is the outcome of the
+ * same step rather than a step of its own, so a lead that goes DISCO_BOOKED → DISCO_NOT_BOOKED
+ * has not advanced.
+ */
+const LEAD_STAGE_ORDER: readonly string[] = [
+  "NEW_LEAD",
+  "WHATSAPP_SENT",
+  "STRATEGY_CALL_BOOKED",
+  "DISCO_BOOKED",
+  "DISCO_NOT_BOOKED",
+  "DISCO_COMPLETED",
+  "SSS_BOOKED",
+  "SSS_COMPLETED",
+  "PROPOSAL_SENT",
+  "SENT_TO_WORKSHOP",
+  "WORKSHOP_FOLLOWUP",
+  "OFFER_FOLLOWUP",
+  "DEPOSIT_FOLLOWUP",
+  "DEPOSIT_PAID",
+  "WON",
+  "LOST",
+  "NO_SHOW",
+];
+
+const LEAD_STAGE_INDEX: Record<string, number> = Object.fromEntries(
+  LEAD_STAGE_ORDER.map((st, i) => [st, i]),
+);
+
+/**
+ * Did this move advance the lead? `null` from = the stage was set for the first time.
+ *
+ * An unknown stage name (a founder's custom board column mapped to something not in the enum)
+ * is treated as NOT a forward move: refusing to pay for a move we cannot place is the safe
+ * direction, and the alternative is paying for every one of them.
+ */
+export function isForwardStageMove(fromStage: string | null, toStage: string): boolean {
+  if (fromStage === null) return true;
+  const to = LEAD_STAGE_INDEX[toStage];
+  const from = LEAD_STAGE_INDEX[fromStage];
+  if (to === undefined || from === undefined) return false;
+  return to > from;
+}
 
 /**
  * Lead-stage names for the Arena feed and the XP console.
@@ -706,8 +771,10 @@ export function computeTeamGame(
     }
     const { streak, loggedToday } = currentStreak(logDays, todayKey);
 
-    // 2) Pipeline stage moves
+    // 2) Pipeline stage moves (forward only - no XP for corrections backwards, exactly as the
+    //    milestone moves below and as Arena's own "How XP works" has always said)
     for (const s of stageMoves) {
+      if (!isForwardStageMove(s.fromStage, s.toStage)) continue;
       const xp = rulesOn(s.dateKey).xpRules.STAGE_MOVED[s.toStage];
       if (!xp) continue;
       push(

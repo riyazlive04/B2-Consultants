@@ -28,6 +28,7 @@ import { normalizeWhatsappNumber } from "@/lib/phone";
 import { sendWhatsApp } from "./whatsapp";
 import { logSystemActivity, SYSTEM_ACTORS } from "./activity-log";
 import { advanceLeadStage, writeLeadStage } from "./lead-stage-auto";
+import { getQualificationConfig } from "./founder-config";
 
 /**
  * Outreach SOP - the DB shell around `lib/outreach-engine.ts`.
@@ -314,6 +315,12 @@ export async function runDueOutreach(): Promise<OutreachRun> {
   };
 
   const cfg = await readOutreachConfig();
+  /**
+   * The BANT cutoffs, read ONCE per run rather than per journey. Step 11's "Qualified" verdict
+   * and the CRM's BANT verdict are the same decision under two names, so they have to apply the
+   * same configured cutoffs - see `qualifiedFromBant`.
+   */
+  const { thresholds } = await getQualificationConfig();
   run.enabled = cfg.enabled;
   if (!cfg.enabled) {
     run.notes.push("Outreach engine is disabled (Outreach → Settings).");
@@ -426,7 +433,7 @@ export async function runDueOutreach(): Promise<OutreachRun> {
     // verdict for someone still being chased for a booking would put the two out of step.
     const scored = row.qualified === null ? bantForQualification(row) : null;
     if (row.bookingId && scored) {
-      const verdict = qualifiedFromBant(scored.avg);
+      const verdict = qualifiedFromBant(scored.avg, thresholds);
       if (verdict) {
         await prisma.outreachJourney.update({
           where: { id },

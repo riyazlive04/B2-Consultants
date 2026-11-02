@@ -35,6 +35,8 @@ import {
   coerceSpeedToLeadAlert,
   coerceDunningConfig,
   coerceAttendanceConfig,
+  coerceWeeklyReportConfig,
+  DEFAULT_WEEKLY_REPORT_CONFIG,
   coerceLeaderboardConfig,
   coerceStudentLifecycleConfig,
   DEFAULT_LEADERBOARD_CONFIG,
@@ -95,6 +97,7 @@ import {
   type SpeedToLeadAlertConfig,
   type DunningConfig,
   type AttendanceConfig,
+  type WeeklyReportConfig,
   type CashTargetsConfig,
   type ExpenseCategoriesConfig,
   type ZoomConfig,
@@ -146,6 +149,7 @@ export const CASH_TARGETS_KEY = "cashTargets";
 export const EXPENSE_CATEGORIES_KEY = "expenseCategories";
 export const PUBLIC_LINKS_KEY = "publicLinks";
 export const IMPROVEMENTS_KEY = "improvements";
+export const WEEKLY_REPORT_KEY = "weeklyReport";
 /** Aliased from config-schema, where it lives so the engine path can import it alone. */
 export const ZOOM_KEY = ZOOM_SETTINGS_KEY;
 
@@ -513,6 +517,29 @@ export async function writeLeaderboardConfig(config: LeaderboardConfig): Promise
  * came back) and by the churn breakdown. Nothing here arms anything: the button is a status
  * change a human presses, and the config only decides what they may say about it.
  */
+/**
+ * The weekly report - the window, the cadence, and the red-flag thresholds.
+ *
+ * Read by the dashboard (to derive each flag), by the public form (nothing - the form reads
+ * the template, not this) and by the cron (to decide whether to open, remind or close at all).
+ * `enabled` false is the shipped state, and the dashboard says so with `EngineOffNotice`
+ * rather than quietly showing a screen that will never fill.
+ */
+export const getWeeklyReportConfig = cache(async (): Promise<WeeklyReportConfig> => {
+  const row = await readSetting(WEEKLY_REPORT_KEY);
+  return row ? coerceWeeklyReportConfig(row.value) : DEFAULT_WEEKLY_REPORT_CONFIG;
+});
+
+export async function writeWeeklyReportConfig(config: WeeklyReportConfig): Promise<void> {
+  const value = config as unknown as Prisma.InputJsonValue;
+  await prisma.appSetting.upsert({
+    where: { key: WEEKLY_REPORT_KEY },
+    create: { key: WEEKLY_REPORT_KEY, value },
+    update: { value },
+  });
+  revalidateFounderConfig();
+}
+
 export const getStudentLifecycleConfig = cache(async (): Promise<StudentLifecycleConfig> => {
   const row = await readSetting(STUDENT_LIFECYCLE_KEY);
   return row ? coerceStudentLifecycleConfig(row.value) : DEFAULT_STUDENT_LIFECYCLE_CONFIG;

@@ -540,7 +540,7 @@ const recordingSchema = z.object({
   /**
    * HOW LONG THE STUDENTS MAY WATCH IT - days, or 0 for no time limit.
    *
-   * Absent means "use the house default" (Console → Attendance), which is how a form that
+   * Absent means "use the house default" (Console → System → Alerts & Chasing), which is how a form that
    * predates this field keeps working. It is deliberately NOT `z.coerce.number().optional()`
    * with a 0 fallback: that would read a missing field as "no limit" and silently overwrite a
    * tutor's 7-day window the next time anybody edited the title.

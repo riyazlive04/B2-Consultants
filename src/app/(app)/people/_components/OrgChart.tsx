@@ -14,14 +14,20 @@ import { CheckboxField, Field, FormError, Select, SubmitButton, TextArea, TextIn
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import { formatDate } from "@/lib/format";
 import { LOG_VARIANT_LABELS, optionsFrom, TEAM_STATUS_LABELS } from "@/lib/labels";
+import { APP_ROLE_OPTIONS } from "@/lib/sections";
 import { safeAction } from "@/lib/action-guard";
 import { PhoneField } from "@/components/ui/PhoneField";
 
-const ROLE_OPTIONS = [
-  { value: "ADMIN", label: "Admin" },
-  { value: "HEAD", label: "Head" },
-  { value: "USER", label: "User" },
-];
+/**
+ * EVERY role, not just the three a telecaller-shaped team used to need.
+ *
+ * This picker writes straight through to the linked login's role. While it offered only
+ * Admin/Head/User, opening a coach's or tutor's profile and saving it handed them Admin: a
+ * `<select>` whose value is not among its options shows - and submits - the FIRST one. Built from
+ * `APP_ROLE_OPTIONS` so adding a role to the app adds it here, and `profileSchema` validates
+ * against the same list rather than a hand-kept copy.
+ */
+const ROLE_OPTIONS = APP_ROLE_OPTIONS;
 
 /** Display-only org chart (PRD2 §3.1): Admin on top, team below; Admin reorders cards. */
 export function OrgChart({ members }: { members: MemberRow[] }) {
@@ -202,8 +208,34 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
             <Field label="Daily log form" hint="Which daily numbers this person logs">
               <Select name="logVariant" options={optionsFrom(LOG_VARIANT_LABELS)} defaultValue={editing?.logVariant ?? "APPOINTMENT_SETTER"} />
             </Field>
-            <Field label="First-call share %" hint="Target share of new leads (0 = not in rotation)">
-              <TextInput kind="int" name="firstCallSharePct" min={0} max={100} defaultValue={String(editing?.firstCallSharePct ?? 0)} />
+            {/*
+              ── READ-ONLY HERE, OWNED BY THE CONSOLE ──────────────────────────────────
+              A share only means anything NEXT TO THE OTHERS: the engine normalises them, so a
+              founder who typed 5 here while a colleague sat on 2 got a 71/29 split out of a form
+              that said "5%". Console → Call Distribution edits the whole roster together, shows
+              the resulting split computed with the same function the hand-out uses, and is where
+              this setting moved to. Leaving an editable box here meant one stored number with two
+              editors, one of which could not see what it was doing.
+
+              Shown rather than removed: "what is this person's share" is a fair question to ask
+              of their profile. `saveTeamProfile` no longer accepts the field, so a stale form
+              cannot write it either.
+            */}
+            <Field label="First-call share %" hint="Set for the whole roster in Console → Call Distribution.">
+              <p className="flex h-10 items-center text-sm text-ink-2">
+                {editing ? (
+                  editing.firstCallSharePct > 0 ? (
+                    <>
+                      <span className="font-semibold text-ink tnum">{editing.firstCallSharePct}%</span>
+                      <span className="ml-1.5 text-muted">of new leads</span>
+                    </>
+                  ) : (
+                    <span className="text-muted">Not in the rotation</span>
+                  )
+                ) : (
+                  <span className="text-muted">Set after they are added</span>
+                )}
+              </p>
             </Field>
             <Field label="Daily call target" hint="Calls expected per day (0 = no target). Shows on their My Desk.">
               <TextInput kind="int" name="dailyCallTarget" min={0} max={999} defaultValue={String(editing?.dailyCallTarget ?? 0)} />

@@ -68,14 +68,25 @@ describe("book order - the ordering trigger", () => {
 
 describe("book order - config", () => {
   test("a tuned threshold is honoured (§18.3 leaves the figure open)", () => {
-    const tuned = coerceBookOrderConfig({ orderThresholdInrMinor: rupees(15_000), requireFreshQuotePerLevel: true });
+    const tuned = coerceBookOrderConfig({ orderThresholdInrMinor: rupees(15_000) });
     assert.equal(decideBookOrder(rupees(15_000), tuned).order, true);
     assert.equal(decideBookOrder(rupees(14_000), tuned).order, false);
   });
 
   test("a zero threshold orders for everyone", () => {
-    const free = coerceBookOrderConfig({ orderThresholdInrMinor: 0, requireFreshQuotePerLevel: false });
+    const free = coerceBookOrderConfig({ orderThresholdInrMinor: 0 });
     assert.equal(decideBookOrder(0, free).order, true);
+  });
+
+  /**
+   * `requireFreshQuotePerLevel` was stored, drawn as a Console toggle, and read by nothing - the
+   * decision takes the whole config and uses only the threshold. A stored row from before it was
+   * removed must still parse, and must not resurrect the field.
+   */
+  test("the retired per-level-quote flag is dropped from an old stored config", () => {
+    const old = coerceBookOrderConfig({ orderThresholdInrMinor: rupees(15_000), requireFreshQuotePerLevel: false });
+    assert.equal(old.orderThresholdInrMinor, rupees(15_000));
+    assert.ok(!("requireFreshQuotePerLevel" in old), "the retired flag is back in the parsed config");
   });
 
   test("an invalid config falls back to the shipped threshold", () => {

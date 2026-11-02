@@ -77,6 +77,7 @@ export const MANUAL_SALES: GuideManual[] = [
         ],
         shot: {
           file: "my-desk-who-to-call.png",
+          as: "telecaller",
           route: "/my-desk",
           caption: "The Level 1 desk: the call queue sorted into priority cards, most urgent first.",
           highlight: { text: "Who to call now", label: "Your queue" },
@@ -110,6 +111,7 @@ export const MANUAL_SALES: GuideManual[] = [
         ],
         shot: {
           file: "my-desk-log-outcome.png",
+          as: "telecaller",
           route: "/my-desk",
           caption: "Every queue row has Call and Log outcome; the outcome form opens from either.",
           highlight: { text: "Log outcome", label: "Record the call" },
@@ -147,6 +149,7 @@ export const MANUAL_SALES: GuideManual[] = [
         ],
         shot: {
           file: "my-desk-tomorrows-calls.png",
+          as: "telecaller",
           route: "/my-desk",
           caption: "Tomorrow's booked calls, with the unconfirmed ones listed to chase today.",
           highlight: { text: "Tomorrow's discovery calls", label: "Confirm these today" },
@@ -175,6 +178,7 @@ export const MANUAL_SALES: GuideManual[] = [
         ],
         shot: {
           file: "my-desk-your-targets.png",
+          as: "telecaller",
           route: "/my-desk",
           caption: "Monthly targets from the job description, furthest behind first.",
           highlight: { text: "Your targets", label: "Your month so far" },
@@ -208,6 +212,7 @@ export const MANUAL_SALES: GuideManual[] = [
         ],
         shot: {
           file: "my-desk-todays-calls.png",
+          as: "telecaller",
           route: "/my-desk",
           caption: "The Level 2 desk: today's booked discovery calls in time order.",
           highlight: { text: "Today's calls", label: "Your calendar today" },
@@ -230,6 +235,7 @@ export const MANUAL_SALES: GuideManual[] = [
         ],
         shot: {
           file: "my-desk-your-leads.png",
+          as: "telecaller",
           route: "/my-desk",
           caption: "Leads you own that are still waiting for a discovery call booking.",
           highlight: { text: "Your leads", label: "Waiting to book" },
@@ -267,6 +273,7 @@ export const MANUAL_SALES: GuideManual[] = [
         ],
         shot: {
           file: "my-desk-your-commission.png",
+          as: "telecaller",
           route: "/my-desk",
           caption: "Your commission this month, with every payment that credits you.",
           highlight: { text: "Your commission", label: "Your share" },
@@ -342,6 +349,7 @@ export const MANUAL_SALES: GuideManual[] = [
         ],
         shot: {
           file: "my-desk-todays-call-list.png",
+          as: "telecaller",
           route: "/my-desk",
           caption: "The simple call desk: today's calls against target and the people still to call.",
           highlight: { text: "Still to call today", label: "Not yet called today" },
@@ -441,13 +449,13 @@ export const MANUAL_SALES: GuideManual[] = [
         logic: [
           "Pipeline value is the number of leads between SSS Call Booked and Confirmed Sign Up (With Deposit), times the average programme fee. The 30-day forecast multiplies that by the close rate.",
           "Booked, completed, no-show and won count people who reached that stage during the period, read from stage history. A lead that has moved on since still counts for the period it got there.",
-          "Calls booked counts people who reached “Pre-Qualified & Confirmed”. Calls completed counts “Pre-Qualified & Confirmed - call done”.",
+          "Calls booked counts people who reached either stage that means a call is on the books - “Discovery Call Booked” (what the public booking page sets) or “Pre-Qualified & Confirmed” (set by hand, and by older rows) - counted once per person even if they passed through both. Calls completed counts “Pre-Qualified & Confirmed - call done”.",
           "Show-up rate is completed divided by booked. Close rate is won divided by completed. Highly qualified rate is Highly Qualified outcomes divided by all discovery outcomes in the period.",
           "Leads in the period are counted by the date the lead came in, across every source.",
           "Conversions by level splits the period's wins by the programme level picked when each lead was marked Won.",
         ],
         watchOut: [
-          "A booking made on the public booking page moves the lead to “Discovery Call Booked”, not to “Pre-Qualified & Confirmed”, so it is not counted under Calls booked until someone moves the stage on.",
+          "Calls completed is a narrower stage than Calls booked: a booking made on the public booking page sits at “Discovery Call Booked” until someone records the call, so show-up rate lags until the outcome is logged.",
         ],
         shot: {
           file: "pipeline-pipeline-value.png",
@@ -1479,6 +1487,26 @@ export const MANUAL_SALES: GuideManual[] = [
           "The person is matched to an existing lead by phone or email, or a new lead is created and given an owner by the rotation.",
           "Their answers are scored. The lead moves to Discovery Call Booked, its Deals card moves with it, and the booking goes to the slot's owner.",
           "When two people pick the same slot at once, only the first gets it; the second is asked to pick another time.",
+        ],
+        controls: [
+          {
+            setting: "Minimum notice and how far ahead a prospect may book",
+            where: ["Sidebar", "Sales", "Bookings", "Booking rules"],
+            href: "/bookings#booking-rules",
+            who: ["ADMIN", "HEAD"],
+            default: "2 hours notice, 30 days ahead",
+            effect:
+              "Changes which slots the public page OFFERS from the next page load. Bookings already taken are untouched, including one now inside the new notice window - a prospect is never un-booked by a settings change.",
+          },
+          {
+            setting: "The gap kept between generated slots",
+            where: ["Sidebar", "Sales", "Bookings", "Booking rules"],
+            href: "/bookings#booking-rules",
+            who: ["ADMIN", "HEAD"],
+            default: "0 minutes",
+            effect:
+              "Applied when slots are GENERATED, not when they are shown. Slots already on the calendar keep the spacing they were made with, so widening the buffer means regenerating to see it.",
+          },
         ],
         shot: {
           file: "bookings-public-booking-page.png",

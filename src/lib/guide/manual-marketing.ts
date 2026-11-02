@@ -92,7 +92,7 @@ export const MANUAL_MARKETING: GuideManual[] = [
         ],
         shot: {
           file: "sites-pages.png",
-          route: "/sites/{siteId}",
+          route: "/sites/[first]",
           caption: "The Pages tab of one website, with a card per page.",
           highlight: { text: "Add new page", label: "Add a page" },
         },
@@ -124,7 +124,7 @@ export const MANUAL_MARKETING: GuideManual[] = [
         ],
         shot: {
           file: "sites-menu.png",
-          route: "/sites/{siteId}",
+          route: "/sites/[first]",
           caption: "One website's screen. The Menu tab holds the links every page shares.",
           highlight: { text: "Menu", label: "Menu tab" },
         },
@@ -158,7 +158,7 @@ export const MANUAL_MARKETING: GuideManual[] = [
         ],
         shot: {
           file: "sites-brand.png",
-          route: "/sites/{siteId}",
+          route: "/sites/[first]",
           caption: "One website's screen. The Brand tab sets colours and width for every page.",
           highlight: { text: "Brand", label: "Brand tab" },
         },
@@ -201,7 +201,7 @@ export const MANUAL_MARKETING: GuideManual[] = [
         ],
         shot: {
           file: "sites-domain-tracking.png",
-          route: "/sites/{siteId}",
+          route: "/sites/[first]",
           caption: "One website's screen. Domain & tracking holds the real address and the tracking ids.",
           highlight: { text: "Domain & tracking", label: "Domain & tracking tab" },
         },
@@ -232,7 +232,7 @@ export const MANUAL_MARKETING: GuideManual[] = [
         ],
         shot: {
           file: "sites-page-builder.png",
-          route: "/sites/{siteId}/pages/{pageId}",
+          route: "/sites/[first]/pages/[first]",
           caption: "The page builder: sections list, canvas and the Add a section library.",
           highlight: { text: "Add a section", label: "Add a section" },
         },
@@ -266,7 +266,7 @@ export const MANUAL_MARKETING: GuideManual[] = [
         ],
         shot: {
           file: "sites-page-details.png",
-          route: "/sites/{siteId}/pages/{pageId}",
+          route: "/sites/[first]/pages/[first]",
           caption: "The Page details card in the page builder.",
           highlight: { text: "Save details", label: "Save details" },
         },
@@ -289,7 +289,7 @@ export const MANUAL_MARKETING: GuideManual[] = [
         ],
         shot: {
           file: "sites-history.png",
-          route: "/sites/{siteId}/pages/{pageId}",
+          route: "/sites/[first]/pages/[first]",
           caption: "The page builder toolbar. History lists earlier versions to restore.",
           highlight: { text: "History", label: "History" },
         },
@@ -403,7 +403,7 @@ export const MANUAL_MARKETING: GuideManual[] = [
         watchOut: ["Preview on a draft funnel shows a not-found page. Publish first, or judge the page from the canvas."],
         shot: {
           file: "funnels-steps.png",
-          route: "/funnels/{funnelId}",
+          route: "/funnels/[first]",
           caption: "The funnel builder on the Pages tab, with the step list on the left.",
           highlight: { text: "Save step", label: "Save the step" },
         },
@@ -448,7 +448,7 @@ export const MANUAL_MARKETING: GuideManual[] = [
         watchOut: ["An empty booking calendar on a funnel is almost always missing availability, not a broken funnel."],
         shot: {
           file: "funnels-page-canvas.png",
-          route: "/funnels/{funnelId}",
+          route: "/funnels/[first]",
           caption: "The step canvas with its Add block and Library buttons.",
           highlight: { text: "Add block", label: "Add a block" },
         },
@@ -483,7 +483,7 @@ export const MANUAL_MARKETING: GuideManual[] = [
         ],
         shot: {
           file: "funnels-global-header-footer.png",
-          route: "/funnels/{funnelId}",
+          route: "/funnels/[first]",
           caption: "The funnel builder tabs. Global header and Global footer wrap every step.",
           highlight: { text: "Global header", label: "Global header tab" },
         },
@@ -522,7 +522,7 @@ export const MANUAL_MARKETING: GuideManual[] = [
         watchOut: ["Deleting a step deletes its variants with it, and the running test is lost."],
         shot: {
           file: "funnels-ab-test.png",
-          route: "/funnels/{funnelId}",
+          route: "/funnels/[first]",
           caption: "The step list. A/B variant starts a split test on the selected step.",
           highlight: { text: "A/B variant", label: "Start a split test" },
         },
@@ -544,7 +544,7 @@ export const MANUAL_MARKETING: GuideManual[] = [
         ],
         shot: {
           file: "funnels-templates.png",
-          route: "/funnels/{funnelId}",
+          route: "/funnels/[first]",
           caption: "Start from a template adds a step copied from a saved page.",
           highlight: { text: "Start from a template", label: "Start from a template" },
         },
@@ -655,7 +655,7 @@ export const MANUAL_MARKETING: GuideManual[] = [
         ],
         shot: {
           file: "forms-edit.png",
-          route: "/forms/{formId}",
+          route: "/forms/[first]",
           caption: "The form builder with the element panel, the form and the question settings.",
           highlight: { text: "Quick Add", label: "Add elements" },
         },
@@ -691,7 +691,7 @@ export const MANUAL_MARKETING: GuideManual[] = [
         ],
         shot: {
           file: "forms-settings.png",
-          route: "/forms/{formId}",
+          route: "/forms/[first]",
           caption: "The form builder. The Settings tab controls what happens after a submit.",
           highlight: { text: "Settings", label: "Settings tab" },
         },
@@ -715,7 +715,7 @@ export const MANUAL_MARKETING: GuideManual[] = [
         ],
         shot: {
           file: "forms-submissions.png",
-          route: "/forms/{formId}",
+          route: "/forms/[first]",
           caption: "The form builder. Open the Submissions tab to see charts, single responses and the CSV export.",
         },
       },

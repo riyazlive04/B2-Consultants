@@ -26,6 +26,7 @@ import { getOwnershipInventory, migrateOwnership, type LeadDestination } from ".
 import { getTerminationReport, type TerminationReport } from "./termination-report";
 import { logActivity, diffFields } from "./activity-log";
 import type { ActionResult } from "./finance-actions";
+import { lastAdminError } from "./admin-rails";
 import { sendLoginCredentials } from "./login-credentials";
 
 /**
@@ -124,15 +125,6 @@ function privilegeError(
     }
   }
   return null;
-}
-
-/** The founder must never be able to lock themselves - or the last Admin - out. */
-async function lastAdminError(userId: string, nextRole: AppRole | null): Promise<string | null> {
-  if (nextRole === "ADMIN") return null;
-  const others = await prisma.user.count({
-    where: { role: "ADMIN", status: "ACTIVE", id: { not: userId } },
-  });
-  return others === 0 ? "At least one active Admin must remain." : null;
 }
 
 // ───────────────────────────── invite ─────────────────────────────

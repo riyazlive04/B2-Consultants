@@ -8,9 +8,9 @@ import { ENGINES, ENGINE_KEYS, type EngineKey } from "../engines";
 /**
  * THE ENGINE REGISTRY (refactor step E5).
  *
- * `lib/engines.ts` is the one place the sixteen switchable engines are described. Two things read
+ * `lib/engines.ts` is the one place the seventeen switchable engines are described. Two things read
  * it: the Console's "not armed" list, and the inline notice a feature screen shows when its own
- * engine is off. Before it existed those two would have been two copies of the same sixteen
+ * engine is off. Before it existed those two would have been two copies of the same seventeen
  * paragraphs, and the inline one would have been the stale copy within a month.
  *
  * These tests hold the registry to the contract its header states, and - the point of the file -
@@ -21,7 +21,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const read = (p: string) => fs.readFileSync(path.join(here, "..", "..", p), "utf8");
 
 describe("engine registry - shape", () => {
-  test("the sixteen engines are exactly these, so adding one is a deliberate act", () => {
+  test("the seventeen engines are exactly these, so adding one is a deliberate act", () => {
     assert.deepEqual([...ENGINE_KEYS].sort(), [
       "agreementReminders",
       "autoCreateOpportunity",
@@ -38,6 +38,7 @@ describe("engine registry - shape", () => {
       "speedToLead",
       "studentWelcome",
       "tutorFeeAccrual",
+      "weeklyReport",
       "whatsapp",
     ]);
   });

@@ -394,6 +394,40 @@ describe("which receivable this payment settles (FIN-12)", () => {
     const d = derive({}, EDITING);
     assert.equal(d.pendingPaymentId, "p9");
   });
+
+  /**
+   * ── RECORDING INSTALMENT 2 OF 3, WHICH THE FORM USED TO MAKE IMPOSSIBLE ─────────────────
+   *
+   * Only an instalment-kind payment settles a plan. But picking that type turned on
+   * `needsSchedule`, which made the count and a complete set of due dates mandatory to save -
+   * and a non-empty schedule is refused by the server with "already has an instalment plan for
+   * this level". So the two halves of the form closed on each other and no later instalment was
+   * ever ticked off automatically.
+   *
+   * Naming the receivable is what distinguishes settling a plan from starting one, and it is
+   * already decisive on the server, so it decides here too.
+   */
+  test("a payment against a named plan asks for no schedule and holds nothing back", () => {
+    const d = derive({ paymentType: "INSTALMENT", student: { text: "Anna Smith", value: "s1" } }, null, {
+      openPlans: [plan()],
+    });
+    assert.equal(d.pendingPaymentId, "p1", "the lone open plan is adopted");
+    assert.equal(d.typeKind, "INSTALMENT");
+    assert.equal(d.needsSchedule, false, "the plan exists - there is nothing to draw");
+    assert.equal(d.planMode, false);
+    assert.deepEqual(d.shares, []);
+    assert.equal(d.blockSave, false, "this is the entry that could not be saved at all");
+  });
+
+  test("with the plan explicitly cleared it is a NEW plan again, schedule and all", () => {
+    const d = derive(
+      { paymentType: "INSTALMENT", student: { text: "Anna Smith", value: "s1" }, pendingPaymentId: "" },
+      null,
+      { openPlans: [plan()] },
+    );
+    assert.equal(d.needsSchedule, true, "\"not against a specific plan\" still starts one");
+    assert.equal(d.blockSave, true);
+  });
 });
 
 // ════════════════════════════════════════════════════════════════════════════════════

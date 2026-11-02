@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireSection } from "@/lib/rbac";
+import { capabilityCheck, requireSection } from "@/lib/rbac";
 import { istToday, parseDateInput, ymdInZone, IST_ZONE } from "@/lib/dates";
 import { stageAfterDiscovery } from "@/lib/call-outcome";
 import { formatDateTimeInZone } from "@/lib/format";
@@ -79,6 +79,25 @@ export async function routeDiscoveryCall(form: FormData): Promise<ActionResult> 
   const on = (v: string | undefined) => v === "on";
   /** The SOP's "Qualified? Yes" branch - the one route that hands the prospect to Level 3. */
   const routesToLevel3 = d.outcome === "QUALIFIED_FOR_SSS";
+
+  /**
+   * THE HIGHLY QUALIFIED VERDICT IS PERMISSIONED HERE TOO.
+   *
+   * `setHighlyQualified` (outreach) and `createOutcome`/`updateOutcome` (pipeline) all check
+   * `outreach.qualify` before letting that verdict be written. This action wrote it two ways and
+   * checked neither: routing "Ready - route to Level 3" sets `OutreachJourney.highlyQualified`,
+   * which arms the SSS reminder ladder, and the tick on the same form sets
+   * `DiscoveryOutcome.highlyQualified`, which drives priority scoring, the HQ-rate metric and XP.
+   * So the Level 2 desk was the one door onto the verdict with no permission on it.
+   *
+   * Checked before the transaction, and only when the submission actually CARRIES the verdict -
+   * recording "not qualified", a no-show or a follow-up stays open to anyone with the pipeline
+   * screen, exactly as `guardHighlyQualified` leaves an ordinary outcome alone.
+   */
+  if (routesToLevel3 || on(d.highlyQualified)) {
+    const { allowed, denied } = await capabilityCheck("outreach.qualify");
+    if (!allowed) return denied;
+  }
 
   /**
    * The Solution Strategy Session the specialist agreed on the call.

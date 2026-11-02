@@ -33,6 +33,9 @@ const ACCOUNTS: { email: string; password: string; label: string; name?: string 
   { email: "local.demo@b2consultants.in", password: "admin-2026", label: "Admin / founder" },
   { email: "karthick@b2consultants.in", password: "head-2026", label: "Head coach" },
   { email: "coach.demo@b2consultants.in", password: "coach-2026", label: "Coach" },
+  // The call desk's own account. My Desk shows the owner's task list to a founder and the call
+  // list to a telecaller, so capturing its screenshots needs a real one of these.
+  { email: "local.demo.user@b2consultants.in", password: "caller-2026", label: "Telecaller" },
   { email: "tutor.demo@b2consultants.in", password: "tutor-2026", label: "German Note tutor" },
   // The User row still carries whichever student this login was attached to previously; the
   // demo cohort has since re-pointed it, so correct the display name too.

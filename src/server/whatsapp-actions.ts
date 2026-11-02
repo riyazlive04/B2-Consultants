@@ -16,6 +16,7 @@ import {
 import { normalizeWhatsappNumber, toCountry } from "@/lib/phone";
 import { parseDurationListMinutes } from "@/lib/duration";
 import { prepareConfirmLoopSave } from "./confirm-loop-config";
+import { findDuplicateLead } from "./lead-intake";
 import { readWatiSettings, writeWatiSettings, fetchWatiTemplates, writeTemplateCatalog } from "@/lib/wati";
 import {
   runDueReminders,
@@ -251,18 +252,39 @@ export async function sendFreeFormWhatsApp(form: FormData): Promise<WhatsAppActi
   const text = String(form.get("text") ?? "").trim();
   if (!to) return { ok: false, message: "Enter a number" };
   if (!text) return { ok: false, message: "Enter a message" };
-  const out = await sendFreeFormMessage(to, text, session.user.id);
+  /**
+   * Attach the contact, if this number belongs to one.
+   *
+   * This tool takes a bare number, so unlike the Conversations reply box it has no id to pass -
+   * but the number is enough to find one, matched on the NORMALISED form the way every other
+   * lookup in the app does ("+91 98765 43210" and "09876543210" are one person). Without it the
+   * message is stored against nobody and never appears in that contact's thread or on their
+   * record, which is exactly where somebody goes looking for "what did we send them".
+   *
+   * A number that matches no contact sends with no target, which is correct - that is a message
+   * to somebody the CRM does not know, and inventing a link would be worse than having none.
+   */
+  const dup = await findDuplicateLead({ phone: to });
+  const target = dup && !dup.lead.deletedAt ? { leadId: dup.lead.id } : {};
+  const out = await sendFreeFormMessage(to, text, session.user.id, target);
   if (out.sent && out.messageId) {
     await logActivity(session, {
       action: "whatsapp.send",
       section: "whatsapp",
       entityType: "WhatsAppMessage",
       entityId: out.messageId,
-      summary: `Sent a free-form WhatsApp to ${to}`,
-      meta: { to, status: out.status, body: text.slice(0, 200) },
+      summary: dup
+        ? `Sent ${dup.lead.name} a free-form WhatsApp`
+        : `Sent a free-form WhatsApp to ${to}`,
+      meta: { to, status: out.status, body: text.slice(0, 200), ...target },
     });
   }
   revalidatePath("/whatsapp");
+  // With the contact attached, two more screens have something new to show.
+  if (target.leadId) {
+    revalidatePath("/conversations");
+    revalidatePath(`/contacts/${target.leadId}`);
+  }
   return toResult(out, "Free-form message sent");
 }
 

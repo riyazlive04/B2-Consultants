@@ -8,6 +8,7 @@ import {
   getMaintenanceConfig,
   getFinancePostingConfig,
   getSpeedToLeadAlertConfig,
+  getWeeklyReportConfig,
   getDunningConfig,
   getPipelineConfig,
   getBookingRulesConfig,
@@ -66,6 +67,7 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
     heartbeat,
     bookingRules,
     agreementWorkflow,
+    weekly,
   ] =
     await Promise.all([
       getEmailRuntime(),
@@ -80,6 +82,7 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
       prisma.appSetting.findUnique({ where: { key: "cronHeartbeat" } }),
       getBookingRulesConfig(),
       getAgreementWorkflow(),
+      getWeeklyReportConfig(),
     ]);
 
   /**
@@ -193,6 +196,21 @@ export async function getNotArmedReport(): Promise<NotArmedItem[]> {
       where: wati.settings.cadence.classReminderEnabled
         ? "WhatsApp → Settings → Class reminder - switch on “Send for real” (it is rehearsing)"
         : "WhatsApp → Settings → Class reminder (bind b2_class_reminder first)",
+    },
+    {
+      /*
+       * Like the class reminders above, this one has three states rather than two, and the
+       * middle one is the trap: armed but rehearsing. A rehearsing weekly report opens every
+       * cohort's week and writes a full SKIPPED row per student, so the dashboard fills up and
+       * looks alive while not one student has been sent a link.
+       */
+      key: "weeklyReport",
+      name: ENGINES.weeklyReport.name,
+      armed: weekly.enabled && !weekly.dryRun,
+      consequence: ENGINES.weeklyReport.consequence,
+      where: weekly.enabled
+        ? "Console → Weekly reports - switch off the dry run (it is rehearsing)"
+        : "Console → Weekly reports",
     },
     {
       key: "intake",

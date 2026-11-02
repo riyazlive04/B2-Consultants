@@ -57,10 +57,34 @@ export default function SubscriptionsTab({
     if (res.ok) toast("Cancelled");
   }
   async function remove(r: Row) {
-    // Archive, not delete (issue 26) - restorable, like every other record in this section.
-    if (!(await askConfirm({ title: "Archive this subscription?", body: "Billing stops and it moves out of the active list. It can be restored.", confirmLabel: "Archive", danger: true }))) return;
+    /**
+     * ── THIS IS A PERMANENT DELETE, AND IT NOW SAYS SO ────────────────────────────────────
+     *
+     * It used to confirm with "Archive this subscription? ... It can be restored", and the
+     * comment here claimed it was "restorable, like every other record in this section". Neither
+     * was true: `Subscription` carries no `deletedAt` column, so there is no archive for it to
+     * move to and `deleteSubscription` hard-deletes the row. The most reassuring dialog in the
+     * section sat in front of its only irreversible action.
+     *
+     * The non-destructive option already exists and is the button beside this one: Cancel sets
+     * the status to CANCELLED, which stops billing and KEEPS THE RECORD. The dialog points at it
+     * rather than pretending to be it - and says only what Cancel actually does. A cancelled row
+     * shows no Pause/Resume/Cancel buttons (see the row actions below), so the dialog must not
+     * promise it can be set back to Active.
+     */
+    if (
+      !(await askConfirm({
+        title: "Delete this subscription for good?",
+        body:
+          "This cannot be undone - the record is removed permanently. To stop billing and keep the record, use Cancel instead.",
+        confirmLabel: "Delete permanently",
+        danger: true,
+      }))
+    ) {
+      return;
+    }
     const res = await safeAction(() => deleteSubscription(r.id));
-    toast(res.ok ? "Archived" : res.error, res.ok ? "success" : "error");
+    toast(res.ok ? "Subscription deleted" : res.error, res.ok ? "success" : "error");
   }
 
   const columns: Column<Row>[] = [
@@ -89,7 +113,7 @@ export default function SubscriptionsTab({
         <div className="flex items-center justify-end gap-1">
           {r.status !== "CANCELLED" && <Btn size="sm" variant="ghost" onClick={() => cycle(r)}>{r.status === "ACTIVE" ? "Pause" : "Resume"}</Btn>}
           {r.status !== "CANCELLED" && <Btn size="sm" variant="ghost" onClick={() => cancel(r)}>Cancel</Btn>}
-          {canDelete && <IconButton label="Archive subscription" onClick={() => remove(r)}><Trash2 size={16} /></IconButton>}
+          {canDelete && <IconButton label="Delete subscription permanently" onClick={() => remove(r)}><Trash2 size={16} /></IconButton>}
         </div>
       ),
     },

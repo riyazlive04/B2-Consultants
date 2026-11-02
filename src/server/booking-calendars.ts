@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { oneSlotPerInstant } from "@/lib/slot-pool";
 import type { Block } from "@/lib/sites-types";
 import { getBookingRulesConfig } from "./founder-config";
 import type { CalendarSlot } from "@/components/booking/BookingCalendar";
@@ -73,13 +74,17 @@ export async function getStepCalendars(keys: string[]): Promise<StepCalendars> {
 
   const out: StepCalendars = {};
   for (const key of wanted) {
-    out[key] = rows
-      .filter((r) => (key === "" ? true : r.assignedToId === key))
-      .map((r) => ({
-        id: r.id,
-        startsAtIso: r.startsAt.toISOString(),
-        durationMins: r.durationMins,
-      }));
+    const mine = rows.filter((r) => (key === "" ? true : r.assignedToId === key));
+    /**
+     * The unscoped pool is every owner's diary at once, so two coaches free at 18:00 would draw
+     * two identical 18:00 buttons - a choice with nothing behind it. `oneSlotPerInstant` keeps one
+     * real slot per time; an owner-scoped key cannot clash with itself, so it passes through.
+     */
+    out[key] = (key === "" ? oneSlotPerInstant(mine) : mine).map((r) => ({
+      id: r.id,
+      startsAtIso: r.startsAt.toISOString(),
+      durationMins: r.durationMins,
+    }));
   }
   return out;
 }

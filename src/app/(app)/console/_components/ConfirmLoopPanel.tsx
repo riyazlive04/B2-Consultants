@@ -12,6 +12,7 @@ import type { BookingRulesConfig } from "@/lib/config-schema";
 import type { SlotReleaseRow } from "@/server/slot-release";
 import { Btn, Card, Hint, SaveBar, TextIn, Toggle } from "./kit";
 import { safeAction } from "@/lib/action-guard";
+import { SharedSettingNotice } from "@/components/ui/SharedSettingNotice";
 
 /**
  * Founder Console → Sales ops → Confirm-or-cancel.
@@ -123,6 +124,8 @@ export function ConfirmLoopPanel({
         cancelled. A WhatsApp &ldquo;yes&rdquo; confirms it automatically; so does{" "}
         <strong>Mark confirmed</strong> on Bookings → Booking requests.
       </Hint>
+
+      <SharedSettingNotice setting="confirmLoop" self="console" />
 
       <Card>
         <div className="space-y-5">

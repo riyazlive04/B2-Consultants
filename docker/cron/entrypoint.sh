@@ -49,10 +49,17 @@ cat > /etc/crontabs/root <<'EOF'
 # double tick sends nothing twice, but a reminder is a message with the company's name on it and
 # there is nothing to gain from checking more often.
 30 4 * * * /usr/local/bin/tick.sh agreements
+
+# Weekly report: opens each cohort's week, sends the link, chases non-responders, closes it.
+# Every 15 minutes rather than hourly so the founder's configured open and close times are hit
+# within a quarter of an hour of the minute they asked for. A tick with nothing due is one
+# query - the engine is idempotent on `(batchId, isoWeek)` and on the send rows themselves, so
+# a double tick neither opens a second week nor messages a cohort twice.
+*/15 * * * * /usr/local/bin/tick.sh weekly-reports
 EOF
 chmod 600 /etc/crontabs/root
 
-echo "cron: TZ=${TZ:-UTC} target=${APP_URL:-http://app:3000} — outreach/whatsapp 1m, workflows/alerts 5m, daily-log 15m, retention/agreements daily, daily 1h"
+echo "cron: TZ=${TZ:-UTC} target=${APP_URL:-http://app:3000} — outreach/whatsapp 1m, workflows/alerts 5m, daily-log 15m, retention/agreements daily, daily 1h, weekly-reports 15m"
 
 # -f foreground (PID 1), -d 8 logs each job to stderr so `docker compose logs cron` works.
 exec crond -f -d 8

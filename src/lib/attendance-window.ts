@@ -132,7 +132,7 @@ export function selfMarkFor(
  * corrected register, with its absences and its excuses, which a tutor may legitimately want
  * to fix before the cohort reads it.
  *
- * `publishRequired` is the founder's switch (Console → Attendance). Turned off, a mark is
+ * `publishRequired` is the founder's switch (Console → System → Alerts & Chasing). Turned off, a mark is
  * visible as soon as it exists, which is how this behaved before windows existed - kept as an
  * option so that a cohort already reading its attendance does not need a tutor to learn a new
  * button before the page works again.

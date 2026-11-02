@@ -31,7 +31,7 @@ const blank: JourneyInput = {
   hasContact: false,
   hasBooking: false,
   hasDiscoveryOutcome: false,
-  agreementStatus: null,
+  agreement: null,
   hasStudent: false,
   hasEnrolment: false,
   programLevel: null,
@@ -47,7 +47,7 @@ const done: JourneyInput = {
   hasContact: true,
   hasBooking: true,
   hasDiscoveryOutcome: true,
-  agreementStatus: "SIGNED",
+  agreement: { status: "SIGNED", expiresAt: null },
   hasStudent: true,
   hasEnrolment: true,
   programLevel: "GUIDED",
@@ -136,7 +136,7 @@ describe("the shapes the six creation doors leave behind", () => {
     const j = deriveJourney({
       ...blank,
       leadStage: "WON",
-      agreementStatus: "SIGNED",
+      agreement: { status: "SIGNED", expiresAt: null },
       hasStudent: true,
     });
     assert.equal(j.state, "SIGNED");
@@ -200,7 +200,7 @@ describe("people who do not fit a straight line", () => {
   });
 
   test("paid and seated before the agreement was ever sent - holes in the rail are allowed", () => {
-    const j = deriveJourney({ ...done, agreementStatus: null });
+    const j = deriveJourney({ ...done, agreement: null });
     assert.equal(j.state, "IN_CLASS");
     assert.ok(!j.reached.includes("AGREEMENT_SENT"));
     assert.ok(!j.reached.includes("SIGNED"));
@@ -222,7 +222,7 @@ describe("exits", () => {
   });
 
   test("a declined agreement is lost", () => {
-    const j = deriveJourney({ ...blank, leadStage: "WON", agreementStatus: "DECLINED" });
+    const j = deriveJourney({ ...blank, leadStage: "WON", agreement: { status: "DECLINED", expiresAt: null } });
     assert.equal(j.state, "LOST");
     assert.equal(j.next.target, "NOTHING");
     assert.equal(isInFlight(j), false);
@@ -234,10 +234,58 @@ describe("exits", () => {
    * notification feed already words it exactly that way: "so the deal isn't lost to a dead link".
    */
   test("an expired signing link is a gap to fix, not a lost deal", () => {
-    const j = deriveJourney({ ...blank, leadStage: "WON", agreementStatus: "EXPIRED" });
+    const j = deriveJourney({ ...blank, leadStage: "WON", agreement: { status: "EXPIRED", expiresAt: null } });
     assert.notEqual(j.state, "LOST");
     assert.deepEqual(j.gaps, ["AGREEMENT_EXPIRED"]);
     assert.equal(j.next.action, "Void and re-issue the agreement");
+  });
+
+  /**
+   * ── THE GAP THAT COULD NEVER FIRE ───────────────────────────────────────────────────────
+   *
+   * The test above passes a STORED status of "EXPIRED", and nothing in this app ever writes
+   * that: expiry is derived from `expiresAt`, exactly as the public token path and
+   * `deriveAgreementState` compute it. So `AGREEMENT_EXPIRED` was unreachable in practice and
+   * the Onboarding journey's promise to surface a dead link was never kept - the one state the
+   * gap exists for was the one it could not see.
+   */
+  test("a SENT link whose date has passed IS expired, with no stored status saying so", () => {
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString();
+    const j = deriveJourney({
+      ...blank,
+      leadStage: "WON",
+      agreement: { status: "SENT", expiresAt: yesterday },
+    });
+    assert.deepEqual(j.gaps, ["AGREEMENT_EXPIRED"]);
+    assert.equal(j.next.action, "Void and re-issue the agreement");
+  });
+
+  test("a VIEWED link whose date has passed too - opening it does not extend it", () => {
+    const yesterday = new Date(Date.now() - 86_400_000);
+    const j = deriveJourney({
+      ...blank,
+      leadStage: "WON",
+      agreement: { status: "VIEWED", expiresAt: yesterday },
+    });
+    assert.deepEqual(j.gaps, ["AGREEMENT_EXPIRED"]);
+  });
+
+  test("a live link is not expired, and a link with no expiry never expires", () => {
+    const tomorrow = new Date(Date.now() + 86_400_000).toISOString();
+    const live = deriveJourney({ ...blank, leadStage: "WON", agreement: { status: "SENT", expiresAt: tomorrow } });
+    assert.deepEqual(live.gaps, [], "a link still open is not a gap");
+    const forever = deriveJourney({ ...blank, leadStage: "WON", agreement: { status: "SENT", expiresAt: null } });
+    assert.deepEqual(forever.gaps, []);
+  });
+
+  test("a SIGNED agreement is never expired, whatever its date says", () => {
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString();
+    const j = deriveJourney({
+      ...blank,
+      leadStage: "WON",
+      agreement: { status: "SIGNED", expiresAt: yesterday },
+    });
+    assert.ok(!j.gaps.includes("AGREEMENT_EXPIRED"), "a signed contract cannot expire");
   });
 
   /**
@@ -289,7 +337,7 @@ describe("gaps outrank progress", () => {
   });
 
   test("sent and waiting is not an action for us", () => {
-    const j = deriveJourney({ ...blank, leadStage: "WON", agreementStatus: "VIEWED" });
+    const j = deriveJourney({ ...blank, leadStage: "WON", agreement: { status: "VIEWED", expiresAt: null } });
     assert.equal(j.state, "AGREEMENT_SENT");
     assert.equal(j.next.target, "AWAIT_SIGNATURE");
   });

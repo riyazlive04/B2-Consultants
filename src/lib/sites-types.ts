@@ -82,6 +82,32 @@ export type FormFieldType =
 /** Items that carry no answer: they lay the form out rather than ask anything. */
 export const STATIC_ITEM_TYPES = ["section", "heading", "image", "html", "captcha"] as const;
 
+/**
+ * THE KEYS THAT CAN GIVE A CAPTURE ITS NAME.
+ *
+ * The palette offers "Full Name" AND a First/Last pair, because the live opt-in uses the split -
+ * and `buildIntakeFromSubmission` honours both: full name wins when present, otherwise the two
+ * halves are joined.
+ *
+ * `togglePublishForm` did not. It demanded a field keyed exactly `name`, so a form built the
+ * First/Last way - the shape the business actually uses - could not be published at all, with an
+ * error naming a field the builder had deliberately not used. One rule, read by both, so the
+ * screen that accepts a submission and the screen that allows one cannot disagree about what a
+ * usable form looks like.
+ */
+export const NAME_FIELD_KEYS = ["name", "firstName", "lastName"] as const;
+
+/**
+ * Will a submission of this form produce a contact name?
+ *
+ * True when ANY name key is present, which is exactly what the intake builder needs - it joins
+ * whichever halves it is given, so a form asking only for a first name still captures somebody.
+ */
+export function capturesName(fieldKeys: Iterable<string>): boolean {
+  const keys = fieldKeys instanceof Set ? fieldKeys : new Set(fieldKeys);
+  return NAME_FIELD_KEYS.some((k) => keys.has(k));
+}
+
 export function isStaticItem(type: FormFieldType): boolean {
   return (STATIC_ITEM_TYPES as readonly string[]).includes(type);
 }

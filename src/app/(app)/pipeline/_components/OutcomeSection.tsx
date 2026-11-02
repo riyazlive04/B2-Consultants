@@ -151,7 +151,10 @@ export function OutcomeSection({
       danger: true,
     });
     if (!ok) return;
-    await deleteOutcome(row.id);
+    // `deleteOutcome` needs `pipeline.configure` and returns a refusal - which this used to
+    // report as "Outcome deleted" over a row still on screen.
+    const res = await safeAction(() => deleteOutcome(row.id));
+    if (!res.ok) return toast(res.error, "error");
     toast("Outcome deleted");
   };
 

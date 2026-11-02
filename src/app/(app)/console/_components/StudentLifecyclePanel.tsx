@@ -10,7 +10,7 @@ import {
 import { saveStudentLifecycleConfig } from "@/server/maintenance-actions";
 import { TextInput } from "@/components/ui/form";
 import { toast } from "@/components/ui/feedback";
-import { Card, Hint, SaveBar, Toggle } from "./kit";
+import { Card, Hint, NumInput, SaveBar, Toggle } from "./kit";
 import { safeAction } from "@/lib/action-guard";
 
 /**
@@ -28,6 +28,44 @@ import { safeAction } from "@/lib/action-guard";
  * a dropdown edit should be able to rewrite. A coach picking a reason that has since been
  * removed is refused and asked for another, which is the only case where the two halves differ.
  */
+/**
+ * One threshold: what it means in words, the box, and the unit after it.
+ *
+ * A row rather than five hand-laid grids, because the thing that makes these editable safely is
+ * that each one says what it DOES - a column of bare numbers labelled "14 / 10 / 50 / 21 / 10"
+ * is exactly as opaque as the constants they replaced.
+ */
+function LimitRow({
+  label,
+  hint,
+  value,
+  min,
+  max,
+  unit,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  value: number;
+  min: number;
+  max: number;
+  unit: string;
+  onChange: (n: number) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-[220px] flex-1">
+        <p className="text-sm text-ink">{label}</p>
+        <p className="text-caption text-muted">{hint}</p>
+      </div>
+      <div className="flex flex-none items-center gap-2">
+        <NumInput value={value} min={min} max={max} onChange={onChange} ariaLabel={label} className="w-20" />
+        <span className="text-caption text-muted">{unit}</span>
+      </div>
+    </div>
+  );
+}
+
 export function StudentLifecyclePanel({ config }: { config: StudentLifecycleConfig }) {
   const router = useRouter();
   const [draft, setDraft] = useState<StudentLifecycleConfig>(config);
@@ -114,6 +152,74 @@ export function StudentLifecyclePanel({ config }: { config: StudentLifecycleConf
           label="A coach may discontinue their own students"
           title="Off keeps the button with Admin and Head. The coach is still the one who knows, and every press is logged and reversible"
         />
+      </div>
+
+      {/*
+        ── WHEN TO WORRY ────────────────────────────────────────────────────────────────────
+        Every number here was a literal in the code until now, and the App Guide said so in as
+        many words. They are not implementation constants: they are this team's definition of
+        "worrying", and it differs between a 90-day programme and a 120-day one.
+
+        Grouped on the same panel as the discontinue reasons because they are the two halves of
+        one subject - when to go and ask, and what to write down if the answer is that they are
+        leaving.
+      */}
+      <div className="mt-5 border-t border-line pt-5">
+        <h5 className="text-sm font-semibold text-ink">When to worry</h5>
+        <Hint>
+          What puts a student on the Early-warning radar on the Students board, and when
+          Onboarding calls somebody stuck. These only decide who gets <em>listed</em> - the
+          signal colour stays a human decision, so a number set too low costs you a longer list
+          to read, never an action taken against a student.
+        </Hint>
+
+        <div className="mt-3 space-y-3">
+          <LimitRow
+            label="Days of silence before a student is flagged"
+            hint="Counted from their last recorded coaching session."
+            value={draft.radarSilentDays}
+            min={1}
+            max={120}
+            unit="days"
+            onChange={(n) => patch({ radarSilentDays: n })}
+          />
+          <LimitRow
+            label="No session at all by day"
+            hint="For a student who has never had one, counted from their enrolment date."
+            value={draft.radarNoSessionByDay}
+            min={1}
+            max={120}
+            unit="of the programme"
+            onChange={(n) => patch({ radarNoSessionByDay: n })}
+          />
+          <LimitRow
+            label="Behind on pace once this much of the programme has gone"
+            hint="Flagged only if they are also still on onboarding or resume - the share on its own says nothing."
+            value={draft.radarPaceElapsedPct}
+            min={5}
+            max={95}
+            unit="% elapsed"
+            onChange={(n) => patch({ radarPaceElapsedPct: n })}
+          />
+          <LimitRow
+            label="Run-in: days left without reaching interviews"
+            hint="The end-of-programme warning, so there is still time to act on it."
+            value={draft.radarEndgameDays}
+            min={1}
+            max={120}
+            unit="days left"
+            onChange={(n) => patch({ radarEndgameDays: n })}
+          />
+          <LimitRow
+            label="Onboarding is stuck after"
+            hint="No movement on the record for this long. The notification feed uses the same number."
+            value={draft.stuckAfterDays}
+            min={1}
+            max={90}
+            unit="days"
+            onChange={(n) => patch({ stuckAfterDays: n })}
+          />
+        </div>
       </div>
 
       {/*

@@ -377,3 +377,80 @@ export async function setQualificationScorer(scorer: "shipped" | "catalogue"): P
   revalidatePath("/book");
   return { ok: true };
 }
+
+/**
+ * The three verdict cutoffs, as a form payload.
+ *
+ * Mirrors `bantThresholdsSchema` in config-schema deliberately rather than importing it: this one
+ * coerces strings off a form, and it returns the ORDER error as a message a founder reads. The
+ * compile-time guard beside that schema is what keeps the two in step if a fourth cutoff is added.
+ */
+const thresholdsInputSchema = z
+  .object({
+    confirmAbove: z.coerce.number().min(0).max(BANT_MAX),
+    doubtFrom: z.coerce.number().min(0).max(BANT_MAX),
+    dimensionMetAt: z.coerce.number().min(0).max(BANT_MAX),
+  })
+  .refine((t) => t.confirmAbove >= t.doubtFrom, {
+    message: "The Confirm cutoff must be at or above the Doubt cutoff, or nobody can score Doubt.",
+    path: ["confirmAbove"],
+  });
+
+/**
+ * Move the three verdict cutoffs.
+ *
+ * ── Why this is its own action, and not part of the question editor ──────────────────────
+ * The cutoffs are not evidence. A question's wording and its option scores are what a prospect
+ * was asked and what the answer was worth, and the `qualification_question_version_guard` trigger
+ * freezes those once answered - the verdict was acted on, so the evidence behind it has to stay
+ * readable. A cutoff is the LINE drawn through that evidence, and moving it is meant to
+ * re-interpret the same answers. Different lifetime, so a different action.
+ *
+ * ── What moving a line does, and does not do ─────────────────────────────────────────────
+ * It takes effect on the next score. It does NOT restate the verdict stored on existing leads and
+ * bookings: those columns are what the business acted on - who was called, who was turned away -
+ * and silently rewriting them would erase the record of a decision rather than change a future
+ * one.
+ *
+ * The `< doubtFrom` line is the one with teeth: with auto-disqualify armed it is what turns an
+ * applicant away with an email. Lowering it lets more borderline applicants keep their call;
+ * raising it rejects more. Both are reversible in one click, which is the whole point of these
+ * being config - the last time they moved it cost a deploy and a data migration.
+ */
+export async function setQualificationThresholds(input: unknown): Promise<ActionResult> {
+  const { allowed, denied, session } = await capabilityCheck("qualification.manage");
+  if (!allowed) return denied;
+
+  const parsed = thresholdsInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Those cutoffs are not valid." };
+  }
+
+  const before = await getQualificationConfig();
+  const next = parsed.data;
+  if (
+    before.thresholds.confirmAbove === next.confirmAbove &&
+    before.thresholds.doubtFrom === next.doubtFrom &&
+    before.thresholds.dimensionMetAt === next.dimensionMetAt
+  ) {
+    return { ok: true };
+  }
+
+  await writeQualificationConfig({ ...before, thresholds: next });
+  await logActivity(session, {
+    action: "qualification.thresholds.set",
+    section: "bookings",
+    entityType: "AppSetting",
+    entityId: "qualificationConfig",
+    summary: `Moved the BANT cutoffs to confirm above ${next.confirmAbove}, doubt from ${next.doubtFrom}`,
+    // The PRIOR values too, so the activity log can answer "what was it before" - the one
+    // question a blind config overwrite otherwise destroys the answer to.
+    meta: { from: before.thresholds, to: next },
+  });
+
+  revalidateTag(QUALIFICATION_CACHE_TAG);
+  revalidatePath("/console");
+  revalidatePath("/book");
+  revalidatePath("/bookings");
+  return { ok: true };
+}

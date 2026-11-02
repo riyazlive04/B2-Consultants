@@ -56,12 +56,15 @@ type Slot = "pages" | "header" | "footer";
 export default function FunnelBuilder({
   funnel,
   forms,
+  hosts,
   calendars,
   snippets,
   snippetCategories,
 }: {
   funnel: FunnelDetail;
   forms: { id: string; name: string }[];
+  /** Bookable team members, for a booking block's "whose calendar" picker. */
+  hosts: { id: string; name: string }[];
   /** Real open slots per booking-block owner, so the canvas previews the live calendar. */
   calendars: StepCalendars;
   snippets: SnippetRow[];
@@ -350,6 +353,7 @@ export default function FunnelBuilder({
           onChange={(b) => setSlotBlocks(slot, b)}
           onRemove={() => removeChrome(slot)}
           forms={forms}
+          hosts={hosts}
           calendars={calendars}
           snippets={snippets}
           snippetCategories={snippetCategories}
@@ -422,6 +426,7 @@ export default function FunnelBuilder({
                 blocks={draft.blocks}
                 onChange={(blocks) => setDraft((d) => ({ ...d, blocks }))}
                 forms={forms}
+                hosts={hosts}
                 calendars={calendars}
                 snippets={snippets}
                 snippetCategories={snippetCategories}
@@ -577,13 +582,14 @@ function StepRow({
  * - a header edited inside a preview of one arbitrary step would suggest it belongs to that step.
  */
 function ChromeEditor({
-  which, blocks, onChange, onRemove, forms, calendars, snippets, snippetCategories,
+  which, blocks, onChange, onRemove, forms, hosts, calendars, snippets, snippetCategories,
 }: {
   which: "header" | "footer";
   blocks: Block[] | null;
   onChange: (b: Block[]) => void;
   onRemove: () => void;
   forms: { id: string; name: string }[];
+  hosts: { id: string; name: string }[];
   calendars: StepCalendars;
   snippets: SnippetRow[];
   snippetCategories: string[];
@@ -625,6 +631,7 @@ function ChromeEditor({
         blocks={blocks}
         onChange={onChange}
         forms={forms}
+        hosts={hosts}
         calendars={calendars}
         snippets={snippets}
         snippetCategories={snippetCategories}

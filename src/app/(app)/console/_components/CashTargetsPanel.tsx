@@ -193,6 +193,33 @@ export function CashTargetsPanel({ config }: { config: CashTargetsConfig }) {
         </Hint>
       </Card>
 
+      <Card
+        title="Euro rate of last resort"
+        subtitle="Only ever used on a day the live rate cannot be fetched and none has been cached."
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field
+            label="Fallback rate (₹ per €)"
+            hint="Set this near today's real rate. It is not used while the daily rate is reachable, and anything computed from it is marked as a stale rate on screen."
+          >
+            <NumInput
+              value={draft.fxFallbackInrPerEur}
+              onChange={(n) => patch({ fxFallbackInrPerEur: Math.max(1, n) })}
+              min={1}
+              max={1000}
+              ariaLabel="Fallback rupees per euro"
+            />
+          </Field>
+        </div>
+        <Hint>
+          {/* The reason this field exists at all: a 20%-low floor is invisible until the one
+              morning it is load-bearing, and then it is wrong on every screen at once. */}
+          This was fixed at ₹90 in the app until now, while the real rate has run nearer ₹110 - so
+          on the rare day it was reached, every euro figure read about a fifth light. It does not
+          change anything already recorded: every entry stamps the rate it used at the time.
+        </Hint>
+      </Card>
+
       {/* Wrapped in a Card so the sticky bar's negative insets land on a real card edge -
           SaveBar is written to sit inside Card's p-6 body. */}
       <Card>

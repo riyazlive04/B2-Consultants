@@ -140,8 +140,17 @@ export function SectionsPanel({ sections }: { sections: ResolvedSection[] }) {
     setBusy(true);
     setError(null);
     const config: SectionsConfig = {
-      entries: rows.map(({ key, label, icon, group, order, enabled, roles }) => ({
+      /**
+       * `onRail` travels with every row, which is the whole point of it existing.
+       *
+       * It used to be inferred from `enabled`, and because this save writes EVERY row, any save
+       * at all re-added the off-rail sections (Outreach) to the sidebar. See
+       * `sectionSettingSchema`. `??` keeps the resolved value - so a row the founder has not
+       * touched is saved as it currently stands rather than as "default".
+       */
+      entries: rows.map(({ key, label, icon, group, order, enabled, roles, onRail, offRail }) => ({
         key, label, icon, group, order, enabled, roles,
+        onRail: onRail ?? !offRail,
       })),
     };
     const form = new FormData();
@@ -263,11 +272,31 @@ export function SectionsPanel({ sections }: { sections: ResolvedSection[] }) {
                   <Lock size={13} /> Locked
                 </span>
               ) : (
-                <Toggle
-                  checked={s.enabled}
-                  onChange={(enabled) => update(s.key, { enabled })}
-                  label={s.enabled ? "On" : "Off"}
-                />
+                <div className="space-y-1">
+                  <Toggle
+                    checked={s.enabled}
+                    onChange={(enabled) => update(s.key, { enabled })}
+                    label={s.enabled ? "On" : "Off"}
+                  />
+                  {/*
+                    THE TOGGLE THE CATALOGUE HAS ALWAYS PROMISED.
+                    `offRail` sections are documented as puttable back "with one toggle in
+                    Console → Sections", and there was no such toggle: the behaviour was inferred
+                    from `enabled`, which this panel writes for every row on every save - so
+                    Outreach came back to the sidebar whenever anything here was saved, and the
+                    only way to remove it was to switch the section off and break its route.
+
+                    Offered only on a switched-on section: "listed in the sidebar" is not a
+                    question about a screen nobody can open.
+                  */}
+                  {s.enabled && (
+                    <Toggle
+                      checked={!(s.onRail === undefined ? s.offRail : !s.onRail)}
+                      onChange={(onRail) => update(s.key, { onRail })}
+                      label="Sidebar"
+                    />
+                  )}
+                </div>
               )}
             </ColRow>
           );
@@ -281,6 +310,11 @@ export function SectionsPanel({ sections }: { sections: ResolvedSection[] }) {
           and My Classroom are a student&apos;s <b>own</b> pages - they read the signed-in
           person&apos;s student record, so no role but Student can open them. Switching a section
           off hides it from everyone, including you - except the locked Founder Console.
+        </Hint>
+        <Hint>
+          <b>Sidebar</b> is separate from <b>On</b>: a section can be switched on and reachable
+          without being listed in the rail. Outreach ships that way, because it is surfaced from
+          Pipeline where it belongs - tick Sidebar to list it as well.
         </Hint>
         <Hint>
           These are <b>defaults</b>. A per-user override, set in Users → Users &amp; access, still wins.

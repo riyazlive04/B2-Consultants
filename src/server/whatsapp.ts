@@ -67,6 +67,12 @@ export type WhatsAppTarget = {
   bookOrderId?: string | null;
   /** The class a reminder is about - what makes the reminder ladder de-duplicable. */
   classSessionId?: string | null;
+  /**
+   * The cohort-week a weekly-report message is about, for the same reason as the line above:
+   * it is how the engine answers "have we already sent this week's link to this student" from
+   * durable state rather than from memory, on a cron that ticks every few minutes.
+   */
+  weeklyCycleId?: string | null;
 };
 
 export type SendWhatsAppInput = WhatsAppTarget & {
@@ -187,6 +193,7 @@ async function writeRow(input: {
       agreementId: input.target.agreementId ?? null,
       bookOrderId: input.target.bookOrderId ?? null,
       classSessionId: input.target.classSessionId ?? null,
+      weeklyCycleId: input.target.weeklyCycleId ?? null,
     },
     select: { id: true },
   });
@@ -207,6 +214,7 @@ export async function sendWhatsApp(input: SendWhatsAppInput): Promise<SendOutcom
       agreementId: input.agreementId,
       bookOrderId: input.bookOrderId,
       classSessionId: input.classSessionId,
+      weeklyCycleId: input.weeklyCycleId,
     } satisfies WhatsAppTarget,
   };
 
@@ -1380,10 +1388,27 @@ export async function sendFreeFormMessage(
   toRaw: string,
   text: string,
   sentById?: string | null,
+  /**
+   * WHO this message is to, as a record link.
+   *
+   * ── Why it had to exist ────────────────────────────────────────────────────────────────────
+   * `target` was hardcoded empty here, so every free-text WhatsApp was stored with a null
+   * `leadId` - and the Conversations inbox builds its threads from
+   * `whatsAppMessage.findMany({ where: { leadId: { not: null } } })`. A reply typed into an open
+   * thread therefore vanished the moment it was sent: it left the building, the customer got it,
+   * and the thread it was a reply to never showed it. The next person to open that conversation
+   * saw the customer's question with no answer under it and wrote a second one.
+   *
+   * The caller that needed it most already HAD the id - `sendWhatsAppFreeTextAction` looks the
+   * lead up to get their phone number - and simply had no parameter to pass it in.
+   *
+   * Optional, because one caller genuinely has no contact: `scheduled-report` messages the
+   * founder's own number. A null target there is the truth, not an omission.
+   */
+  target: WhatsAppTarget = {},
 ): Promise<SendOutcome> {
   const runtime = await getWatiRuntime();
   const number = normalizeWhatsappNumber(toRaw, runtime.settings.defaultCountry);
-  const target: WhatsAppTarget = {};
   const noParams = {} as Prisma.InputJsonValue;
 
   let skip: string | null = null;

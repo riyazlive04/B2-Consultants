@@ -15,6 +15,8 @@ import { MILESTONE_ORDER } from "@/lib/gamification";
 import { formatDate, formatPct } from "@/lib/format";
 import { MILESTONE_LABELS, PROGRAM_LEVEL_LABELS, STUDENT_STATUS_LABELS } from "@/lib/labels";
 import { SprintCheckIn } from "./_components/SprintCheckIn";
+import { MyWeeklyReports } from "./_components/MyWeeklyReports";
+import { getMyWeeklyReports } from "@/server/student-weekly-report";
 
 /** Its own name in the browser tab, rather than sharing one title with every other page
  *  (issue 28). The root layout adds the "· B2 Consultants" suffix. */
@@ -33,7 +35,7 @@ export default async function MyJourneyPage({
   searchParams?: { onboarding?: string };
 }) {
   const session = await requireSection("my-journey");
-  const [portal, agreements, payments, classroom] = await Promise.all([
+  const [portal, agreements, payments, classroom, weeklyReports] = await Promise.all([
     getMyStudentPortal(session.user.id),
     getMyAgreements(session.user.id),
     getMyPayments(session.user.id),
@@ -41,6 +43,9 @@ export default async function MyJourneyPage({
     // carries one line so a student who lands on their scoreboard still sees what is on next,
     // rather than having to know a second page exists.
     getMyClassroom(session.user.id),
+    // Their own weekly reports. Flags, streaks and unshared coach notes are stripped on the
+    // server - see student-weekly-report.ts.
+    getMyWeeklyReports(session.user.id),
   ]);
   /**
    * The welcome walkthrough, which no student could ever see.
@@ -180,6 +185,10 @@ export default async function MyJourneyPage({
 
       {/* Spec §10: the student's own payment plan, balance and receipts. Own records only -
           scoped to this login server-side; no margin, LTV or other students' figures. */}
+      {/* The weekly form: the open week with its link, then their own answers back. Renders
+          nothing at all until their cohort has been asked about a week. */}
+      <MyWeeklyReports weeks={weeklyReports} />
+
       <MyPayments payments={payments} />
 
       {/* CV diagnostic - the self-serve tool students can use any time, when it is switched on */}

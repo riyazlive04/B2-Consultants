@@ -31,7 +31,10 @@ export function OkrBoard({ members, month }: { members: MemberRow[]; month: stri
   const remove = async (okr: Okr) => {
     const ok = await askConfirm({ title: `Delete OKR “${okr.title}”?`, confirmLabel: "Delete", danger: true });
     if (!ok) return;
-    await deleteOkr(okr.id);
+    // `deleteOkr` is Admin-only, so the old unconditional toast claimed success over an
+    // action that never ran for anybody else.
+    const res = await safeAction(() => deleteOkr(okr.id));
+    if (!res.ok) return toast(res.error, "error");
     toast("OKR deleted");
   };
 

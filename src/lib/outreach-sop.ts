@@ -20,7 +20,7 @@
  */
 
 import type { OutreachStep, OutreachChannel, QualifiedVerdict } from "@prisma/client";
-import { BANT_CONFIRM_ABOVE, BANT_DOUBT_FROM } from "./booking-intake";
+import { DEFAULT_BANT_THRESHOLDS, type BantThresholds } from "./booking-intake";
 
 // ─────────────────────────────── Variables ───────────────────────────────
 
@@ -1123,10 +1123,13 @@ export function isInstantIntroSource(source: string): boolean {
  * second scale, so "Qualified" and "BANT verdict" can never disagree - they are the same decision
  * under the SOP's names and the CRM's names.
  */
-export function qualifiedFromBant(bantAvg: number | null | undefined): QualifiedVerdict | null {
+export function qualifiedFromBant(
+  bantAvg: number | null | undefined,
+  thresholds: BantThresholds = DEFAULT_BANT_THRESHOLDS,
+): QualifiedVerdict | null {
   if (bantAvg == null || !Number.isFinite(bantAvg)) return null;
-  if (bantAvg > BANT_CONFIRM_ABOVE) return "YES";
-  if (bantAvg >= BANT_DOUBT_FROM) return "MAYBE";
+  if (bantAvg > thresholds.confirmAbove) return "YES";
+  if (bantAvg >= thresholds.doubtFrom) return "MAYBE";
   return "NO";
 }
 

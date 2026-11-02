@@ -1,6 +1,6 @@
 import { BarChart3, Megaphone } from "lucide-react";
 import { PageHeader, SectionHeading } from "@/components/ui/kit";
-import { requireSection } from "@/lib/rbac";
+import { canOpenSection, requireSection } from "@/lib/rbac";
 import {
   GROUP_BY_FIELDS,
   REPORT_OBJECTS,
@@ -12,7 +12,7 @@ import {
   resolveReportRange,
   type ReportObject,
 } from "@/lib/reports";
-import { getReport } from "@/server/reports-metrics";
+import { getReport, type ReportScope } from "@/server/reports-metrics";
 import { getAttribution } from "@/server/insights-metrics";
 import ReportControls from "./_components/ReportControls";
 import ReportSummary from "./_components/ReportSummary";
@@ -54,9 +54,26 @@ export default async function ReportsPage({
 }: {
   searchParams: { object?: string; groupBy?: string; measure?: string; range?: string };
 }) {
-  await requireSection("reports");
+  const session = await requireSection("reports");
 
-  const object: ReportObject = isValidObject(searchParams.object) ? searchParams.object : "opportunities";
+  /**
+   * ── WHAT THIS VIEWER MAY REPORT ON ───────────────────────────────────────────────────────────
+   *
+   * Opening Reports is not the same question as "may this person see the book's money". Invoice
+   * totals and campaign economics (spend, cost per lead, cost to acquire) are Finance figures, so
+   * they are offered only to someone who could open Finance - which is the founder by default.
+   * Anyone else gets the two record objects, narrowed to their own leads and deals.
+   *
+   * Narrowed in the QUERY, not in the table: a total is the thing people read off this page, and
+   * a filtered table under an unfiltered total is worse than either.
+   */
+  const canSeeMoney = await canOpenSection("finance", session.role, session.overrides);
+  const scope: ReportScope = session.role === "ADMIN" ? null : { ownerId: session.user.id };
+  const objects = canSeeMoney ? REPORT_OBJECTS : REPORT_OBJECTS.filter((o) => o.key !== "invoices");
+
+  const requested: ReportObject = isValidObject(searchParams.object) ? searchParams.object : "opportunities";
+  // A hand-edited or bookmarked `?object=invoices` must not be a way round the line above.
+  const object: ReportObject = requested === "invoices" && !canSeeMoney ? "opportunities" : requested;
   const measure = isValidMeasure(object, searchParams.measure)
     ? searchParams.measure
     : defaultMeasure(object);
@@ -66,10 +83,12 @@ export default async function ReportsPage({
   const range = resolveReportRange(parseReportRange(searchParams.range), new Date());
 
   const [{ groupBy, result }, attribution] = await Promise.all([
-    getReport(object, searchParams.groupBy ?? defaultGroupBy(object), measure, range),
+    getReport(object, searchParams.groupBy ?? defaultGroupBy(object), measure, range, scope),
     // Attribution now follows the same period control as everything else on the page. It was
     // hardcoded to 90 days, which meant the picker moved every figure on the page except this one.
-    getAttribution(range.from ?? new Date(0), range.to),
+    canSeeMoney
+      ? getAttribution(range.from ?? new Date(0), range.to)
+      : Promise.resolve([] as Awaited<ReturnType<typeof getAttribution>>),
   ]);
 
   return (
@@ -78,7 +97,11 @@ export default async function ReportsPage({
         icon={<BarChart3 size={22} strokeWidth={1.8} />}
         eyebrow="Insights"
         title="Reports"
-        subtitle="Pick an object, a period, and a field that matters - see how much, which way it is moving, and what sits behind the number. The link is the saved report."
+        subtitle={
+          scope
+            ? "Your own leads and deals: pick a period and a field that matters, and see which way it is moving. The link is the saved report."
+            : "Pick an object, a period, and a field that matters - see how much, which way it is moving, and what sits behind the number. The link is the saved report."
+        }
       />
 
       <ReportControls
@@ -87,7 +110,7 @@ export default async function ReportsPage({
         measure={measure}
         range={range.key}
         fields={GROUP_BY_FIELDS[object]}
-        objects={REPORT_OBJECTS}
+        objects={objects}
       />
 
       <ReportSummary
@@ -118,7 +141,11 @@ export default async function ReportsPage({
         ER v2 Track F. The diagram's INSIGHT entity, computed rather than stored - every field
         of it is a division over rows that already exist, so a table would just be a cached
         quotient that goes stale the moment a lead converts.
+
+        Finance-visible viewers only: every column of it is money (spend, cost per lead, cost to
+        acquire, return on spend) over the whole business, and there is no per-owner version of it.
       */}
+      {canSeeMoney && (
       <section className="space-y-4">
         <SectionHeading
           icon={<Megaphone size={18} />}
@@ -127,6 +154,7 @@ export default async function ReportsPage({
         />
         <AttributionTable rows={attribution} />
       </section>
+      )}
     </div>
   );
 }

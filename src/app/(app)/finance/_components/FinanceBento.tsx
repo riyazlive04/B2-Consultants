@@ -111,6 +111,7 @@ export function FinanceBento({
   categoryRows,
   topPayments,
   priorityReceivables,
+  periodLabel,
 }: {
   revenue: MoneyAgg;
   expenses: MoneyAgg;
@@ -122,6 +123,12 @@ export function FinanceBento({
   categoryRows: MixRow[];
   topPayments: TopPayment[];
   priorityReceivables: PriorityReceivable[];
+  /**
+   * The window the figures cover, from the page's period bar ("This month", "June 2026", a
+   * custom range). Every card here used to say "this month" in its own subtitle while its rows
+   * followed the period bar, so picking June labelled June's data "this month".
+   */
+  periodLabel: string;
 }) {
   const { ccy } = useFinanceCcy();
   const c = { compact: true } as const;
@@ -186,10 +193,10 @@ export function FinanceBento({
       <Card
         className="lg:row-span-2"
         title={<CardTitle icon={<Trophy size={16} />}>Top 5 payments</CardTitle>}
-        subtitle="Largest income entries this month."
+        subtitle={`Largest income entries - ${periodLabel.toLowerCase()}.`}
       >
         {topPayments.length === 0 ? (
-          <EmptyState title="No income yet this month" body="Entries you add under the Income tab show up here." />
+          <EmptyState title={`No income in ${periodLabel.toLowerCase()}`} body="Entries you add under the Income tab show up here." />
         ) : (
           <ol className="divide-y divide-line">
             {topPayments.map((p, i) => (
@@ -220,7 +227,7 @@ export function FinanceBento({
 
       <Card
         title={<CardTitle icon={<PieChart size={16} />}>Expenses by category</CardTitle>}
-        subtitle="This month, top categories."
+        subtitle={`Top categories - ${periodLabel.toLowerCase()}.`}
       >
         <Donut
           slices={categoryRows.map((r) => ({

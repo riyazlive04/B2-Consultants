@@ -33,6 +33,9 @@ import { getMyGame, getTeamGame } from "@/server/gamification";
 import { getGnHomeSnapshot } from "@/server/german-note-metrics";
 import { computeNotifications } from "@/server/notifications";
 import { getMyWorkTime, istWeekKeys } from "@/server/work-time";
+import { getActiveLevels } from "@/server/levels";
+import { B2_LEVEL_KINDS } from "@/lib/levels";
+import { levelTallyRows } from "@/lib/level-tally";
 
 export const dynamic = "force-dynamic";
 
@@ -179,6 +182,17 @@ export default async function Home({
   // headless tracker; this is just the history the widget renders from.
   const workTime = await getMyWorkTime(session.user.id);
 
+  /**
+   * Wins by tier for the pipeline card's popup, named from the live catalogue.
+   *
+   * It listed Solo, Guided and Elite with an unnamed "Other" tail, so a deal won at a tier the
+   * founders added was shown as "Other" on the founder's own dashboard. One rule in
+   * lib/level-tally.ts: active tiers always, anything else the data carries as well.
+   */
+  const winRows = pipeline
+    ? levelTallyRows(pipeline.winsByLevel, await getActiveLevels(), B2_LEVEL_KINDS)
+    : [];
+
   const months = runway?.runwayMonths ?? null;
   const cashOnHandInr = runway?.cashInr ?? null;
   const avgBurnInr = runway?.burnInr ?? 0;
@@ -260,10 +274,7 @@ export default async function Home({
       href="/pipeline"
       detail={{
         rows: [
-          { label: "Solo", value: pipeline.winsByLevel.SOLO },
-          { label: "Guided", value: pipeline.winsByLevel.GUIDED },
-          { label: "Elite", value: pipeline.winsByLevel.ELITE },
-          ...(pipeline.winsByLevel.OTHER > 0 ? [{ label: "Other", value: pipeline.winsByLevel.OTHER }] : []),
+          ...winRows.map((r) => ({ label: r.label, value: r.value })),
           { label: "Completed discovery calls", value: pipeline.completedThisMonth },
         ],
       }}

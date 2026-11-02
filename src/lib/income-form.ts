@@ -298,10 +298,39 @@ export function deriveIncomeForm(
     : (lineLevelOptions[0]?.value ?? "");
   const entryLine: BusinessLine | null = programLevel ? (cat.levelLines[programLevel] ?? line) : line;
 
+  // ── Which receivable this pays off (FIN-12) ────────────────────────────────────
+  // Narrowed to the person named on the form, by the SAME pairing rule the balance maths uses:
+  // student id when one was picked, normalised name otherwise. Deliberately NOT narrowed by
+  // level - a Guided payment can legitimately pay down the A1 plan the student is actually
+  // settling, and refusing to show it is how the old auto-matching came to decline to act.
+  const plansForPayer = cat.openPlans.filter((pl) =>
+    draft.student.value
+      ? pl.studentId === draft.student.value
+      : pl.studentId === null && nameKey(pl.studentName) === nameKey(draft.student.text),
+  );
+  /**
+   * Defaulting to a LONE plan is the one piece of inference kept: a student with exactly one open
+   * receivable has no ambiguity to resolve, and making somebody confirm the only possible answer
+   * is how a field comes to be ignored. Two or more and nothing is assumed.
+   */
+  const pendingPaymentId =
+    draft.pendingPaymentId ??
+    editing?.pendingPaymentId ??
+    (plansForPayer.length === 1 ? plansForPayer[0].id : "");
+
   // ── The fee, and how it divides ────────────────────────────────────────────────
-  // Editing never redraws a schedule: the plan of a receivable already under way is not
-  // something an income edit may silently restate. That belongs in the receivable.
-  const needsSchedule = typeKind === "INSTALMENT" && !editing;
+  /**
+   * Editing never redraws a schedule: the plan of a receivable already under way is not
+   * something an income edit may silently restate. That belongs in the receivable.
+   *
+   * NEITHER DOES A PAYMENT THAT NAMES ONE. With `pendingPaymentId` set, this money pays off the
+   * next instalment(s) of a plan that was already agreed - there is no plan to draw. Without this
+   * condition the Save button stayed inert on exactly that entry (`blockSaveReason` below demands
+   * a count and a complete schedule whenever `needsSchedule` is true), and filling them in to get
+   * past it produced a second schedule the server then refused. Between the two, recording
+   * instalment 2 of 3 had no path through the form at all.
+   */
+  const needsSchedule = typeKind === "INSTALMENT" && !editing && !pendingPaymentId;
   const planMode = needsSchedule;
   const shares = planMode
     ? planShares(draft.fee, draft.extra, draft.instalmentCount, draft.firstInstalment)
@@ -358,16 +387,6 @@ export function deriveIncomeForm(
     draft.paymentMethod ?? editing?.paymentMethod ?? "UPI",
   );
 
-  // ── Which receivable this pays off (FIN-12) ────────────────────────────────────
-  // Narrowed to the person named on the form, by the SAME pairing rule the balance maths uses:
-  // student id when one was picked, normalised name otherwise. Deliberately NOT narrowed by
-  // level - a Guided payment can legitimately pay down the A1 plan the student is actually
-  // settling, and refusing to show it is how the old auto-matching came to decline to act.
-  const plansForPayer = cat.openPlans.filter((pl) =>
-    draft.student.value
-      ? pl.studentId === draft.student.value
-      : pl.studentId === null && nameKey(pl.studentName) === nameKey(draft.student.text),
-  );
   /**
    * The label carries the BALANCE and the due date, not just the level: with two plans open,
    * "GN A1" and "Guided" alone do not tell the operator which one the money in their hand is
@@ -382,15 +401,6 @@ export function deriveIncomeForm(
       }`,
     })),
   ];
-  /**
-   * Defaulting to a LONE plan is the one piece of inference kept: a student with exactly one open
-   * receivable has no ambiguity to resolve, and making somebody confirm the only possible answer
-   * is how a field comes to be ignored. Two or more and nothing is assumed.
-   */
-  const pendingPaymentId =
-    draft.pendingPaymentId ??
-    editing?.pendingPaymentId ??
-    (plansForPayer.length === 1 ? plansForPayer[0].id : "");
 
   // ── A name that matches nobody is a student waiting to be created ──────────────
   // Tested against `studentOptions` alone, NOT against the payers-known-by-name: a name that is

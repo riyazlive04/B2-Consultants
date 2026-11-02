@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { programDays } from "@/lib/milestones";
 import { generateSprintPlan, saveSprintWeek } from "@/server/students-actions";
 import type { StudentDetail } from "@/server/students-metrics";
 import { toast } from "@/components/ui/feedback";
@@ -39,7 +40,16 @@ export function SprintTracker({
 }) {
   const [saving, setSaving] = useState<string | null>(null);
   const weeks = enrollment.sprintWeeks;
-  const planWeeks = enrollment.programLevel === "GUIDED" ? 13 : 18;
+  /**
+   * The plan's length in WEEKS, from the enrolment's own duration.
+   *
+   * This read `programLevel === "GUIDED" ? 13 : 18`, so every tier that is not Guided - including
+   * any the founders add - was planned as 18 weeks whatever its actual length. The duration is
+   * stored on the enrolment when it is created; `programDays` is the one place that turns it into
+   * a number of days.
+   */
+  const planDays = programDays(enrollment.duration) ?? 120;
+  const planWeeks = Math.ceil(planDays / 7);
 
   const counts = {
     achieved: weeks.filter((w) => w.status === "ACHIEVED").length,
@@ -145,7 +155,7 @@ export function SprintTracker({
         <h4 className="text-sm font-semibold">
           Sprint tracker
           <span className="ml-2 font-normal text-muted">
-            {enrollment.programLevel === "GUIDED" ? "90 days · 13 weeks" : "120 days · 18 weeks"}
+            {planDays} days · {planWeeks} weeks
           </span>
         </h4>
         {weeks.length > 0 && (

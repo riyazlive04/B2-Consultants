@@ -97,11 +97,24 @@ export const MANUAL_STUDENTS: GuideManual[] = [
           "Stuck is a part of In flight. People who have finished, and people not going ahead, are never stuck.",
           "Quiet days are counted from the last change to the person's contact record. For someone who was never a lead, the student record is used instead.",
           "Any edit to that record resets the count, not only a step change, so a small edit can make a stalled person look active.",
-          "The limit is 10 days and is fixed in the app. It matches the stalled-in-pipeline rule in the notification feed.",
+          "The limit ships at 10 days and is a Console setting. The stalled-in-pipeline rule in the notification feed is a separate 10-day rule and does not move with it.",
           "Days are counted by calendar date, so a record changed late yesterday counts as 1 day quiet.",
+        ],
+        controls: [
+          {
+            setting: "How many quiet days make an onboarding person stuck",
+            where: ["Sidebar", "Admin", "Founder Console", "System", "Why students stop", "When to worry"],
+            href: consoleHref("system", "student-lifecycle"),
+            who: ["ADMIN"],
+            default: "10 days",
+            effect:
+              "Worked out on every load, so the tab re-populates immediately and nothing stored changes. Shortening it only makes the list longer - being on it is a prompt to look, not a mark against the person.",
+            reset: "Reset on the panel puts it back to 10 days.",
+          },
         ],
         watchOut: [
           "For a converted lead the count follows the contact record, not the student record. Editing the student does not reset it.",
+          "The notification feed's \"no movement in 10+ days\" pipeline alert is a different rule with its own fixed 10 days. Changing this setting does not move that one.",
         ],
         shot: {
           file: "onboarding-stuck.png",
@@ -229,8 +242,8 @@ export const MANUAL_STUDENTS: GuideManual[] = [
           "Average satisfaction and recommend score only use students who have at least one completed programme. Promoters score 9 to 10, passives 7 to 8 and detractors 0 to 6.",
           "Total paid adds up every live income entry linked to the student, with euro amounts converted at the rate saved on each entry. Upgrade rate is the share of students with more than one enrolment.",
           "Journey XP adds points for each milestone reached plus points per session, application and interview.",
-          "The radar flags a student when it has been more than 14 days since their last session, no session is logged after day 10, the next check-in date has passed, or the last task was not done.",
-          "It also flags over half the programme gone while still on Onboarding or Resume build, 21 days or fewer left before reaching Interviews, a sprint week marked Missed in the last 14 days, and a weekly check-in more than 2 days late. It only suggests; the signal colour stays your decision.",
+          "The radar flags a student when it has been more than 14 days since their last session, no session is logged after day 10, the next check-in date has passed, or the last task was not done. All four of those numbers are Console settings, shown here at their shipped values.",
+          "It also flags over half the programme gone while still on Onboarding or Resume build, 21 days or fewer left before reaching Interviews, a sprint week marked Missed in the last 14 days, and a weekly check-in more than 2 days late. The half-way share and the 21 days are Console settings; the sprint-week rules are not. It only suggests; the signal colour stays your decision.",
         ],
         controls: [
           {
@@ -248,9 +261,18 @@ export const MANUAL_STUDENTS: GuideManual[] = [
             default: "7 reasons, plus a free-text Other",
             effect: "Forward only: enrolments already dropped keep the reason they were given. A removed reason simply stops being offered.",
           },
+          {
+            setting: "When the Early-warning radar flags a student - days of silence, no session by day N, how far through the programme counts as behind, and the run-in before the end",
+            where: ["Sidebar", "Admin", "Founder Console", "System", "Why students stop", "When to worry"],
+            href: consoleHref("system", "student-lifecycle"),
+            who: ["ADMIN"],
+            default: "14 days silent, no session by day 10, half the programme elapsed, 21 days left",
+            effect:
+              "Worked out on every load, so a change re-reads the whole board at once and nothing stored is rewritten. These decide who is LISTED; the signal colour stays a human decision, so a number set too low costs you a longer list to read, not an action taken against a student.",
+            reset: "Reset on the panel puts all five back to the shipped numbers.",
+          },
         ],
         watchOut: [
-          "The radar's limits (14 days, day 10, half-way, 21 days) are fixed in the app and cannot be changed in the Console.",
           "Dropped this month follows the date of the last status change, so putting a student back and dropping them again moves them into the current month.",
         ],
         shot: {
@@ -906,15 +928,28 @@ export const MANUAL_STUDENTS: GuideManual[] = [
           "Click Add conversion for each person who bought, with their product, source, price, amount paid and batch.",
         ],
         logic: [
-          "Cost of delivery is worked out from the product: books ₹1,300 per level, and tutor ₹7,000 for A1, ₹8,000 for A2 and ₹12,000 for B1. A bundle adds up every level it includes.",
+          "Cost of delivery is worked out from the product: the books and tutor cost set on each GN level in the programme catalogue, added up over every level the product enrols. Shipped at books ₹1,300 per level, and tutor ₹7,000 for A1, ₹8,000 for A2 and ₹12,000 for B1.",
+          "A level with no cost filled in on the catalogue falls back to those shipped figures rather than costing nothing, so a half-filled catalogue cannot make a workshop look like pure profit.",
           "You can override the books or tutor cost on one conversion for a real exception, such as sponsored books.",
           "The workshop's ad spend is split evenly across conversions whose source is Ad. Organic conversions carry no ad cost.",
           "Gross profit is revenue minus books and tutor. Net profit also takes off ad spend and referral cost. ROAS is revenue divided by ad spend.",
           "Batches & seats is built from the batch names and times typed on each conversion, not from the German Note batches.",
           "Ad performance works out click rate, cost per click, show-up rate and conversion rate from the numbers you enter.",
         ],
+        controls: [
+          {
+            setting: "What a GN level costs to deliver - its books and tutor cost",
+            where: ["Sidebar", "Admin", "Programs", "Programmes", "GN A1 / GN A2 / GN B1", "Pencil icon"],
+            href: "/programs",
+            who: ["ADMIN"],
+            default: "Books ₹1,300 for every level; tutor ₹7,000 (A1), ₹8,000 (A2), ₹12,000 (B1)",
+            effect:
+              "Every workshop P&L is worked out when the page loads, so a change re-costs PAST workshops as well as future ones. That is deliberate - there is one true cost of delivering A1 - but it does mean a gross profit you quoted last month can move. Where a single conversion was genuinely cheaper or dearer, use the per-conversion override instead, which is pinned to that row and is not affected.",
+            reset: "Clear the cost on the level and it falls back to the shipped figure above.",
+          },
+        ],
         watchOut: [
-          "The standard book and tutor costs are fixed in the app, not in the Console. Use the per-conversion override when a cost is different.",
+          "Changing a level's cost re-costs every workshop ever run, because the P&L is worked out on each load rather than stored. Use the per-conversion override for a one-off exception.",
           "Only Admins can add or change workshops, conversions and ad sets. Others with the financials permission can only read.",
         ],
         shot: {

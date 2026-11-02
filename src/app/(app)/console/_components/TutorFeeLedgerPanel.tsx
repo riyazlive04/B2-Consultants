@@ -89,8 +89,11 @@ export function TutorFeeLedgerPanel({ fees, accrualOn }: { fees: TutorFeeRow[]; 
           <> Approved fees also post <strong>Dr COGS / Cr Accounts payable</strong> to the ledger.</>
         ) : (
           <>
+            {/* The old text said "Operations → Finance posting", which is not a panel this app
+                has. The toggle lives on the Maintenance card, beside the other two posting
+                switches - see `MaintenancePanel`'s PostingCard. */}
             {" "}Recording fees as money owed is <strong>off</strong>; approving records the decision without
-            posting. Turn it on in Operations → Finance posting.
+            posting. Turn it on in <strong>System → Maintenance → Ledger auto-posting</strong>.
           </>
         )}
       </Hint>

@@ -39,7 +39,16 @@ const SOURCE_OPTS = [
   { value: "OTHER", label: "Other" },
 ];
 
-export function StartPerson() {
+export function StartPerson({
+  canAddContact,
+}: {
+  /**
+   * Whether this viewer can open Contacts - which is what `createContact` guards on, and it
+   * REDIRECTS when refused. Onboarding is open to a head coach and Contacts is not, so without
+   * this the first step of the wizard threw them off the page the moment they submitted it.
+   */
+  canAddContact: boolean;
+}) {
   const router = useRouter();
   const form = useRef<HTMLFormElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +68,8 @@ export function StartPerson() {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+    <div className={`grid gap-4 ${canAddContact ? "lg:grid-cols-[1.4fr_1fr]" : ""}`}>
+      {canAddContact ? (
       <Card title={<CardTitle icon={<UserPlus size={17} />}>Who is this?</CardTitle>} subtitle="Name and a phone number are enough to start. Everything else can wait.">
         <form action={add} ref={form} className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -88,6 +98,20 @@ export function StartPerson() {
           </div>
         </form>
       </Card>
+      ) : (
+        /* No Contacts access. The form is not drawn rather than drawn and refused - saying which
+           step this is and who does it is the useful half of the answer. */
+        <Card
+          title={<CardTitle icon={<UserPlus size={17} />}>Adding a new person</CardTitle>}
+          subtitle="The first step of the journey is a contact record, and that is created in Contacts."
+        >
+          <p className="text-body text-ink-2">
+            You do not have Contacts, so somebody with it adds the person first. Once they exist,
+            they appear on the onboarding board below and you can carry their journey on from
+            there - every later step reads off their records.
+          </p>
+        </Card>
+      )}
 
       <Card
         title={<CardTitle icon={<Search size={17} />}>Already in the app?</CardTitle>}
@@ -104,19 +128,25 @@ export function StartPerson() {
           >
             Open the onboarding board
           </Link>
-          <Link href="/contacts">
-            <Btn variant="soft">Search contacts</Btn>
-          </Link>
+          {/* Same access question as the form - a link to a section this person is bounced out of
+              is the smaller version of the same problem. */}
+          {canAddContact && (
+            <Link href="/contacts">
+              <Btn variant="soft">Search contacts</Btn>
+            </Link>
+          )}
         </div>
         {/*
           The duplicate guard lives in `createContact` and matches on phone or email, so re-typing
           somebody who exists is refused with their name rather than silently forking the person
           into two records. Saying so here means the refusal is expected rather than confusing.
         */}
-        <p className="mt-4 text-caption text-muted">
-          Typing somebody who already exists is refused, not duplicated - the phone number and
-          email are both checked.
-        </p>
+        {canAddContact && (
+          <p className="mt-4 text-caption text-muted">
+            Typing somebody who already exists is refused, not duplicated - the phone number and
+            email are both checked.
+          </p>
+        )}
       </Card>
     </div>
   );

@@ -13,8 +13,10 @@ import {
   PRODUCT_LEVELS,
   PRODUCT_ORDER,
   SEAT_LEVELS,
+  gnLevelCostsFrom,
   standardBooksCost,
   standardTutorCost,
+  type GnLevelCosts,
   type SeatLevel,
 } from "@/lib/gn-workshop-pricing";
 
@@ -147,11 +149,39 @@ type AdSetRecord = {
 };
 
 /**
+ * What a level costs to deliver, read from the programme catalogue once per request.
+ *
+ * `cache()`d rather than threaded down from each caller: all three readers below want the
+ * same answer, and a workshop list would otherwise re-query the catalogue per workshop.
+ */
+const gnLevelCosts = cache(async (): Promise<GnLevelCosts> => {
+  const rows = await prisma.level.findMany({
+    where: { code: { in: SEAT_LEVELS.map((l) => `GN_${l}`) } },
+    select: { code: true, booksCostInrMinor: true, tutorCostInrMinor: true },
+  });
+  return gnLevelCostsFrom(
+    new Map(
+      rows.map((r) => [
+        r.code,
+        {
+          books: r.booksCostInrMinor === null ? null : Number(r.booksCostInrMinor),
+          tutor: r.tutorCostInrMinor === null ? null : Number(r.tutorCostInrMinor),
+        },
+      ]),
+    ),
+  );
+});
+
+/**
  * Turn stored conversions + ad-sets into computed rows. Costs are DERIVED from
  * the product (override wins when present); ad spend is DERIVED by splitting the
  * workshop's total ad-set spend across its AD conversions.
  */
-function buildRows(conversions: ConversionRecord[], adSets: AdSetRecord[]): GnConversionRow[] {
+function buildRows(
+  conversions: ConversionRecord[],
+  adSets: AdSetRecord[],
+  costs: GnLevelCosts,
+): GnConversionRow[] {
   const totalAdSpend = adSets.reduce((a, s) => a + Number(s.adSpendInrMinor), 0);
   const adConvCount = conversions.filter((c) => c.source === "AD").length;
   const adPerConversion = adConvCount > 0 ? totalAdSpend / adConvCount : 0;
@@ -165,8 +195,8 @@ function buildRows(conversions: ConversionRecord[], adSets: AdSetRecord[]): GnCo
     };
     const booksOverride = c.booksCostOverrideInrMinor;
     const tutorOverride = c.tutorCostOverrideInrMinor;
-    const books = booksOverride !== null ? Number(booksOverride) : standardBooksCost(c.product);
-    const tutor = tutorOverride !== null ? Number(tutorOverride) : standardTutorCost(c.product);
+    const books = booksOverride !== null ? Number(booksOverride) : standardBooksCost(c.product, costs);
+    const tutor = tutorOverride !== null ? Number(tutorOverride) : standardTutorCost(c.product, costs);
     const ads = c.source === "AD" ? Math.round(adPerConversion) : 0;
     return {
       id: c.id,
@@ -398,8 +428,9 @@ export const getGnWorkshops = cache(async (): Promise<GnWorkshopSummary[]> => {
     orderBy: [{ status: "asc" }, { month: "desc" }],
     include: { conversions: true, adSets: true },
   });
+  const costs = await gnLevelCosts();
   return workshops.map((w) => {
-    const rows = buildRows(w.conversions, w.adSets);
+    const rows = buildRows(w.conversions, w.adSets, costs);
     const sets = w.adSets.map(adSetRow);
     return {
       id: w.id,
@@ -475,11 +506,12 @@ export const getGnFounderStats = cache(async (): Promise<GnFounderStats> => {
     include: { conversions: true, adSets: true },
   });
 
+  const costs = await gnLevelCosts();
   const all: GnConversionRow[] = [];
   const dues: GnDuesRow[] = [];
   const perWorkshop: GnWorkshopBar[] = [];
   for (const w of workshops) {
-    const rows = buildRows(w.conversions, w.adSets);
+    const rows = buildRows(w.conversions, w.adSets, costs);
     all.push(...rows);
     let owedHere = 0;
     for (const r of rows) {
@@ -557,7 +589,8 @@ export const getGnWorkshopDetail = cache(async (workshopId: string): Promise<GnW
     },
   });
   if (!w) return null;
-  const rows = buildRows(w.conversions, w.adSets);
+  const costs = await gnLevelCosts();
+  const rows = buildRows(w.conversions, w.adSets, costs);
   const sets = w.adSets.map(adSetRow);
   return {
     id: w.id,

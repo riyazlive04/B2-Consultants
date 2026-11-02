@@ -31,6 +31,7 @@ export type EngineKey =
   | "confirmLoop"
   | "studentWelcome"
   | "classReminders"
+  | "weeklyReport"
   | "intake"
   | "speedToLead"
   | "dunning"
@@ -102,6 +103,12 @@ export const ENGINES: Record<EngineKey, EngineCopy> = {
       "Nobody is told their class is about to start. Students get the timetable only if they open the portal and look, and a coach gets no nudge before a session they are due to run - so a missed class looks identical to a class nobody scheduled.",
     where: "WhatsApp → Settings → Class reminder",
   },
+  weeklyReport: {
+    name: "Weekly reports",
+    consequence:
+      "No cohort is being asked how its week went. No form appears on anybody's dashboard, nobody is chased for a missing one, and no week opens or closes on its own - so the red and yellow flags only ever cover the weeks somebody opened by hand.",
+    where: "Console → Weekly reports",
+  },
   intake: {
     name: "Lead capture webhooks",
     consequence:
@@ -131,22 +138,36 @@ export const ENGINES: Record<EngineKey, EngineCopy> = {
       "Archived rows and expired invites are kept forever rather than purged on the 90-day policy.",
     where: "Console → System → Maintenance",
   },
+  /**
+   * ── THE THREE POSTING ENGINES, AND WHAT THEIR SILENCE REALLY COSTS ──────────────────────
+   *
+   * These three write to the double-entry ledger and NOTHING ELSE. Every figure on /finance,
+   * /cash and the dashboard is computed from the `Income`, `Expense` and `PendingPayment` records
+   * directly, so arming any of them moves nothing a user can see - and `/ledger`, the one screen
+   * that read the books, was removed at the founder's instruction (see `server/ledger.ts`).
+   *
+   * So each `consequence` below says BOOKS, not P&L. The previous wording ("the P&L understates
+   * what is owed to the team") promised a screen would change, which left a founder arming all
+   * three, watching Finance sit perfectly still, and reasonably concluding the switches were
+   * broken. What is actually at stake is whether the accounts are complete when somebody comes to
+   * read them - which is worth arming for, and is a different claim.
+   */
   commissionAccrual: {
     name: "Commission accrual posting",
     consequence:
-      "Commission is reported but never posted to the ledger, so the P&L understates what is owed to the team.",
+      "Commission is reported on screen but never written to the books, so the accounts omit what is owed to the team. The Finance figures are unaffected either way - they are read from the payment records, not the ledger.",
     where: "Console → System → Maintenance",
   },
   tutorFeeAccrual: {
     name: "Tutor-fee accrual posting",
     consequence:
-      "Tutor fees are calculated but never posted, so German Note's cost of delivery is missing from the ledger.",
+      "Approved tutor fees are never written to the books, so German Note's cost of delivery is missing from the accounts. The fee report itself is complete either way.",
     where: "Console → System → Maintenance",
   },
   invoicePosting: {
     name: "Invoice-issuance posting",
     consequence:
-      "Issuing an invoice records no receivable in the ledger - revenue appears only when cash arrives.",
+      "Issuing an invoice records no receivable in the books, so the accounts recognise revenue only when cash arrives. The invoice, and the receivable figures on Finance, are unaffected.",
     where: "Console → System → Maintenance",
   },
   autoCreateOpportunity: {

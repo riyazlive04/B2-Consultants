@@ -214,6 +214,22 @@ function instalmentFields(d: z.infer<typeof incomeSchema>, kind: PaymentTypeKind
   if (kind !== "INSTALMENT") {
     return { instalmentCount: null, instalmentExtraInrMinor: BigInt(0), instalmentExtraEurMinor: BigInt(0) };
   }
+  /**
+   * ── A PAYMENT AGAINST AN EXISTING PLAN IS NOT A NEW PLAN ─────────────────────────────────
+   *
+   * `pendingPaymentId` names the receivable this money pays off, and that plan already knows how
+   * many instalments it has. Requiring the count again was the first half of a trap: the count is
+   * what made the form's schedule box draw `count - 1` dated rows (it auto-fills by default), a
+   * non-empty schedule tripped the "already has an instalment plan" refusal below, and the only
+   * way through was to untick auto-fill and hand-clear the last row. So the ordinary act of
+   * recording instalment 2 of 3 was refused by the screen built to record it, which is why no
+   * later instalment was ever ticked off automatically.
+   *
+   * With a plan named, the count and the surcharge come from the plan, not from this form.
+   */
+  if (d.pendingPaymentId?.trim()) {
+    return { instalmentCount: null, instalmentExtraInrMinor: BigInt(0), instalmentExtraEurMinor: BigInt(0) };
+  }
   if (!d.instalmentCount) return { error: "Enter how many instalments the fee is split into" };
   return {
     instalmentCount: Number(d.instalmentCount),
@@ -402,12 +418,17 @@ async function prepareIncome(form: FormData): Promise<{ error: string } | Prepar
   if (!(await isKnownLevel(d.programLevel))) return { error: "That program level no longer exists - pick another." };
 
   const incomeDate = parseDateInput(d.date);
-  // Only an INSTALMENT-kind entry carries a schedule; switching back to full payment discards any
-  // dates left in the form rather than billing for a plan the founder just cancelled.
-  const parsedSchedule = parseSchedule(
-    type.kind === "INSTALMENT" ? d.instalmentSchedule : undefined,
-    incomeDate,
-  );
+  /**
+   * Only an INSTALMENT-kind entry carries a schedule; switching back to full payment discards any
+   * dates left in the form rather than billing for a plan the founder just cancelled.
+   *
+   * And a payment that NAMES an existing receivable carries none either, whatever arrives in the
+   * field. The form no longer draws the schedule box in that case, so this is the server half of
+   * the same rule: a plan was already agreed, this money pays off its next instalment(s), and a
+   * second schedule would double what the student is thought to owe. See `instalmentFields`.
+   */
+  const buildsPlan = type.kind === "INSTALMENT" && !d.pendingPaymentId?.trim();
+  const parsedSchedule = parseSchedule(buildsPlan ? d.instalmentSchedule : undefined, incomeDate);
   if ("error" in parsedSchedule) return { error: parsedSchedule.error };
   const schedule = parsedSchedule.schedule;
 

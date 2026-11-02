@@ -237,13 +237,38 @@ function rangeQuery(range: ResolvedRange): string {
 
 // ───────────────────────────── per-object reports ─────────────────────────────
 
+/**
+ * ── WHO SEES WHOSE ROWS ───────────────────────────────────────────────────────────────────────
+ *
+ * The workbench reports over three objects, and until now it reported over ALL of each one for
+ * anyone who could open the section - telecallers included. So a telecaller with Reports read the
+ * whole book's invoice totals, and every lead and deal in the business, from a screen whose own
+ * documentation said the rows were scoped to the viewer.
+ *
+ * `null` means "everything" - an Admin. Otherwise it is the viewer's user id and the record
+ * objects are narrowed to their own work, on the SAME predicate the pipeline uses:
+ * `assignedToId` OR `enteredById`. Ownership is `assignedToId` (what the rotation writes, what
+ * My Desk reads, what commission pays on); `enteredById` rides along so someone who hand-enters a
+ * lead still sees it before the rotation has placed it.
+ *
+ * Invoices carry no owner at all, so they are not scoped here - they are withheld at the page,
+ * which offers the object only to a viewer who could open Finance.
+ */
+export type ReportScope = { ownerId: string } | null;
+
+/** The own-rows predicate, or `{}` for an unscoped (Admin) read. */
+function scopeWhere(scope: ReportScope) {
+  return scope ? { OR: [{ assignedToId: scope.ownerId }, { enteredById: scope.ownerId }] } : {};
+}
+
 async function getContactsReport(
   groupBy: string,
   measure: ReportMeasure,
   range: ResolvedRange,
+  scope: ReportScope,
 ): Promise<ReportResult> {
   const leads = await prisma.lead.findMany({
-    where: { ...ACTIVE, ...createdAtFilter(range) },
+    where: { ...ACTIVE, ...createdAtFilter(range), ...scopeWhere(scope) },
     select: {
       leadSource: true,
       stage: true,
@@ -299,9 +324,19 @@ async function getOpportunitiesReport(
   groupBy: string,
   measure: ReportMeasure,
   range: ResolvedRange,
+  scope: ReportScope,
 ): Promise<ReportResult> {
   const opps = await prisma.opportunity.findMany({
-    where: { deletedAt: null, lead: { deletedAt: null }, ...createdAtFilter(range) },
+    where: {
+      deletedAt: null,
+      lead: { deletedAt: null },
+      ...createdAtFilter(range),
+      // An opportunity has no `enteredById`, so "own" is the assignment plus anything on a lead
+      // this person owns - otherwise a rep's own deal disappears the moment it is left unassigned.
+      ...(scope
+        ? { OR: [{ assignedToId: scope.ownerId }, { lead: { assignedToId: scope.ownerId, deletedAt: null } }] }
+        : {}),
+    },
     select: {
       status: true,
       source: true,
@@ -418,13 +453,14 @@ export const getReport = cache(
     groupByRaw: string,
     measure: ReportMeasure,
     range: ResolvedRange,
+    scope: ReportScope = null,
   ): Promise<{ groupBy: string; result: ReportResult }> => {
     const groupBy = isValidGroupBy(object, groupByRaw) ? groupByRaw : defaultGroupBy(object);
     const result =
       object === "contacts"
-        ? await getContactsReport(groupBy, measure, range)
+        ? await getContactsReport(groupBy, measure, range, scope)
         : object === "opportunities"
-          ? await getOpportunitiesReport(groupBy, measure, range)
+          ? await getOpportunitiesReport(groupBy, measure, range, scope)
           : await getInvoicesReport(groupBy, measure, range);
     return { groupBy, result };
   },

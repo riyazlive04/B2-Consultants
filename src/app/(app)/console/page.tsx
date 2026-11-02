@@ -34,8 +34,14 @@ import {
   getAttendanceConfig,
   getLeaderboardConfig,
   getStudentLifecycleConfig,
-  getDeliveryDefaults,} from "@/server/founder-config";
+  getDeliveryDefaults,
+  getWeeklyReportConfig,
+} from "@/server/founder-config";
 import { getGoalsWithProgress } from "@/server/goals";
+import { WeeklyReportPanel } from "./_components/WeeklyReportPanel";
+import { WeeklyTemplatesPanel } from "./_components/WeeklyTemplatesPanel";
+import { getWeeklyTemplateDetails } from "@/server/weekly-report-board";
+import { lineForKind } from "@/lib/business-line";
 import { listTutorFees } from "@/server/tutor-fees";
 import { getAllQualificationQuestions, shadowAgreement } from "@/server/qualification";
 import { getIntakeMappingReport } from "@/server/intake-inspection";
@@ -172,10 +178,22 @@ export default async function ConsolePage() {
 
   // Lead webhook switch - its own pair for the same reason as the tuple above. `deliveryFailures`
   // is the other half of the Not-armed question: what is switched ON and still not delivering.
-  const [leadWebhook, deliveries, deliveryFailures] = await Promise.all([
+  const [leadWebhook, deliveries, deliveryFailures, weeklyReport, weeklyTemplates, levelRows] = await Promise.all([
     getLeadWebhookConfig(),
     readDeliveryStatuses(),
     getDeliveryFailureReport(),
+    // The weekly report's cadence and thresholds. Appended here rather than to the config tuple
+    // above for the reason that tuple's own comment gives: it is long enough that an added entry
+    // silently shifts a destructured name.
+    getWeeklyReportConfig(),
+    getWeeklyTemplateDetails(),
+    // The level catalogue, so a question set can be pinned to one tier. Read here rather than
+    // inside the panel because the panel is a client component.
+    prisma.level.findMany({
+      where: { active: true },
+      select: { code: true, label: true, kind: true },
+      orderBy: { order: "asc" },
+    }),
   ]);
 
   /**
@@ -437,6 +455,7 @@ export default async function ConsolePage() {
                         questions={qualificationQuestions}
                         shadow={shadowStatus}
                         scorer={qualificationConfig.scorer}
+                        thresholds={qualificationConfig.thresholds}
                         inbound={inboundReport}
                       />
                     ),
@@ -561,6 +580,23 @@ export default async function ConsolePage() {
                         quests={questOptions}
                         goals={goalOptions}
                       />
+                    ),
+                  },
+                  {
+                    id: P.delivery[6],
+                    label: "Weekly reports",
+                    content: (
+                      <div className="space-y-6">
+                        <WeeklyReportPanel config={weeklyReport} />
+                        <WeeklyTemplatesPanel
+                          templates={weeklyTemplates}
+                          levels={levelRows.map((l) => ({
+                            code: l.code,
+                            label: l.label,
+                            line: lineForKind(l.kind),
+                          }))}
+                        />
+                      </div>
                     ),
                   },
                 ]}

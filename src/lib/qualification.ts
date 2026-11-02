@@ -23,7 +23,15 @@
  */
 
 import type { BantDimension, QuestionKind } from "@prisma/client";
-import { INTAKE_OPTIONS, BANT_ANSWER_SCORES, BANT_MAX, DIMENSION_MET_AT, bantVerdictFor, type BantResult } from "./booking-intake";
+import {
+  INTAKE_OPTIONS,
+  BANT_ANSWER_SCORES,
+  BANT_MAX,
+  DEFAULT_BANT_THRESHOLDS,
+  bantVerdictFor,
+  type BantResult,
+  type BantThresholds,
+} from "./booking-intake";
 
 /**
  * One option on a SELECT-style question. `score` is the 0-4 weighted layer.
@@ -88,7 +96,11 @@ export function optionScore(q: QuestionSpec, value: string | null | undefined): 
  * The dimension booleans below are unchanged and still take the best evidence per dimension,
  * because the pipeline ranking consumes them.
  */
-export function scoreFromAnswers(answers: AnswerMap, questions: QuestionSpec[]): BantResult {
+export function scoreFromAnswers(
+  answers: AnswerMap,
+  questions: QuestionSpec[],
+  thresholds: BantThresholds = DEFAULT_BANT_THRESHOLDS,
+): BantResult {
   const dims = SCORED_DIMENSIONS.map((dimension) => {
     const forDim = questions.filter((q) => q.dimension === dimension);
     // MAX, not sum: "the best evidence available for this dimension".
@@ -98,7 +110,7 @@ export function scoreFromAnswers(answers: AnswerMap, questions: QuestionSpec[]):
   const scored = questions.filter((q) => (SCORED_DIMENSIONS as readonly BantDimension[]).includes(q.dimension));
   const total = scored.reduce((sum, q) => sum + optionScore(q, answers[q.key]), 0);
   const bantAvg = scored.length ? Math.round((total / scored.length) * 10) / 10 : 0;
-  const met = dims.map((d) => d >= DIMENSION_MET_AT);
+  const met = dims.map((d) => d >= thresholds.dimensionMetAt);
 
   return {
     bantBudget: met[0],
@@ -107,7 +119,7 @@ export function scoreFromAnswers(answers: AnswerMap, questions: QuestionSpec[]):
     bantTimeline: met[3],
     bantScore: met.filter(Boolean).length,
     bantAvg,
-    bantVerdict: bantVerdictFor(bantAvg),
+    bantVerdict: bantVerdictFor(bantAvg, thresholds),
   };
 }
 

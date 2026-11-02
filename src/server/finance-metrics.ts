@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { istMonthRange, istToday, istYearRange } from "@/lib/dates";
 import { aggEurMinor, aggInrMinor, sumAgg } from "@/lib/money";
 import { ACTIVE, INCOME_COUNTABLE } from "@/lib/soft-delete";
+import { GERMAN_NOTE_BUCKET } from "@/lib/level-tally";
 import {
   allocatePayments, isSettled, studentKey, type PlanInput, type PaymentInput,
 } from "@/lib/payment-allocation";
@@ -210,6 +211,19 @@ export const getPendingRows = cache(async () => {
       nextDueDate: p.nextDueDate?.toISOString() ?? null,
       /** What the table shows - the arithmetic, where the stored column has not caught up. */
       status: effectiveStatus,
+      /**
+       * STILL OWED - the one definition of an open receivable, for every reader.
+       *
+       * Computed here already (it is what gates `overdue` above), and now exposed, because the
+       * callers were each keeping their own copy of it and they had drifted: Finance counted
+       * `ACTIVE || OVERDUE` while Cash Health counted `ACTIVE` alone. So the overdue receivables
+       * - the ones a cash-flow screen exists to warn about - were the ones Cash Health left out,
+       * and the two screens reported different totals off the same rows.
+       *
+       * The same mistake this function's own comment above records being fixed INSIDE it, made
+       * again outside it. Read `owing` rather than re-testing the status.
+       */
+      owing,
       /** What an admin last chose, before the arithmetic had its say. */
       storedStatus: p.status,
       settled,
@@ -322,25 +336,31 @@ export async function getFinanceOverview(period?: { start: Date; endExclusive: D
   const net = { inr: revenue.inr - expenses.inr, eur: revenue.eur - expenses.eur };
   const margin = revenue.inr > BigInt(0) ? (Number(net.inr) / Number(revenue.inr)) * 100 : 0;
 
-  // Revenue by level (PRD1: Solo | Guided | Elite | German Note - this month)
-  const byLevel: Record<"SOLO" | "GUIDED" | "ELITE" | "GERMAN_NOTE" | "OTHER", Money2> = {
-    SOLO: { inr: 0, eur: 0 }, GUIDED: { inr: 0, eur: 0 }, ELITE: { inr: 0, eur: 0 },
-    GERMAN_NOTE: { inr: 0, eur: 0 }, OTHER: { inr: 0, eur: 0 },
-  };
-  // Bucket by the level's KIND, not a "GN_" name-prefix: a German level added with any code
-  // (e.g. "C1") still rolls into German Note. Coaching tiers keep their own columns.
+  /**
+   * Revenue by level, keyed by the level CODE - with ONE rollup that is deliberate.
+   *
+   * German Note's A1/A2/B1/bundles roll into a single `GERMAN_NOTE` row, because on this P&L
+   * they are one product line, and that rollup is by KIND rather than a "GN_" name-prefix: a
+   * German level added with any code (e.g. "C1") still lands there.
+   *
+   * B2's coaching tiers each keep their own row, and this used to name three of them in source
+   * with everything else falling into "Other". Levels are a founder-editable catalogue, so a
+   * fourth tier's revenue was real money filed under a residue bucket that the card's own
+   * comment says is "not a programme". Keyed by code, a new tier is named the day it is added.
+   */
+  const byLevel: Record<string, Money2> = {};
   const kindByLevel = await levelKinds();
-  const bucketFor = (programLevel: string): keyof typeof byLevel => {
+  const bucketFor = (programLevel: string): string => {
     const kind = kindByLevel.get(programLevel);
-    if (kind === "GERMAN_LEVEL" || kind === "GERMAN_BUNDLE") return "GERMAN_NOTE";
-    return programLevel === "SOLO" || programLevel === "GUIDED" || programLevel === "ELITE"
-      ? programLevel
-      : "OTHER";
+    if (kind === "GERMAN_LEVEL" || kind === "GERMAN_BUNDLE") return GERMAN_NOTE_BUCKET;
+    return programLevel?.trim() ?? "";
   };
+  const addTo = (into: Record<string, Money2>, bucket: string): Money2 =>
+    (into[bucket] ??= { inr: 0, eur: 0 });
   for (const i of monthIncomes) {
-    const bucket = bucketFor(i.programLevel);
-    byLevel[bucket].inr += Number(aggInrMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed));
-    byLevel[bucket].eur += Number(aggEurMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed));
+    const m = addTo(byLevel, bucketFor(i.programLevel));
+    m.inr += Number(aggInrMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed));
+    m.eur += Number(aggEurMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed));
   }
 
   /**
@@ -349,14 +369,11 @@ export async function getFinanceOverview(period?: { start: Date; endExclusive: D
    * Same-day, not whole-month, for the reason `prevSameDay` already exists: comparing a
    * part-month against a full one always shows a fall, on the 3rd of every month, in every level.
    */
-  const prevByLevel: Record<keyof typeof byLevel, Money2> = {
-    SOLO: { inr: 0, eur: 0 }, GUIDED: { inr: 0, eur: 0 }, ELITE: { inr: 0, eur: 0 },
-    GERMAN_NOTE: { inr: 0, eur: 0 }, OTHER: { inr: 0, eur: 0 },
-  };
+  const prevByLevel: Record<string, Money2> = {};
   for (const i of prevIncomes) {
-    const bucket = bucketFor(i.programLevel);
-    prevByLevel[bucket].inr += Number(aggInrMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed));
-    prevByLevel[bucket].eur += Number(aggEurMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed));
+    const m = addTo(prevByLevel, bucketFor(i.programLevel));
+    m.inr += Number(aggInrMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed));
+    m.eur += Number(aggEurMinor(i.amountInrMinor, i.amountEurMinor, i.fxRateUsed));
   }
 
   // ── Business-line segmentation (§1): B2 vs German Note vs Combined ──────────
@@ -430,9 +447,7 @@ export async function getFinanceOverview(period?: { start: Date; endExclusive: D
     addTakings(dailyByLine[lineOfLevel(i.programLevel)], i.date.toISOString().slice(0, 10), i);
   }
 
-  const receivableRows = pendingRows.filter(
-    (p) => (p.status === "ACTIVE" || p.status === "OVERDUE") && p.balance.inr > 0,
-  );
+  const receivableRows = pendingRows.filter((p) => p.owing && p.balance.inr > 0);
   for (const p of receivableRows) {
     const l = lines[lineOfLevel(p.programLevel)];
     l.receivables.inr += p.balance.inr;

@@ -129,8 +129,15 @@ export async function shadowScore(input: BantInput & AnswerMap): Promise<ShadowS
     const questions = await getQualificationQuestions();
     if (questions.length === 0) return { shadowAvg: null, configVersion: null, agrees: null };
 
-    const catalogue = scoreFromAnswers(input, questions);
-    const legacy = computeBant(input);
+    /**
+     * BOTH scorers get the SAME configured cutoffs. The whole value of this comparison is that
+     * the two differ only in where their scores come from; handing one the founder's cutoffs and
+     * the other the shipped defaults would manufacture disagreements the moment a cutoff is
+     * edited, and `disagreements` is the gate that decides whether the catalogue may go live.
+     */
+    const { thresholds } = await getQualificationConfig();
+    const catalogue = scoreFromAnswers(input, questions, thresholds);
+    const legacy = computeBant(input, thresholds);
     return {
       shadowAvg: catalogue.bantAvg,
       configVersion: Math.max(...questions.map((q) => q.version)),
@@ -171,7 +178,14 @@ export type LiveScore = {
 };
 
 export async function scoreSubmission(input: BantInput & AnswerMap): Promise<LiveScore> {
-  const shipped = computeBant(input);
+  /**
+   * The config is read FIRST and the cutoffs applied to every path below, including each
+   * fall-back to the shipped scorer. "Fail safe" means fall back to the shipped SCORER, never to
+   * the shipped CUTOFFS: a founder who moved the Cancel line to 1.2 to stop rejecting borderline
+   * applicants must not have that undone by an empty question catalogue.
+   */
+  const { scorer, thresholds } = await getQualificationConfig();
+  const shipped = computeBant(input, thresholds);
   let questions: Awaited<ReturnType<typeof getQualificationQuestions>> = [];
   try {
     questions = await getQualificationQuestions();
@@ -184,14 +198,13 @@ export async function scoreSubmission(input: BantInput & AnswerMap): Promise<Liv
 
   let catalogue: BantResult | null = null;
   try {
-    catalogue = scoreFromAnswers(input, questions);
+    catalogue = scoreFromAnswers(input, questions, thresholds);
   } catch {
     catalogue = null;
   }
   const configVersion = Math.max(...questions.map((q) => q.version));
   const shadowAvg = catalogue ? catalogue.bantAvg : null;
 
-  const { scorer } = await getQualificationConfig();
   if (scorer === "catalogue" && catalogue) {
     return { result: catalogue, source: "catalogue", shadowAvg, configVersion };
   }

@@ -296,11 +296,52 @@ export async function getCommissionReport(period?: { start: Date; endExclusive: 
     }
   }
 
+  const totals = [...totalsMap.values()].sort((a, b) => b.amountInrMinor - a.amountInrMinor);
+
+  /**
+   * ── WHETHER THIS MONTH'S FIGURE IS SETTLED OR STILL MOVING ───────────────────────────────
+   *
+   * Every figure above is DERIVED, at read time, from the rates stored right now - so editing a
+   * rate in the Console rewrites what every past month reports. That is not a bug in the maths;
+   * it is what "derived" means, and it is why `runCommissionPayout` snapshots the month into a
+   * `CommissionPayoutRun`. What was wrong is that the screen could not tell the two apart: a
+   * month that had been signed off and paid looked exactly like a month still being computed,
+   * and a founder who nudged a rate in October silently restated every month back to January
+   * with nothing saying so.
+   *
+   * So the recorded run rides back with the report. `recordedTotalInrMinor` is what was signed
+   * off; when it differs from the live total, the rates (or the payments) have moved since, and
+   * the screen says which figure is which rather than quietly showing the new one.
+   *
+   * Only the TOTAL is compared, not the per-person lines: the question the screen has to answer
+   * is "is what I am looking at still what we agreed", and a changed split with an unchanged
+   * total is a reallocation the per-person figures already show.
+   */
+  const monthDate = new Date(`${month.start.toISOString().slice(0, 7)}-01T00:00:00.000Z`);
+  const recorded = await prisma.commissionPayoutRun.findUnique({
+    where: { month: monthDate },
+    select: { totalInrMinor: true, createdAt: true, postedEntryId: true },
+  });
+  const liveTotalInrMinor = totals.reduce((n, t) => n + t.amountInrMinor, 0);
+
   return {
     month: month.start.toISOString().slice(0, 7),
     rules,
     rows,
-    totals: [...totalsMap.values()].sort((a, b) => b.amountInrMinor - a.amountInrMinor),
+    totals,
+    liveTotalInrMinor,
+    /**
+     * The signed-off run for this month, or null while it is still provisional. `drifted` is the
+     * one thing the screen needs to decide what to say.
+     */
+    recorded: recorded
+      ? {
+          totalInrMinor: Number(recorded.totalInrMinor),
+          recordedAt: recorded.createdAt.toISOString(),
+          posted: recorded.postedEntryId !== null,
+          drifted: Number(recorded.totalInrMinor) !== liveTotalInrMinor,
+        }
+      : null,
     unattributed: rows.filter((r) => !r.attributed).length,
     offDayReviews: rows.filter((r) => r.offDayReview).length,
   };

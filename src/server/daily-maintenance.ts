@@ -13,6 +13,7 @@ import { backfillInvoiceIssuance } from "./invoice-posting";
 import { runDunning } from "./dunning";
 import { ensureBookingSlots } from "./slot-topup";
 import { ensureSssSlots } from "./sss-topup";
+import { releaseDeferredBookOrders } from "./book-order-sweep";
 
 /**
  * The once-a-day housekeeping orchestrator (audit §C #18/#19/#21/#22/#24), ticked by
@@ -79,6 +80,22 @@ export async function runDailyMaintenance(): Promise<DailyMaintenanceRun> {
   // Event-driven posting handles new invoices; this mops up legacy/flag-was-off ones. Cheap
   // (postEntryOnce short-circuits already-posted), so it can run every tick.
   await safe("invoiceIssuanceBackfill", () => backfillInvoiceIssuance());
+
+  /**
+   * Release book orders whose student has now paid enough (spec §9.2).
+   *
+   * `releaseDeferredBookOrders` was written, documented as "intended for the same cron tick that
+   * runs the other engines", and then never called from anywhere - so DEFERRED was not
+   * self-clearing after all. An EMI student who crossed the threshold on their third instalment
+   * stayed held until somebody opened the panel and noticed, which is exactly the "someone
+   * remembering to check" the function exists to remove.
+   *
+   * Every tick, not once a day: it only ever moves DEFERRED → QUOTE_REQUESTED, re-reads the cash
+   * each time, and the first thing it does on a business with no deferred orders is return
+   * `{ released: 0, checked: 0 }`. Nothing is messaged and no money moves - asking the publisher
+   * for a price is the next human step.
+   */
+  await safe("bookOrderRelease", releaseDeferredBookOrders);
 
   // Destructive growth-table pruning (aged WhatsApp messages + expired invites) - once per IST day
   // only. Archived-record purging is handled separately by /api/cron/retention.

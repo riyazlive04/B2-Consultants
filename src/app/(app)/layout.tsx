@@ -70,7 +70,7 @@ async function CallsGreetingSlot({ userId }: { userId: string }) {
 /** Authenticated shell: grouped, collapsible left sidebar + slim top bar. */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession();
-  const accessible = (await visibleSections(session.role, session.overrides))
+  const accessible = (await visibleSections(session.role, session.overrides, session.capabilities))
     // Admin technically has access to everything, but the student portal is a
     // student-only surface - Admin reviews students via /students instead.
     .filter((s) => s.key !== "my-journey" || session.role === "STUDENT");

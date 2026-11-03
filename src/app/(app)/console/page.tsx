@@ -161,7 +161,7 @@ export default async function ConsolePage() {
       // control that does nothing.
       prisma.teamProfile.findMany({
         where: { status: "ACTIVE", userId: { not: null } },
-        select: { id: true, fullName: true, roleTitle: true, firstCallSharePct: true, worksSaturdays: true },
+        select: { id: true, fullName: true, roleTitle: true, firstCallSharePct: true, workingDaysMask: true },
         orderBy: [{ firstCallSharePct: "desc" }, { orderIndex: "asc" }],
       }),
       // Everyone with a login, for the per-person capability matrix. ACTIVE only: a suspended
@@ -471,7 +471,7 @@ export default async function ConsolePage() {
                           name: r.fullName,
                           roleTitle: r.roleTitle,
                           sharePct: r.firstCallSharePct,
-                          worksSaturdays: r.worksSaturdays,
+                          workingDaysMask: r.workingDaysMask,
                         }))}
                       />
                     ),

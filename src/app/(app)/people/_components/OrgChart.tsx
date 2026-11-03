@@ -10,13 +10,19 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import { toast } from "@/components/ui/feedback";
 import { Card, Pill } from "@/components/ui/kit";
 import { Btn, IconButton } from "@/components/ui/controls";
-import { CheckboxField, Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
+import { Field, FormError, Select, SubmitButton, TextArea, TextInput } from "@/components/ui/form";
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import { formatDate } from "@/lib/format";
 import { LOG_VARIANT_LABELS, optionsFrom, TEAM_STATUS_LABELS } from "@/lib/labels";
 import { APP_ROLE_OPTIONS } from "@/lib/sections";
 import { safeAction } from "@/lib/action-guard";
 import { PhoneField } from "@/components/ui/PhoneField";
+import {
+  WEEKDAY_BITS,
+  WEEKDAY_SHORT,
+  WORKING_DAYS_DEFAULT_MASK,
+  workDayFieldName,
+} from "@/lib/working-days";
 
 /**
  * EVERY role, not just the three a telecaller-shaped team used to need.
@@ -240,8 +246,13 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
             <Field label="Daily call target" hint="Calls expected per day (0 = no target). Shows on their My Desk.">
               <TextInput kind="int" name="dailyCallTarget" min={0} max={999} defaultValue={String(editing?.dailyCallTarget ?? 0)} />
             </Field>
-            <div className="flex items-end pb-1">
-              <CheckboxField name="worksSaturdays" label="Works Saturdays" defaultChecked={editing?.worksSaturdays ?? true} />
+            <div className="sm:col-span-2 lg:col-span-3">
+              <Field
+                label="Working days"
+                hint="Tick the days this person is in. Someone off midweek can tick Saturday in return (comp-off)."
+              >
+                <WorkingDaysPicker initialMask={editing?.workingDaysMask ?? WORKING_DAYS_DEFAULT_MASK} />
+              </Field>
             </div>
             {/*
               ── AGREED MONTHLY PAY ────────────────────────────────────────────────────
@@ -272,5 +283,45 @@ export function OrgChart({ members }: { members: MemberRow[] }) {
         </Card>
       )}
     </section>
+  );
+}
+
+/**
+ * Seven-day working-days picker, used inside the profile form. Writes seven hidden checkboxes
+ * (`workDay0`…`workDay6`, Mon…Sun) so the form action can collapse them into a bitmask with
+ * `maskFromFormData` - the server never sees the mask integer, which keeps the "value" the
+ * person edits and the "value" the server reads a single source of truth.
+ *
+ * Compact row of toggle buttons matches Availability panel conventions in Console → Availability.
+ * `key` on the mount in the parent form rebuilds state when a different member is opened.
+ */
+function WorkingDaysPicker({ initialMask }: { initialMask: number }) {
+  const [mask, setMask] = useState<number>(initialMask);
+  return (
+    <div className="flex flex-wrap gap-2">
+      {WEEKDAY_BITS.map((bit) => {
+        const on = (mask & (1 << bit)) !== 0;
+        return (
+          <button
+            key={bit}
+            type="button"
+            aria-pressed={on}
+            onClick={() => setMask((m) => m ^ (1 << bit))}
+            className={`press h-10 min-w-[3.25rem] rounded-field border px-3 text-sm transition-colors duration-150 ease-out ${
+              on
+                ? "border-primary bg-primary text-on-accent"
+                : "border-line-strong bg-surface text-ink-2 hover:border-primary-tint"
+            }`}
+          >
+            {WEEKDAY_SHORT[bit]}
+            {/* Checkbox is HIDDEN rather than removed: the server action reads these seven
+                names out of FormData, which keeps parsing identical to any other checkbox
+                field and avoids a parallel "mask integer" form field we would have to keep
+                in step with the UI. */}
+            <input type="checkbox" name={workDayFieldName(bit)} checked={on} readOnly className="sr-only" />
+          </button>
+        );
+      })}
+    </div>
   );
 }

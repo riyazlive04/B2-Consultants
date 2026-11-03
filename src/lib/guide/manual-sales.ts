@@ -515,7 +515,7 @@ export const MANUAL_SALES: GuideManual[] = [
         logic: [
           "Each new lead (from a form, a webhook, a booking, Add contact or the New lead form) goes to whoever is furthest behind their share over the last 30 days. Ties go to the larger share.",
           "Shares that do not add up to 100 are treated as relative weights. The card shows what the rotation actually aims for.",
-          "On a Saturday, anyone whose profile is not ticked “Works Saturdays” is skipped.",
+          "Anyone whose Working days on their profile does not include today is skipped (e.g. Asma off Tuesdays, in on Saturday as a comp-off).",
           "Anyone at the daily cap is skipped. There is no cap by default.",
           "If the auto-assigned share is below 100%, the rest of new leads arrive unassigned and wait to be handed out.",
           "If nobody is eligible, the lead still arrives, just without an owner.",
@@ -538,12 +538,13 @@ export const MANUAL_SALES: GuideManual[] = [
             effect: "Forward only: applies to the next lead that arrives.",
           },
           {
-            setting: "Works Saturdays",
+            setting: "Working days",
             where: ["Sidebar", "Admin", "Users", "Team & org chart"],
             href: "/people?tab=2",
             who: ["ADMIN"],
-            default: "Ticked",
-            effect: "From the next lead that arrives. Leads already assigned are not moved.",
+            default: "Mon–Sat",
+            effect:
+              "Any day not ticked excludes this person from the rotation on that day of the week. A comp-off swap (off Tuesdays, in on Saturdays) is just two ticks. Applies from the next lead that arrives.",
           },
         ],
         shot: {
@@ -610,7 +611,7 @@ export const MANUAL_SALES: GuideManual[] = [
         logic: [
           "Only unassigned leads that have a phone number and are not Won or Cancelled/Unqualified are handed out. That is the same rule My Desk uses, so every lead handed out can be worked.",
           "At most 200 per press, on purpose: a day's work, not the whole pile.",
-          "Split mode uses the Call Distribution shares and skips anyone off today (the Saturday rule) or at their daily cap.",
+          "Split mode uses the Call Distribution shares and skips anyone whose Working days do not include today, or who is at their daily cap.",
           "A suspended account cannot be given leads.",
           "Every hand-out is written to the activity log with who got how many.",
         ],
@@ -767,7 +768,7 @@ export const MANUAL_SALES: GuideManual[] = [
     faq: [
       {
         q: "Why is a new lead Unassigned?",
-        a: "The rotation could not place it: nobody has a first-call share, the auto-assigned share is below 100%, everyone in the rotation is off today (Saturday) or at their daily cap. Hand it out from the Leads tab.",
+        a: "The rotation could not place it: nobody has a first-call share, the auto-assigned share is below 100%, everyone in the rotation has today marked as a non-working day, or everyone is at their daily cap. Hand it out from the Leads tab.",
       },
       {
         q: "Why does a lead show “Mark contacted” instead of a speed-to-lead time?",
@@ -822,7 +823,7 @@ export const MANUAL_SALES: GuideManual[] = [
           },
         ],
         watchOut: [
-          "A new contact lands as Unassigned when the rotation cannot place them: no shares set, the auto-assigned share below 100%, or everyone off (Saturday) or at their daily cap.",
+          "A new contact lands as Unassigned when the rotation cannot place them: no shares set, the auto-assigned share below 100%, or everyone whose Working days exclude today or who is at their daily cap.",
         ],
         shot: {
           file: "contacts-contacts-list.png",

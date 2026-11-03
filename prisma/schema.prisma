@@ -2339,14 +2339,15 @@ model TeamProfile {
   logVariant          DailyLogVariant
   orderIndex          Int             @default(0) // org-chart card order (Admin can rearrange)
   // First-call assignment rules (client notes): target share of incoming leads
-  // (Nilofer 80 / Asma 20) and Saturday availability (Asma doesn't work Saturdays).
-  // Drives the intake auto-assign suggestion; manual reassignment always overrides.
+  // (Nilofer 80 / Asma 20) and per-weekday availability (Asma off Tuesdays, works Saturdays
+  // as a comp-off). Drives the intake auto-assign suggestion; manual reassignment always
+  // overrides. The mask is a 7-bit bitfield, Mon=bit 0 … Sun=bit 6; 63 = Mon–Sat default.
   firstCallSharePct   Int             @default(0) // 0 = not in the first-call rotation
-  worksSaturdays      Boolean         @default(true)
+  workingDaysMask     Int             @default(63)
   // How many calls this person is expected to make on a working day. Admin-set (dynamic),
   // 0 = no target, which hides the target UI rather than showing "0 / 0".
   // Deliberately NOT a Goal: GoalPeriod has no DAY, and a daily bar is a working-day
-  // notion (Saturdays follow worksSaturdays) that the monthly Goal engine doesn't model.
+  // notion (follows workingDaysMask) that the monthly Goal engine doesn't model.
   dailyCallTarget     Int             @default(0)
 
   /// ── AGREED MONTHLY PAY ────────────────────────────────────────────────────────────

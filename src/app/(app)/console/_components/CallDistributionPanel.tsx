@@ -6,6 +6,7 @@ import { Card, Hint, NumInput, SaveBar, Toggle } from "./kit";
 import { toast } from "@/components/ui/feedback";
 import { previewSplit } from "@/lib/call-distribution";
 import { DEFAULT_CALL_DISTRIBUTION, type CallDistributionConfig } from "@/lib/config-schema";
+import { offDaysLabel } from "@/lib/working-days";
 import { saveCallDistribution } from "@/server/console-actions";
 
 /**
@@ -28,7 +29,8 @@ export type RosterMember = {
   name: string;
   roleTitle: string;
   sharePct: number;
-  worksSaturdays: boolean;
+  /** 7-bit mask, Mon=bit 0 … Sun=bit 6. 63 = Mon–Sat (the shipped default). */
+  workingDaysMask: number;
 };
 
 export function CallDistributionPanel({
@@ -150,13 +152,14 @@ export function CallDistributionPanel({
               {roster.map((r) => {
                 const value = shares[r.profileId] ?? 0;
                 const share = preview.find((p) => p.userId === r.profileId);
+                const off = offDaysLabel(r.workingDaysMask);
                 return (
                   <div key={r.profileId} className="flex flex-wrap items-center gap-3 rounded-field border border-line p-3">
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium text-ink">{r.name}</div>
                       <div className="text-caption text-ink-3">
                         {r.roleTitle}
-                        {!r.worksSaturdays && " · off Saturdays"}
+                        {off && ` · off ${off}`}
                       </div>
                     </div>
                     <label className="flex items-center gap-2 text-caption text-ink-3">

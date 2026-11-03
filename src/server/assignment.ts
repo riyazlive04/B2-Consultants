@@ -3,12 +3,14 @@ import { prisma } from "@/lib/prisma";
 import { ACTIVE } from "@/lib/soft-delete";
 import { istBoundaryToInstant, istToday } from "@/lib/dates";
 import { DEFAULT_CALL_DISTRIBUTION } from "@/lib/config-schema";
+import { isWorkingDay, normaliseMask, offDaysLabel } from "@/lib/working-days";
 import { getCallDistribution } from "./founder-config";
 
 /**
  * First-call assignment rules (client notes):
  *   - target split of incoming leads, e.g. Nilofer 80% / Asma 20% (TeamProfile.firstCallSharePct)
- *   - Saturday availability, e.g. Asma doesn't work Saturdays (TeamProfile.worksSaturdays)
+ *   - per-weekday availability, e.g. Asma off Tuesdays but in on Saturday as a comp-off
+ *     (TeamProfile.workingDaysMask) - a 7-bit mask, Mon=bit 0 … Sun=bit 6.
  *
  * pickFirstCaller() is a deterministic rule engine, no AI: among today's eligible people it
  * assigns the one furthest BELOW their target share over the last 30 days, so the real split
@@ -22,14 +24,14 @@ import { getCallDistribution } from "./founder-config";
  */
 const LOOKBACK_DAYS = DEFAULT_CALL_DISTRIBUTION.lookbackDays;
 
-const istWeekday = (d: Date) =>
-  new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "Asia/Kolkata" }).format(d);
-
 export type RotationMember = {
   userId: string;
   name: string;
   sharePct: number;
-  worksSaturdays: boolean;
+  /** 7-bit mask, Mon=bit 0 … Sun=bit 6. `WORKING_DAYS_DEFAULT_MASK` (63) = Mon–Sat. */
+  workingDaysMask: number;
+  /** The days this person is off, in sentence form - "" when they work Mon–Sun. */
+  offDaysLabel: string;
   /**
    * Leads assigned inside the configured lookback window.
    *
@@ -39,7 +41,7 @@ export type RotationMember = {
   assignedInWindow: number;
   /** Share of the window's auto-trackable assignments. */
   actualPct: number;
-  /** Excluded right now by the Saturday rule. */
+  /** Excluded right now because today is not a working day in their mask. */
   offToday: boolean;
   /** Auto-assigned so far in the current IST day - measured against the daily cap. */
   assignedToday: number;
@@ -51,7 +53,7 @@ async function loadRotation(now: Date): Promise<RotationMember[]> {
   const cfg = await getCallDistribution();
   const profiles = await prisma.teamProfile.findMany({
     where: { status: "ACTIVE", firstCallSharePct: { gt: 0 }, userId: { not: null } },
-    select: { userId: true, fullName: true, firstCallSharePct: true, worksSaturdays: true },
+    select: { userId: true, fullName: true, firstCallSharePct: true, workingDaysMask: true },
   });
   if (!profiles.length) return [];
 
@@ -80,19 +82,20 @@ async function loadRotation(now: Date): Promise<RotationMember[]> {
   const countOf = new Map(counts.map((c) => [c.assignedToId, c._count._all]));
   const todayOf = new Map(todayCounts.map((c) => [c.assignedToId, c._count._all]));
   const total = counts.reduce((s, c) => s + c._count._all, 0);
-  const isSaturday = istWeekday(now) === "Sat";
 
   return profiles.map((p) => {
     const assignedInWindow = countOf.get(p.userId!) ?? 0;
     const assignedToday = todayOf.get(p.userId!) ?? 0;
+    const mask = normaliseMask(p.workingDaysMask);
     return {
       userId: p.userId!,
       name: p.fullName,
       sharePct: p.firstCallSharePct,
-      worksSaturdays: p.worksSaturdays,
+      workingDaysMask: mask,
+      offDaysLabel: offDaysLabel(mask),
       assignedInWindow,
       actualPct: total > 0 ? (assignedInWindow / total) * 100 : 0,
-      offToday: isSaturday && !p.worksSaturdays,
+      offToday: !isWorkingDay(mask, now),
       assignedToday,
       atDailyCap: cfg.dailyCapPerPerson > 0 && assignedToday >= cfg.dailyCapPerPerson,
     };
@@ -181,12 +184,19 @@ export async function getFirstCallSplit(now = new Date()) {
   const cfg = await getCallDistribution();
   const rotation = await loadRotation(now);
   const shareTotal = rotation.reduce((s, m) => s + m.sharePct, 0);
+  // Today's weekday in IST, so the Pipeline banner can name the day whoever is off is off:
+  // "Tuesday - Asma off today" instead of a Saturday-only banner.
+  const todayLabel = new Intl.DateTimeFormat("en-GB", {
+    weekday: "long",
+    timeZone: "Asia/Kolkata",
+  }).format(now);
   return {
     lookbackDays: cfg.lookbackDays,
     dailyCapPerPerson: cfg.dailyCapPerPerson,
     /** The founder's auto-assign rate. Below 100 the rest of intake waits to be handed out. */
     autoAssignPct: cfg.autoAssignPct,
-    isSaturday: istWeekday(now) === "Sat",
+    /** The weekday name (e.g. "Tuesday") for whichever rotation members are off today. */
+    todayLabel,
     /** True when the raw shares don't total 100 - the card explains rather than blocks. */
     sharesNormalised: shareTotal > 0 && shareTotal !== 100,
     members: rotation

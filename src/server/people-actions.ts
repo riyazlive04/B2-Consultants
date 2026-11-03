@@ -12,6 +12,7 @@ import { activityDate } from "@/lib/activity-actions";
 import { blankToUndefined, intInRange, optionalRule, rule } from "@/lib/field-rules";
 import { teamStatusClosesLogin } from "@/lib/termination-policy";
 import { APP_ROLES } from "@/lib/sections";
+import { maskFromFormData } from "@/lib/working-days";
 import { lastAdminError } from "./admin-rails";
 import { getDailyLogEod } from "./founder-config";
 import { logActivity, diffFields } from "./activity-log";
@@ -55,7 +56,20 @@ const profileSchema = z.object({
    * The field is read-only on the org chart; dropping it from the schema means a stale or
    * hand-made submission cannot write it either.
    */
-  worksSaturdays: z.string().optional(), // checkbox
+  /**
+   * Seven weekday checkboxes (`workDay0`…`workDay6`, Mon…Sun) collapse into a single bitmask
+   * on the TeamProfile. A simple boolean could only say Saturday on/off; a mask lets Asma be
+   * off Tuesdays AND in on Saturday as a comp-off without a second column. See
+   * `lib/working-days.ts` for the bit layout. Validated loosely as strings here because zod's
+   * `Object.fromEntries` collapses the seven keys into one object we re-read directly.
+   */
+  workDay0: z.string().optional(),
+  workDay1: z.string().optional(),
+  workDay2: z.string().optional(),
+  workDay3: z.string().optional(),
+  workDay4: z.string().optional(),
+  workDay5: z.string().optional(),
+  workDay6: z.string().optional(),
   // How many calls a day this person is expected to make - drives the My Desk bar and the
   // once-a-day greeting. Blank/0 = no target, which hides the bar rather than showing 0/0.
   dailyCallTarget: blankToUndefined(intInRange(0, 999, "Daily call target must be")),
@@ -87,7 +101,7 @@ export async function saveTeamProfile(id: string | null, form: FormData): Promis
     keyResponsibilities: d.keyResponsibilities || null,
     status: d.status,
     logVariant: d.logVariant,
-    worksSaturdays: d.worksSaturdays === "on",
+    workingDaysMask: maskFromFormData(form),
     dailyCallTarget: Math.min(999, d.dailyCallTarget?.trim() ? parseInt(d.dailyCallTarget, 10) : 0),
     monthlyPayInrMinor: d.monthlyPayInr?.trim() ? majorStringToMinor(d.monthlyPayInr) : BigInt(0),
     monthlyPayEurMinor: d.monthlyPayEur?.trim() ? majorStringToMinor(d.monthlyPayEur) : BigInt(0),

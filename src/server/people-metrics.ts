@@ -89,7 +89,7 @@ export async function getPeopleOverview(monthStr?: string) {
     logVariant: p.logVariant,
     orderIndex: p.orderIndex,
     firstCallSharePct: p.firstCallSharePct,
-    worksSaturdays: p.worksSaturdays,
+    workingDaysMask: p.workingDaysMask,
     dailyCallTarget: p.dailyCallTarget,
     /** Agreed monthly pay, as major-unit text the profile form re-opens on ("" when none). */
     monthlyPayInr: p.monthlyPayInrMinor === BigInt(0) ? "" : (Number(p.monthlyPayInrMinor) / 100).toFixed(2),

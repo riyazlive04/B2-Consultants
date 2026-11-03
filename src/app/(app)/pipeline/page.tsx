@@ -459,9 +459,9 @@ export default async function PipelinePage({
               }
               subtitle="New leads are auto-assigned toward each person's target share; reassign any lead below. Set the shares and the rules in Console → Call Distribution."
               actions={
-                callSplit.isSaturday && callSplit.members.some((m) => m.offToday) ? (
+                callSplit.members.some((m) => m.offToday) ? (
                   <Pill tone="warn">
-                    Saturday - {callSplit.members.filter((m) => m.offToday).map((m) => m.name).join(", ")} off today
+                    {callSplit.todayLabel} - {callSplit.members.filter((m) => m.offToday).map((m) => m.name).join(", ")} off today
                   </Pill>
                 ) : undefined
               }

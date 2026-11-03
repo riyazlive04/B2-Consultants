@@ -89,17 +89,18 @@ export async function getCommissionReport(period?: { start: Date; endExclusive: 
   });
 
   // §9.4 - leave awareness. The only leave pattern the data actually models per-DATE is the
-  // standing Saturday-off flag (`worksSaturdays`); the ON_LEAVE status is a CURRENT state and
-  // says nothing about the day a past call happened, so it is deliberately not used to judge
-  // history. A discovery call logged on a Saturday for a caller who doesn't work Saturdays is
-  // therefore surfaced for review - it usually means a stand-in covered the slot and the
-  // `coveredFor` split was never recorded, which would pay the wrong person. We flag rather
-  // than reassign: the engine cannot know who actually covered, only that a human should look.
+  // standing weekly off-day set (`workingDaysMask`); the ON_LEAVE status is a CURRENT state
+  // and says nothing about the day a past call happened, so it is deliberately not used to
+  // judge history. A discovery call logged on a day the caller doesn't work (Saturday, or
+  // whatever other day they are off) is surfaced for review - it usually means a stand-in
+  // covered the slot and the `coveredFor` split was never recorded, which would pay the wrong
+  // person. We flag rather than reassign: the engine cannot know who actually covered, only
+  // that a human should look.
   const teamProfiles = await prisma.teamProfile.findMany({
     where: { userId: { not: null } },
-    select: { userId: true, worksSaturdays: true },
+    select: { userId: true, workingDaysMask: true },
   });
-  const worksSaturdays = new Map(teamProfiles.map((t) => [t.userId!, t.worksSaturdays]));
+  const workingDaysMaskOf = new Map(teamProfiles.map((t) => [t.userId!, t.workingDaysMask]));
 
   /**
    * ── PER-PERSON ELIGIBILITY ──────────────────────────────────────────────────────
@@ -127,9 +128,11 @@ export async function getCommissionReport(period?: { start: Date; endExclusive: 
     if (!u) return true;
     return hasCapability(u.role as AppRole, u.capabilities as Record<string, boolean> | null, key);
   };
-  // @db.Date is stored as UTC midnight of the calendar day, so the weekday is the UTC weekday -
-  // reading it in IST would shift a Saturday date back into Friday. 6 = Saturday.
-  const isSaturday = (d: Date) => d.getUTCDay() === 6;
+  // @db.Date is stored as UTC midnight of the calendar day, so the weekday is the UTC weekday
+  // (reading it as IST would shift a late-Friday-UTC Saturday back into Friday). Mon=0 … Sun=6
+  // matching the `workingDaysMask` bit layout; the mask has Sun = bit 6, UTC day has Sun = 0,
+  // so remap.
+  const utcDayToMaskBit = (d: Date) => (d.getUTCDay() + 6) % 7;
 
   const rows = incomes.map((i) => {
     const lead = i.student?.lead ?? null;
@@ -250,12 +253,18 @@ export async function getCommissionReport(period?: { start: Date; endExclusive: 
       }
     }
 
-    // Day-off review flag: a discovery call credited to someone on a Saturday they don't work,
+    // Day-off review flag: a discovery call credited to someone on a day they don't work,
     // where no cover split was recorded. If `coveredFor` IS set, the stand-in situation is
-    // already handled, so there is nothing to review.
+    // already handled, so there is nothing to review. Works for any off day now, not only
+    // Saturdays - someone off Tuesdays will raise the same flag on a Tuesday call.
+    const discoMask = disco ? workingDaysMaskOf.get(disco.userId) : undefined;
     const offDayReview =
-      disco && outcome?.callDate && !coveredFor && worksSaturdays.get(disco.userId) === false && isSaturday(outcome.callDate)
-        ? `${disco.name}'s discovery call is dated a Saturday (${outcome.callDate.toISOString().slice(0, 10)}), a day off - confirm who covered it, or record the cover so the split is right.`
+      disco && outcome?.callDate && !coveredFor && typeof discoMask === "number" &&
+      (discoMask & (1 << utcDayToMaskBit(outcome.callDate))) === 0
+        ? `${disco.name}'s discovery call is dated ${new Intl.DateTimeFormat("en-GB", {
+            weekday: "long",
+            timeZone: "UTC",
+          }).format(outcome.callDate)} (${outcome.callDate.toISOString().slice(0, 10)}), a day off - confirm who covered it, or record the cover so the split is right.`
         : null;
 
     return {

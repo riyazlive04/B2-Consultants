@@ -31,8 +31,11 @@ type SeedUser = {
   logVariant: "DISCOVERY_SPECIALIST" | "APPOINTMENT_SETTER" | "DELIVERY_COACH";
   orderIndex: number;
   // First-call rotation (client rules): Nilofer 80% / Asma 20%; Asma is off Saturdays.
+  // `workingDaysMask` is a 7-bit bitmask (Mon=bit 0 … Sun=bit 6); 63 = Mon–Sat (default),
+  // 31 = Mon–Fri, etc. Prefer this over the old `worksSaturdays` boolean, which only
+  // modelled one day. See `lib/working-days.ts`.
   firstCallSharePct?: number;
-  worksSaturdays?: boolean;
+  workingDaysMask?: number;
 };
 
 function env(key: string, fallback: string): string {
@@ -67,7 +70,7 @@ const USERS: SeedUser[] = [
     logVariant: "DISCOVERY_SPECIALIST",
     orderIndex: 2,
     firstCallSharePct: 20,
-    worksSaturdays: false,
+    workingDaysMask: 31, // Mon–Fri, off Saturdays (matches the historical client rule)
   },
   {
     name: "Nilofer",
@@ -107,7 +110,7 @@ async function main() {
       update: {
         dashboardRole: u.role,
         firstCallSharePct: u.firstCallSharePct ?? 0,
-        worksSaturdays: u.worksSaturdays ?? true,
+        workingDaysMask: u.workingDaysMask ?? 63,
       },
       create: {
         userId,
@@ -119,7 +122,7 @@ async function main() {
         orderIndex: u.orderIndex,
         status: "ACTIVE",
         firstCallSharePct: u.firstCallSharePct ?? 0,
-        worksSaturdays: u.worksSaturdays ?? true,
+        workingDaysMask: u.workingDaysMask ?? 63,
       },
     });
   }

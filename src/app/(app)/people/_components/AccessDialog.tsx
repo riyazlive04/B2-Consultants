@@ -224,7 +224,7 @@ export function AccessDialog({
           linked to your login" with nothing here looking wrong.
 
           Stated, not editable. The Team & org chart tab owns the profile and holds far more of
-          it than this one field (reporting line, first-call share, Saturday availability), and a
+          it than this one field (reporting line, first-call share, working-days schedule), and a
           second editor for one field of it is the duplication this refactor is reducing.
 
           Only for roles that HAVE a desk: a student or a tutor has no team profile by design,

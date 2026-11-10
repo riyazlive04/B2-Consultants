@@ -138,6 +138,7 @@ services:
       CRON_SECRET: ${CRON_SECRET:?openssl rand -base64 32}
 
       # --- Optional. Every one fails CLOSED: the feature is simply off when unset ---
+      AGENT_SECRET: ${AGENT_SECRET:-}
       FX_API_URL: ${FX_API_URL:-https://api.frankfurter.app}
 
       # Supabase Storage — the marketing site's media origin (lib/supabase-storage.ts).

@@ -141,6 +141,16 @@ services:
       AGENT_SECRET: ${AGENT_SECRET:-}
       FX_API_URL: ${FX_API_URL:-https://api.frankfurter.app}
 
+      # SirahOS change-request forwarding (server/sirahos-forward.ts). Every improvement
+      # report filed here is COPIED to the company OS queue; the report itself stays here.
+      #
+      # Forwarding is off unless BOTH the project id and the secret are set, which is what
+      # keeps a dev copy or a local checkout from posting into the client's live queue. Leave
+      # them unset anywhere that is not production.
+      SIRAHOS_URL: ${SIRAHOS_URL:-}
+      SIRAHOS_PROJECT_ID: ${SIRAHOS_PROJECT_ID:-}
+      SIRAHOS_SECRET: ${SIRAHOS_SECRET:-}
+
       # Supabase Storage — the marketing site's media origin (lib/supabase-storage.ts).
       #
       # These were NEVER set on hosted Supabase, so storageConfig() returned null and

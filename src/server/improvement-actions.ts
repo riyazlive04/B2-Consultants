@@ -27,6 +27,7 @@ import { afterResponse } from "./after-response";
 import { appVersion, captureImprovementContext } from "./improvement-context";
 import { nextImprovementRef } from "./improvement-ref";
 import { notifyDeveloper } from "./improvement-notify";
+import { forwardToSirahos } from "./sirahos-forward";
 import { getResolvedSections } from "./founder-config";
 import type { ActionResult } from "./finance-actions";
 
@@ -151,6 +152,21 @@ export async function submitImprovement(
    * otherwise be indistinguishable from a failed report. The row is already saved; announcing it
    * is not something anyone is waiting on.
    */
+  afterResponse("improvement:sirahos", () =>
+    forwardToSirahos({
+      id: report.id,
+      ref: report.ref,
+      kind: d.kind,
+      severity: d.severity,
+      title,
+      description: Object.entries(answers.data).map(([, v]) => v).filter(Boolean).join("\n\n"),
+      expectedBehaviour: (answers.data as Record<string, string>).expected ?? null,
+      route: d.route,
+      reporterName: session.user.name,
+      reporterRole: session.role,
+    }),
+  );
+
   afterResponse("improvement:notify", async () => {
     const outcome = await notifyDeveloper({
       id: report.id,

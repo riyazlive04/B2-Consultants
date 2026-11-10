@@ -22,7 +22,7 @@ const bodySchema = z.object({
   /** Free-text analysis from the agent — root cause, affected files, suggested fix. */
   devNote: z.string().trim().max(4000).optional(),
   /** Target status. Defaults to TRIAGED if omitted. */
-  status: z.enum(["TRIAGED", "ACCEPTED", "IN_PROGRESS", "FIXED"]).optional(),
+  status: z.enum(["TRIAGED", "ACCEPTED", "IN_PROGRESS", "FIXED", "DECLINED", "DUPLICATE"]).optional(),
   /** A comment visible to the reporter — e.g. "this has been identified and a fix is in progress". */
   resolution: z.string().trim().max(2000).optional(),
   /** Internal comment (not visible to reporter) — e.g. the PR link. */
@@ -31,7 +31,7 @@ const bodySchema = z.object({
 
 async function getAdminUserId(): Promise<string | null> {
   const admin = await prisma.user.findFirst({
-    where: { role: "ADMIN", ...ACTIVE },
+    where: { role: "ADMIN" },
     select: { id: true },
     orderBy: { createdAt: "asc" },
   });

@@ -1,0 +1,57 @@
+name: Agent Outbox Apply
+
+on:
+  push:
+    paths:
+      - "data/agent/outbox.json"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply agent results
+        env:
+          AGENT_SECRET: ${{ secrets.AGENT_SECRET }}
+          APP_URL: ${{ vars.APP_URL || 'https://b2app.sirahagents.com' }}
+        run: |
+          FILE=data/agent/outbox.json
+          if [ ! -f "$FILE" ]; then
+            echo "No outbox file"
+            exit 0
+          fi
+
+          COUNT=$(jq '.results | length' "$FILE")
+          echo "Processing $COUNT results"
+
+          for i in $(seq 0 $(( COUNT - 1 ))); do
+            ID=$(jq -r ".results[$i].id" "$FILE")
+            BODY=$(jq -c ".results[$i].resolve" "$FILE")
+
+            echo "Resolving $ID..."
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+              -X POST \
+              -H "Authorization: Bearer $AGENT_SECRET" \
+              -H "Content-Type: application/json" \
+              -d "$BODY" \
+              "$APP_URL/api/agent/improvements/$ID/resolve")
+
+            echo "  -> HTTP $HTTP_CODE"
+          done
+
+      - name: Clear outbox after apply
+        run: |
+          git config user.name  "B2 Agent Sync"
+          git config user.email "agent@b2consultants.de"
+          echo '{"results":[],"appliedAt":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'"}' > data/agent/outbox.json
+          git add data/agent/outbox.json
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "chore(agent): clear outbox after apply [skip ci]"
+            git push
+          fi

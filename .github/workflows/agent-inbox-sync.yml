@@ -1,0 +1,38 @@
+name: Agent Inbox Sync
+
+on:
+  schedule:
+    - cron: "45 5,11,17,23 * * *"   # 13 min before the routine fires at :58
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pending improvements
+        env:
+          AGENT_SECRET: ${{ secrets.AGENT_SECRET }}
+          APP_URL: ${{ vars.APP_URL || 'https://b2app.sirahagents.com' }}
+        run: |
+          mkdir -p data/agent
+          curl -sf \
+            -H "Authorization: Bearer $AGENT_SECRET" \
+            "$APP_URL/api/agent/improvements" \
+            -o data/agent/inbox.json
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name  "B2 Agent Sync"
+          git config user.email "agent@b2consultants.de"
+          git add data/agent/inbox.json
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "chore(agent): sync pending improvements [skip ci]"
+            git push
+          fi

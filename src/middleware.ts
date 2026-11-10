@@ -24,6 +24,7 @@ import { VISITOR_COOKIE } from "@/lib/ab";
 //  - /api/resend/*    Resend delivery-status + inbound-email webhook  (Svix-signed, RESEND_WEBHOOK_SECRET)
 //  - /api/twilio/*    Twilio inbound-SMS + delivery-status webhook  (X-Twilio-Signature, TWILIO_AUTH_TOKEN)
 //  - /api/cron/*      the scheduled reminder trigger, hit by an external cron (CRON_SECRET)
+//  - /api/agent/*     automated improvement agent endpoints (AGENT_SECRET / CRON_SECRET)
 //  - /api/health      container liveness/readiness probe. Carries no data and no secret -
 //                     it reports ok/degraded only, so it needs no session and leaks nothing.
 //  - /f/*             Phase 2: publicly-hosted native forms (submit → idempotent lead-intake)
@@ -38,7 +39,7 @@ import { VISITOR_COOKIE } from "@/lib/ab";
 // one letter, and /invite is its own prefix anyway).
 const PUBLIC_PREFIXES = [
   "/book", "/invite", "/agreement",
-  "/api/leads", "/api/wati", "/api/resend", "/api/twilio", "/api/cron", "/api/health",
+  "/api/leads", "/api/wati", "/api/resend", "/api/twilio", "/api/cron", "/api/agent", "/api/health",
   // Direct capture endpoints (landing pages posting straight to us, no relay). Same
   // fail-closed shared-secret contract as /api/leads - see server/intake-route.ts.
   // NOT /api/export: that one is session-gated, and a public export of 23,545 contacts

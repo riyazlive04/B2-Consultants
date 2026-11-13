@@ -3,6 +3,11 @@
 ## Unreleased
 - 2026-11-12 build-docs created; Calendars redesign plan drafted.
 - 2026-11-13 Plan approved. `fix(app-guide)` 43d1e77: en dashes broke the house-style test.
+- 2026-11-13 `feat(calendar-settings)`: a "Calendar settings" tab listing every calendar B2 has -
+  one card per discovery pattern, one per pile of hand-made slots, one for strategy sessions -
+  each saying whether it is actually offering anybody a time, and why not when it is not. A door
+  onto Console → Availability and the SSS tab; no second place to configure anything. Bookings
+  tabs gained stable ids, so a link to a tab survives a reorder.
 - 2026-11-13 `feat(appointment-list-view)`: an "Appointments" tab - both call types as one table
   with Synamate's saved views (Upcoming / Cancelled / All / Upcoming discovery / Upcoming
   strategy), inline status, search, sort and Admin CSV export. Booking requests and Cancelled

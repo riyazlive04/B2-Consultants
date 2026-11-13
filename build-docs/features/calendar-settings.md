@@ -25,3 +25,16 @@ Synamate's Calendar settings list, as the door to B2's existing slot setup. Not 
 - AC1 Lists one Discovery row per owner with slots and one SSS row per SSS owner.
 - AC2 ✎ opens the existing availability screen scoped to that owner.
 - AC3 HEAD/USER cannot see "+ New calendar".
+
+## As built (2026-11-13)
+- Cards, not a table: five facts per calendar (owner, length, when, how many open slots ahead,
+  and one sentence on what to do) read better as a card than as a row with six columns.
+- Three row kinds: a configured discovery pattern, a pile of open slots NO pattern explains
+  (hand-made, or left behind by a deleted pattern), and the strategy calendar.
+- Status is the point of the screen: Active / No availability / Switched off / No days chosen /
+  Owner not set. "Switched on with no weekdays" is called out separately because that exact state
+  emptied the production calendar once and read as "the booking system is broken".
+- **AC2 as built:** ✎ opens Console → Availability rather than an owner-scoped version of it.
+  That panel IS the list of calendars, so there is nothing to scope; scoping it would have meant
+  adding a parameter to a console panel for one link.
+- "+ New calendar" links to the same console panel and is ADMIN-only. Nothing is configured here.

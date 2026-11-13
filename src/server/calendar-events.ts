@@ -5,6 +5,7 @@ import {
   calendarRef, discoStatus, eventTitle, ownerColor, releaseStatus,
   type CalEvent, type CalType,
 } from "@/lib/calendar-event";
+import type { SlotTally } from "@/lib/calendar-settings";
 
 /**
  * Everything on the Calendars grid for [from, to): booked + blocked Discovery slots, the cancelled /
@@ -200,4 +201,60 @@ export async function getCalendarEvents(q: CalendarQuery): Promise<CalEvent[]> {
   // Appointments-vs-blocked is decided after building, not in SQL: a cancelled call comes from
   // SlotRelease while its slot may be BLOCKED, so the two cannot be told apart by slot status.
   return q.kinds ? events.filter((e) => q.kinds!.includes(e.kind)) : events;
+}
+
+/**
+ * How much bookable time each calendar actually holds, from here to the horizon.
+ *
+ * Two grouped counts rather than two lists: the settings screen only asks "is anything open on
+ * this calendar, and how far does it run", and counting in the database beats carrying every
+ * future slot into the page to count it here.
+ */
+export async function getSlotTallies(): Promise<{ disco: SlotTally[]; sss: SlotTally[] }> {
+  const now = new Date();
+  const [disco, discoLast, sss, sssLast] = await Promise.all([
+    prisma.appointmentSlot.groupBy({
+      by: ["assignedToId"],
+      where: { status: "OPEN", startsAt: { gte: now } },
+      _count: { _all: true },
+    }),
+    prisma.appointmentSlot.groupBy({
+      by: ["assignedToId"],
+      where: { startsAt: { gte: now } },
+      _max: { startsAt: true },
+    }),
+    prisma.sssSlot.groupBy({
+      by: ["ownerId"],
+      where: { status: "OPEN", startsAt: { gte: now } },
+      _count: { _all: true },
+    }),
+    prisma.sssSlot.groupBy({
+      by: ["ownerId"],
+      where: { startsAt: { gte: now } },
+      _max: { startsAt: true },
+    }),
+  ]);
+
+  const fold = (
+    counts: { _count: { _all: number } }[],
+    ids: (string | null)[],
+    lasts: { _max: { startsAt: Date | null } }[],
+    lastIds: (string | null)[],
+  ): SlotTally[] => {
+    const owners = new Set([...ids, ...lastIds].map((id) => id ?? ""));
+    return [...owners].map((key) => {
+      const i = ids.findIndex((id) => (id ?? "") === key);
+      const j = lastIds.findIndex((id) => (id ?? "") === key);
+      return {
+        ownerId: key === "" ? null : key,
+        openAhead: i < 0 ? 0 : counts[i]._count._all,
+        lastAheadAt: j < 0 ? null : lasts[j]._max.startsAt?.toISOString() ?? null,
+      };
+    });
+  };
+
+  return {
+    disco: fold(disco, disco.map((r) => r.assignedToId), discoLast, discoLast.map((r) => r.assignedToId)),
+    sss: fold(sss, sss.map((r) => r.ownerId), sssLast, sssLast.map((r) => r.ownerId)),
+  };
 }

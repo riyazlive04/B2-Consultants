@@ -8,8 +8,9 @@ import { formatDate } from "@/lib/format";
 import { canOpenSection, requireSection } from "@/lib/rbac";
 import { addDays, monthDays, weekDays } from "@/lib/calendar-grid";
 import { kindsFor, parseFilters, showsNothing } from "@/lib/calendar-filters";
+import { calendarSettingRows } from "@/lib/calendar-settings";
 import { getBookableTeamMembers, getBookingsOverview } from "@/server/booking-metrics";
-import { getCalendarEvents } from "@/server/calendar-events";
+import { getCalendarEvents, getSlotTallies } from "@/server/calendar-events";
 import {
   getBookingCalendars,
   getSssConfig,
@@ -21,6 +22,7 @@ import { BookingsTable } from "./_components/BookingsTable";
 import { CancelledSlotsTable } from "./_components/CancelledSlotsTable";
 import { SssCalendar } from "./_components/SssCalendar";
 import { AppointmentList } from "./_components/calendar/AppointmentList";
+import { CalendarSettings } from "./_components/calendar/CalendarSettings";
 import { CalendarView } from "./_components/calendar/CalendarView";
 import { CAL_VIEWS, type CalView } from "./_components/calendar/Toolbar";
 import { consoleHref } from "@/lib/guide/manual-types";
@@ -78,7 +80,7 @@ export default async function BookingsPage({
 
   const [
     { bookings, openSlots },
-    events, listEvents, teamMembers, sssSlots, sssNeeds, sssConfig, slotPattern, slotReleases,
+    events, listEvents, teamMembers, sssSlots, sssNeeds, sssConfig, slotPattern, slotReleases, tallies,
   ] = await Promise.all([
     getBookingsOverview(),
     // Nothing ticked is a real state, and one worth not querying for at all.
@@ -100,6 +102,7 @@ export default async function BookingsPage({
     // availability banner below.
     getBookingCalendars(),
     listSlotReleases(),
+    getSlotTallies(),
   ]);
   /**
    * Depends on `bookings`, so it cannot join the batch above - but it must not be a bare
@@ -227,6 +230,7 @@ export default async function BookingsPage({
              * the booking requests table rather than replacing it - that table holds the BANT
              * verdict, the WhatsApp state and the export, none of which Synamate ever had.
              */
+            id: "appointments",
             label: `Appointments${listEvents.length ? ` (${listEvents.length})` : ""}`,
             content: (
               <AppointmentList
@@ -237,17 +241,33 @@ export default async function BookingsPage({
               />
             ),
           },
-          { label: `Booking requests${bookings.length ? ` (${bookings.length})` : ""}`, content: <BookingsTable rows={bookings} waStatus={waByBooking} teamMembers={teamMembers} openSlots={openSlots} canExport={canConfigure} /> },
+          { id: "requests", label: `Booking requests${bookings.length ? ` (${bookings.length})` : ""}`, content: <BookingsTable rows={bookings} waStatus={waByBooking} teamMembers={teamMembers} openSlots={openSlots} canExport={canConfigure} /> },
           {
             /**
              * The slots we gave back. Its own view because a release is the one booking event with
              * no row anywhere else: the booking lost its time the moment `slotId` was nulled, and
              * the slot itself looks untouched once it reopens.
              */
+            id: "cancelled",
             label: `Cancelled slots${cancelledSlotCount ? ` (${cancelledSlotCount})` : ""}`,
             content: <CancelledSlotsTable rows={slotReleases} />,
           },
           {
+            /** Synamate's Calendar settings, as a door onto the screens that own each setting. */
+            id: "settings",
+            label: "Calendar settings",
+            content: (
+              <CalendarSettings
+                rows={calendarSettingRows(
+                  { patterns: slotPattern, sss: sssConfig, discoTallies: tallies.disco, sssTallies: tallies.sss },
+                  teamMembers,
+                )}
+                canConfigure={canConfigure}
+              />
+            ),
+          },
+          {
+            id: "sss",
             label: "SSS Calendar",
             content: (
               <SssCalendar

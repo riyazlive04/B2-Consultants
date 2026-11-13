@@ -7,6 +7,16 @@
 - Browser: local preview (:3011, local DB) via Playwright; never against live.
 
 ## Results
+- 2026-11-13 **calendar-settings**: `src/lib/__tests__/calendar-settings.test.ts` 5/5 (AC1 one row
+  per pattern + the strategy row; the three distinct ways a calendar produces nothing; hand-made
+  slots get their own row only when bookable; no SSS owner; an unassigned PATTERN is a calendar,
+  not a missing owner). Browser on the local preview: 4 cards - Asma and Ameen "No availability"
+  (the hourly top-up does not run locally), the unassigned pattern "Active" with 11 open ahead,
+  and the strategy calendar owned by Ameen with none laid out. Group filter counts 3 / 1.
+  AC2 is met in spirit, not to the letter: the ✎ opens Console → Availability, which is where a
+  discovery pattern is edited - there is no per-owner scoping to open, since that panel lists the
+  calendars themselves. AC3 (no "+ New calendar" for HEAD/USER) uses the same ADMIN flag as the
+  rest of the page; checked by reading, not with a second login.
 - 2026-11-13 **appointment-list-view**: `src/lib/__tests__/calendar-list.test.ts` 6/6 (AC1 upcoming
   order, AC2 both type lists, cancelled newest-first, All keeps the past, blocked time never
   listed, and a call running RIGHT NOW still counts as upcoming). Browser on the local preview:

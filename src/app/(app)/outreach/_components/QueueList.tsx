@@ -6,12 +6,11 @@ import {
   Check,
   ChevronDown,
   Copy,
-  MessageCircle,
   PhoneCall,
   SkipForward,
   Settings2,
-  Video,
 } from "lucide-react";
+import { BrandIcon } from "@/components/ui/BrandIcon";
 import { fieldKindProps } from "@/components/ui/field-base";
 import { DateTimePicker } from "@/components/ui/DateTimePicker";
 import type { QueueRow, QueueStep } from "@/server/outreach-metrics";
@@ -246,7 +245,7 @@ function ProspectCard({ row }: { row: QueueRow }) {
   const zoomProps = fieldKindProps<HTMLInputElement>("url", undefined);
 
   const channelIcon =
-    next?.channel === "CALL" ? <PhoneCall size={13} /> : next?.channel === "WHATSAPP" ? <MessageCircle size={13} /> : <Settings2 size={13} />;
+    next?.channel === "CALL" ? <PhoneCall size={13} /> : next?.channel === "WHATSAPP" ? <BrandIcon brand="whatsapp" size={13} /> : <Settings2 size={13} />;
 
   return (
     <div
@@ -346,7 +345,7 @@ function ProspectCard({ row }: { row: QueueRow }) {
               <input type="hidden" name="journeyId" value={row.journeyId} />
               <label className="min-w-0 flex-1 text-xs">
                 <span className="mb-1 flex items-center gap-1 font-medium text-muted">
-                  <Video size={12} /> Zoom link (from the Discovery Specialist&apos;s calendar)
+                  <BrandIcon brand="zoom" size={12} /> Zoom link (from the Discovery Specialist&apos;s calendar)
                 </span>
                 <input
                   {...zoomProps.attrs}

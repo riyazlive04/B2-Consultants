@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, CalendarClock, Check, CircleCheck, Mail, Phone, Video } from "lucide-react";
+import { ArrowRight, CalendarClock, Check, CircleCheck, Mail, Phone } from "lucide-react";
+import { BrandIcon } from "@/components/ui/BrandIcon";
 import { Modal } from "@/components/ui/Modal";
 import { Btn } from "@/components/ui/controls";
 import { Field, Select } from "@/components/ui/form";
@@ -158,7 +159,7 @@ export function BookingDetail({
                   rel="noopener noreferrer"
                   className="inline-flex h-10 items-center gap-2 rounded-btn border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-surface-2"
                 >
-                  <Video size={15} aria-hidden /> Start as host
+                  <BrandIcon brand="zoom" size={15} /> Start as host
                 </a>
               )}
               <a
@@ -167,7 +168,7 @@ export function BookingDetail({
                 rel="noopener noreferrer"
                 className="inline-flex h-10 min-w-0 items-center gap-2 rounded-btn border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-surface-2"
               >
-                <Video size={15} aria-hidden className="flex-none" />
+                <BrandIcon brand="zoom" size={15} />
                 <span className="truncate">Prospect&apos;s join link</span>
               </a>
             </div>

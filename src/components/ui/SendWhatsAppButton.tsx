@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { MessageCircle } from "lucide-react";
+import { BrandIcon } from "./BrandIcon";
 import { toast, askConfirm } from "./feedback";
 import type { WhatsAppActionResult } from "@/server/whatsapp-actions";
 
@@ -103,7 +103,7 @@ export function SendWhatsAppButton({
           "inline-flex items-center gap-1.5 rounded-field border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-2 disabled:opacity-50"
         }
       >
-        <MessageCircle size={14} />
+        <BrandIcon brand="whatsapp" size={14} />
         {text}
       </button>
     );
@@ -119,7 +119,7 @@ export function SendWhatsAppButton({
         aria-label={label}
         className={className ?? "inline-flex items-center text-muted hover:text-accent disabled:opacity-50"}
       >
-        <MessageCircle size={15} />
+        <BrandIcon brand="whatsapp" size={15} />
       </button>
     );
   }
@@ -137,7 +137,7 @@ export function SendWhatsAppButton({
         }`
       }
     >
-      <MessageCircle size={13} />
+      <BrandIcon brand="whatsapp" size={13} />
       {text}
     </button>
   );

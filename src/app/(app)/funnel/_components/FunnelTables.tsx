@@ -11,6 +11,7 @@
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { formatDate, formatInrMinor, formatPct } from "@/lib/format";
 import { LEAD_SOURCE_LABELS } from "@/lib/labels";
+import { BrandIcon, brandForLeadSource } from "@/components/ui/BrandIcon";
 import type { FunnelOverview } from "@/server/funnel-metrics";
 
 type Month = FunnelOverview["months"][number];
@@ -71,7 +72,23 @@ export function FunnelMetricsTable({ months }: { months: Month[] }) {
 
 export function FunnelAttributionTable({ attribution }: { attribution: AttributionRow[] }) {
   const attributionColumns: Column<AttributionRow>[] = [
-    { key: "source", header: "Source", sortable: false, cell: (a) => <span className="font-medium">{LEAD_SOURCE_LABELS[a.source] ?? a.source}</span> },
+    {
+      key: "source",
+      header: "Source",
+      sortable: false,
+      // The brand's own mark where the source is a brand, so the column can be scanned
+      // without reading it. `brandForLeadSource` returns null for Referral, Workshop and
+      // the rest, which simply render as the label alone.
+      cell: (a) => {
+        const brand = brandForLeadSource(a.source);
+        return (
+          <span className="inline-flex items-center gap-1.5 font-medium">
+            {brand && <BrandIcon brand={brand} size={14} color />}
+            {LEAD_SOURCE_LABELS[a.source] ?? a.source}
+          </span>
+        );
+      },
+    },
     { key: "leads", header: "Leads", align: "right", sortable: false, cell: (a) => a.leads },
     { key: "calls", header: "Calls done", align: "right", sortable: false, cell: (a) => a.callsCompleted },
     { key: "won", header: "Won", align: "right", sortable: false, cell: (a) => a.won },

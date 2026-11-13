@@ -7,6 +7,16 @@
 - Browser: local preview (:3011, local DB) via Playwright; never against live.
 
 ## Results
+- 2026-11-13 **appointment-list-view**: `src/lib/__tests__/calendar-list.test.ts` 6/6 (AC1 upcoming
+  order, AC2 both type lists, cancelled newest-first, All keeps the past, blocked time never
+  listed, and a call running RIGHT NOW still counts as upcoming). Browser on the local preview:
+  the tab shows 11 calls; Cancelled 3, All 11, Upcoming discovery 4, Upcoming strategy 0 with its
+  empty state; AC3 setting Divya Nair to Confirmed from the list persisted across a reload and the
+  grid card agreed; AC4 the Export CSV button is present for an Admin, and Booking requests keeps
+  its own BANT / WhatsApp / export untouched.
+  Found and fixed while testing: EventCard mixed `borderLeft` with `borderStyle`, logging a React
+  warning on every re-render (feature 2 bug).
+  Full suite 2383 pass / 0 fail, tsc + lint clean.
 - 2026-11-13 **book-appointment-modal**: `src/lib/__tests__/calendar-book.test.ts` 4/4 (AC4 open-only
   blocking, empty range, end <= start incl. the equal case, junk times). Browser on the local
   preview: AC5 clicking the 2 PM lane on Sat prefilled that date and selected the 02:00 PM slot;

@@ -56,6 +56,15 @@ This file starts 12 Nov 2026 with the Calendars redesign.
 - 2026-11-13 Blocking is one IST day and a time range, not Synamate's multi-day datetime pair;
   OPEN slots only, booked calls keep their time and are reported back.
 
+- 2026-11-13 The appointment list does NOT replace BookingsTable (the feature doc's plan). That
+  table carries BANT, WhatsApp state, the intake answers and the export - things Synamate never
+  had and the team uses daily - so rebuilding them behind a "Manage columns" control would have
+  been a large change whose best outcome was parity. The list is a second tab beside it.
+- 2026-11-13 Status writing lives in ONE client module (`_components/calendar/event-status.ts`):
+  the drawer and the list both call `applyStatusChange`, so "No show" cannot mean two things.
+- 2026-11-13 The list reads a 90-days-either-side window, its own `getCalendarEvents` call; the
+  grid's query stays scoped to the view on screen.
+
 ## Constraints
 - Synamate capture at `../syn-cal/` (outer folder, not git) contains real prospect PII. Never commit.
 - Local preview only (`.env.local`, :5435 Postgres, `scripts/local-demo-serve.ps1` on :3011).

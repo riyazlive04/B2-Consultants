@@ -8,16 +8,11 @@ import { BrandIcon } from "@/components/ui/BrandIcon";
 import { Modal } from "@/components/ui/Modal";
 import { Btn } from "@/components/ui/controls";
 import { Field, Select } from "@/components/ui/form";
-import { askConfirm, toast } from "@/components/ui/feedback";
+import { toast } from "@/components/ui/feedback";
 import { CALENDAR_STATUS_LABELS } from "@/lib/labels";
 import { istDateLabel, istRangeLabel } from "@/lib/calendar-grid";
-import {
-  discoStatusWrite, eventLook, FREES_THE_SLOT, type CalEvent, type CalStatus,
-} from "@/lib/calendar-event";
-import { safeAction } from "@/lib/action-guard";
-import { setBookingConfirmed, setBookingStatus, setSlotBlocked } from "@/server/booking-actions";
-import { setSalesCallConfirmed } from "@/server/outreach-actions";
-import { unblockSssSlotAction } from "@/server/sss-actions";
+import { eventLook, type CalEvent, type CalStatus } from "@/lib/calendar-event";
+import { applyStatusChange, unblockEntry, type StatusResult } from "./event-status";
 
 /**
  * Synamate's "View details" drawer: one entry on the calendar, in full, with the few things you
@@ -47,53 +42,17 @@ export function EventDrawer({ ev, canSetSss, onClose }: { ev: CalEvent; canSetSs
   /* A cancelled call is drawn from its SlotRelease, which has no booking to set a status on. */
   const ghost = ev.source.table === "release";
 
-  const run = async (fn: () => Promise<{ ok: boolean; error?: string }>, done: string) => {
+  const run = async (fn: () => Promise<StatusResult | null>) => {
     if (busy) return;
     setBusy(true);
-    const res = await safeAction(fn);
+    const res = await fn();
     setBusy(false);
-    if (!res.ok) return toast(res.error ?? "That did not save", "error");
-    toast(done);
+    if (!res) return; // asked, and told no
+    toast(res.message, res.ok ? "success" : "error");
+    if (!res.ok) return;
     router.refresh();
     onClose();
   };
-
-  const changeDisco = async (next: CalStatus) => {
-    if (next === ev.status || !ev.source.bookingId) return;
-    if (FREES_THE_SLOT.includes(next)) {
-      const label = CALENDAR_STATUS_LABELS[next].toLowerCase();
-      const ok = await askConfirm({
-        title: `Mark this call ${label}?`,
-        body:
-          `${ev.contact?.name ?? "This call"}'s slot goes back to the calendar and the booking keeps only a record of the time it held. ` +
-          "Nothing is deleted, and nobody is messaged.",
-        confirmLabel: `Mark ${label}`,
-        danger: true,
-      });
-      if (!ok) return;
-    }
-    const write = discoStatusWrite(next);
-    const id = ev.source.bookingId;
-    await run(
-      () => ("confirmed" in write ? setBookingConfirmed(id, write.confirmed) : setBookingStatus(id, write.bookingStatus)),
-      `Marked ${CALENDAR_STATUS_LABELS[next].toLowerCase()}`,
-    );
-  };
-
-  const changeSss = async (next: CalStatus) => {
-    const journeyId = ev.source.journeyId;
-    if (next === ev.status || !journeyId) return;
-    const form = new FormData();
-    form.set("journeyId", journeyId);
-    form.set("confirmed", next === "CONFIRMED" ? "YES" : "NO");
-    await run(() => setSalesCallConfirmed(form), next === "CONFIRMED" ? "Session confirmed" : "Confirmation cleared");
-  };
-
-  const unblock = () =>
-    run(
-      () => (ev.source.table === "sss" ? unblockSssSlotAction(ev.source.id) : setSlotBlocked(ev.source.id, false)),
-      "Time freed up",
-    );
 
   return (
     <Modal
@@ -150,7 +109,7 @@ export function EventDrawer({ ev, canSetSss, onClose }: { ev: CalEvent; canSetSs
             call has no booking left to set, and SSS confirmation belongs to Outreach. */}
         <section className="space-y-3 border-t border-line pt-4">
           {blocked ? (
-            <Btn variant="outline" onClick={unblock} busy={busy} className="w-full sm:w-auto">
+            <Btn variant="outline" onClick={() => run(() => unblockEntry(ev))} busy={busy} className="w-full sm:w-auto">
               Unblock this time
             </Btn>
           ) : ghost ? (
@@ -165,7 +124,7 @@ export function EventDrawer({ ev, canSetSss, onClose }: { ev: CalEvent; canSetSs
                   value={ev.status}
                   aria-label="Status"
                   disabled={busy}
-                  onChange={(e) => changeSss(e.target.value as CalStatus)}
+                  onChange={(e) => run(() => applyStatusChange(ev, e.target.value as CalStatus))}
                   options={[
                     { value: "CONFIRMED", label: CALENDAR_STATUS_LABELS.CONFIRMED },
                     { value: "UNCONFIRMED", label: CALENDAR_STATUS_LABELS.UNCONFIRMED },
@@ -181,7 +140,7 @@ export function EventDrawer({ ev, canSetSss, onClose }: { ev: CalEvent; canSetSs
                 value={ev.status}
                 aria-label="Status"
                 disabled={busy}
-                onChange={(e) => changeDisco(e.target.value as CalStatus)}
+                onChange={(e) => run(() => applyStatusChange(ev, e.target.value as CalStatus))}
                 options={DISCO_STATUSES.map((s) => ({ value: s, label: CALENDAR_STATUS_LABELS[s] }))}
               />
             </Field>

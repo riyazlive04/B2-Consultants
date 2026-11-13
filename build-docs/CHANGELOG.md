@@ -3,6 +3,13 @@
 ## Unreleased
 - 2026-11-12 build-docs created; Calendars redesign plan drafted.
 - 2026-11-13 Plan approved. `fix(app-guide)` 43d1e77: en dashes broke the house-style test.
+- 2026-11-13 `feat(appointment-list-view)`: an "Appointments" tab - both call types as one table
+  with Synamate's saved views (Upcoming / Cancelled / All / Upcoming discovery / Upcoming
+  strategy), inline status, search, sort and Admin CSV export. Booking requests and Cancelled
+  slots are UNCHANGED beside it, so BANT, WhatsApp state and the existing export are not lost.
+  Status writing moved into one shared module so the drawer and the list cannot disagree.
+  `fix(calendar-view)`: EventCard mixed the `borderLeft` shorthand with `borderStyle`, which
+  React warns about on re-render.
 - 2026-11-13 `feat(book-appointment-modal)`: "+ New" on the toolbar and clicking an empty half-hour
   open a two-tab dialog - book an existing contact into an OPEN slot, or block a time range off.
   New actions `searchBookableLeads`, `listOpenSlotsForDay`, `bookDiscoveryForLead`, `blockTimeRange`;

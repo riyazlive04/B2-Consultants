@@ -37,7 +37,11 @@ export function EventCard({ ev, compact = false }: { ev: CalEvent; compact?: boo
         color: look.text,
         borderColor: look.border,
         borderStyle: look.dashed ? "dashed" : "solid",
-        borderLeft: `5px solid ${look.edge}`,
+        // Long-hand, not `borderLeft`: React warns (and can mis-apply) when a shorthand and a
+        // long-hand fight over the same property across a re-render.
+        borderLeftWidth: 5,
+        borderLeftStyle: "solid",
+        borderLeftColor: look.edge,
       }}
     >
       <span className={`block truncate text-caption font-semibold ${look.strike ? "line-through" : ""}`}>

@@ -32,3 +32,16 @@ Synamate's "Appointment list view" tab: every appointment as a table with inline
 - AC2 Upcoming SSS / Upcoming Disco filter by type correctly.
 - AC3 Inline status change persists and matches the drawer.
 - AC4 BANT + WhatsApp columns available via Manage columns; CSV export still downloads.
+
+## As built (2026-11-13)
+- **BookingsTable was NOT replaced.** The doc's plan rebuilt it with "Manage columns" so nothing
+  was lost; keeping it is the cheaper way to lose nothing. The list is a tab beside it, reading
+  the same `CalEvent` the grid draws - so both call types appear, which is what Synamate's list
+  gave the team and the booking table never could.
+- Saved views as built: Upcoming, Cancelled, All, Upcoming discovery, Upcoming strategy. Synamate's
+  advanced-filter drawer is not rebuilt: the Manage view panel already filters by person, calendar
+  and type, and the table searches and sorts itself.
+- Columns: Appointment, Contact, Appointment time, Status (inline), Calendar, Owner, Details.
+  No row number column - the table pages, so a row's number is a lie by page two.
+- Blocked time is never listed. It is not an appointment; it stays on the grid.
+- Export is the house DataTable's CSV, Admin-only, named for the view it was taken from.

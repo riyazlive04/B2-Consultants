@@ -20,6 +20,7 @@ import { listSlotReleases } from "@/server/slot-release";
 import { BookingsTable } from "./_components/BookingsTable";
 import { CancelledSlotsTable } from "./_components/CancelledSlotsTable";
 import { SssCalendar } from "./_components/SssCalendar";
+import { AppointmentList } from "./_components/calendar/AppointmentList";
 import { CalendarView } from "./_components/calendar/CalendarView";
 import { CAL_VIEWS, type CalView } from "./_components/calendar/Toolbar";
 import { consoleHref } from "@/lib/guide/manual-types";
@@ -67,9 +68,17 @@ export default async function BookingsPage({
   const weekStartUtc = istWallToUtc(week[0], "00:00");
   const weekEndUtc = istWallToUtc(addDays(week[6], 1), "00:00");
 
+  /**
+   * The list tab's own window: calls either side of today, rather than only the week on screen.
+   * Ninety days each way covers "what did we cancel last month" and "what is coming" without
+   * reading a calendar that goes back to the first booking ever taken.
+   */
+  const listFrom = new Date(Date.now() - 90 * 86_400_000);
+  const listTo = new Date(Date.now() + 90 * 86_400_000);
+
   const [
     { bookings, openSlots },
-    events, teamMembers, sssSlots, sssNeeds, sssConfig, slotPattern, slotReleases,
+    events, listEvents, teamMembers, sssSlots, sssNeeds, sssConfig, slotPattern, slotReleases,
   ] = await Promise.all([
     getBookingsOverview(),
     // Nothing ticked is a real state, and one worth not querying for at all.
@@ -82,6 +91,7 @@ export default async function BookingsPage({
           types: filters.cals ?? undefined,
           kinds: kindsFor(filters.type),
         }),
+    getCalendarEvents({ from: listFrom, to: listTo, kinds: ["APPOINTMENT"] }),
     getBookableTeamMembers(),
     listSssSlots(weekStartUtc, weekEndUtc),
     listSssNeedsScheduling(),
@@ -211,6 +221,22 @@ export default async function BookingsPage({
       <Tabs
         urlKey="tab"
         tabs={[
+          {
+            /**
+             * Synamate's appointment list: BOTH call types, with its saved views. It sits beside
+             * the booking requests table rather than replacing it - that table holds the BANT
+             * verdict, the WhatsApp state and the export, none of which Synamate ever had.
+             */
+            label: `Appointments${listEvents.length ? ` (${listEvents.length})` : ""}`,
+            content: (
+              <AppointmentList
+                events={listEvents}
+                canSetSss={canSetSss}
+                canExport={canConfigure}
+                nowIso={new Date().toISOString()}
+              />
+            ),
+          },
           { label: `Booking requests${bookings.length ? ` (${bookings.length})` : ""}`, content: <BookingsTable rows={bookings} waStatus={waByBooking} teamMembers={teamMembers} openSlots={openSlots} canExport={canConfigure} /> },
           {
             /**

@@ -116,13 +116,43 @@ export function buildCalendarEvents(rows: { slots: SlotRow[]; releases: ReleaseR
   return out.sort((a, b) => a.startsAt.localeCompare(b.startsAt));
 }
 
-export type CalendarQuery = { from: Date; to: Date; ownerIds?: string[]; types?: CalType[] };
+export type CalendarQuery = {
+  from: Date;
+  to: Date;
+  /** Owner ids to keep. `""` means "also unassigned". Undefined = everyone. */
+  ownerIds?: string[];
+  /** Owner ids to drop, when the filter is phrased as "everyone except" (see lib/calendar-filters). */
+  excludeOwnerIds?: string[];
+  types?: CalType[];
+  kinds?: CalEvent["kind"][];
+};
 
 export async function getCalendarEvents(q: CalendarQuery): Promise<CalEvent[]> {
   const want = (t: CalType) => !q.types || q.types.includes(t);
   const owner = { select: { id: true, name: true } } as const;
-  const discoOwner = q.ownerIds ? { assignedToId: { in: q.ownerIds } } : {};
   const range = { gte: q.from, lt: q.to };
+  /**
+   * An unassigned slot has a NULL owner, which `in: [...]` never matches - so ticking
+   * "Unassigned" has to ask for the null explicitly or those entries silently vanish.
+   */
+  const ownerWhere = (field: "assignedToId" | "ownerId") => {
+    if (q.ownerIds) {
+      const ids = q.ownerIds.filter(Boolean);
+      return q.ownerIds.includes("")
+        ? { OR: [{ [field]: { in: ids } }, { [field]: null }] }
+        : { [field]: { in: ids } };
+    }
+    if (q.excludeOwnerIds?.length) {
+      const ids = q.excludeOwnerIds.filter(Boolean);
+      // `notIn` is false for NULL in SQL, so an unassigned slot would be dropped by a filter that
+      // never mentioned it - the null has to be allowed back in explicitly unless it was excluded.
+      const keepNull = !q.excludeOwnerIds.includes("");
+      return keepNull ? { OR: [{ [field]: { notIn: ids } }, { [field]: null }] } : { [field]: { notIn: ids } };
+    }
+    return {};
+  };
+  const discoOwner = ownerWhere("assignedToId");
+  const narrowed = Boolean(q.ownerIds || q.excludeOwnerIds?.length);
 
   const [team, slots, releases, sss] = await Promise.all([
     // Colour index = position in the name-sorted active team, so a person keeps one colour everywhere.
@@ -140,7 +170,7 @@ export async function getCalendarEvents(q: CalendarQuery): Promise<CalEvent[]> {
       ? prisma.slotRelease.findMany({
           where: {
             slotStartsAt: range, reason: { not: "POSTPONED" },
-            ...(q.ownerIds ? { slot: { assignedToId: { in: q.ownerIds } } } : {}),
+            ...(narrowed ? { slot: ownerWhere("assignedToId") } : {}),
           },
           select: {
             id: true, slotStartsAt: true, durationMins: true, prospectName: true, reason: true,
@@ -151,7 +181,7 @@ export async function getCalendarEvents(q: CalendarQuery): Promise<CalEvent[]> {
       : [],
     want("SSS")
       ? prisma.sssSlot.findMany({
-          where: { startsAt: range, status: { not: "OPEN" }, ...(q.ownerIds ? { ownerId: { in: q.ownerIds } } : {}) },
+          where: { startsAt: range, status: { not: "OPEN" }, ...ownerWhere("ownerId") },
           select: {
             id: true, startsAt: true, durationMins: true, status: true, owner,
             journey: {
@@ -164,5 +194,8 @@ export async function getCalendarEvents(q: CalendarQuery): Promise<CalEvent[]> {
         })
       : [],
   ]);
-  return buildCalendarEvents({ slots, releases, sss }, team);
+  const events = buildCalendarEvents({ slots, releases, sss }, team);
+  // Appointments-vs-blocked is decided after building, not in SQL: a cancelled call comes from
+  // SlotRelease while its slot may be BLOCKED, so the two cannot be told apart by slot status.
+  return q.kinds ? events.filter((e) => q.kinds!.includes(e.kind)) : events;
 }

@@ -10,10 +10,16 @@ Synamate's right-hand filter panel: choose whose calendars and which kinds of en
   - **Users (n)** collapsible checklist, 5 shown + "See more (+k)".
   - **Calendars** collapsible checklist (derived `CalendarRef`s).
   - Synamate "Groups" → B2 has two natural groups, DISCO and SSS: shown as 2 checkboxes.
-- State in URL (`users`, `cal`, `type`); default = the signed-in user if they own a calendar,
-  else all owners (matches Synamate defaulting to "me").
-- USER role sees only their own calendars + any they're the booked caller on (same scoping the
-  current bookings page applies); HEAD/ADMIN see all.
+- State in URL (`users` / `off`, `cal`, `type`, `panel`). **Default = everyone**, not "me" as in
+  Synamate: /bookings is deliberately the whole-team calendar (see `sections.ts`), and opening it
+  pre-filtered to yourself would hide what the page is for.
+- Who is shown is stored whichever way round is SHORTER - `users` (show these) or `off` (hide
+  these) - because on a 22-person team "everyone except Anna" is 21 ids in the address bar.
+- Synamate's three lists (Users / Calendars / Groups) collapse to two: a B2 calendar IS
+  (person x call type), so its groups and its calendars are the same two things.
+- **AC4 dropped, 13 Nov:** it assumed /bookings already scopes a USER to their own calendar. It
+  does not - every role sees the whole team's calls, by design. Adding scoping here would be a
+  silent access change, so it needs a decision of its own, not a filter panel.
 
 ## Impact map
 - `getCalendarEvents` filter args; `getBookableTeamMembers` for the user list.
@@ -28,4 +34,4 @@ Synamate's right-hand filter panel: choose whose calendars and which kinds of en
 - AC1 Unticking a user removes their events and (in Day view) their column.
 - AC2 "Blocked slots" shows only BLOCKED entries.
 - AC3 Clear all restores the default selection.
-- AC4 USER role cannot see another rep's appointments via URL params (server-enforced).
+- ~~AC4 USER role cannot see another rep's appointments via URL params~~ - dropped, see above.

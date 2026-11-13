@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarPlus, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarPlus, ChevronLeft, ChevronRight, SlidersHorizontal } from "lucide-react";
 import { DateJump } from "./DateJump";
 
 /**
@@ -18,7 +18,7 @@ const btnCls =
   "inline-flex h-8 items-center gap-1.5 rounded-field border border-line px-3 text-xs font-medium text-muted transition-colors hover:bg-surface-2 hover:text-ink";
 
 export function CalendarToolbar({
-  view, label, hrefFor, todayHref, prevHref, nextHref, dayKey, actions,
+  view, label, hrefFor, todayHref, prevHref, nextHref, dayKey, manageHref, manageOpen, filtersOn, actions,
 }: {
   view: CalView;
   label: string;
@@ -28,6 +28,11 @@ export function CalendarToolbar({
   prevHref: string;
   nextHref: string;
   dayKey: string;
+  /** Opens or closes the Manage view panel - `?panel=1`, so the layout is decided server-side. */
+  manageHref: string;
+  manageOpen: boolean;
+  /** A dot on the button, so a filtered calendar never looks like an empty one. */
+  filtersOn: boolean;
   actions?: React.ReactNode;
 }) {
   return (
@@ -53,6 +58,15 @@ export function CalendarToolbar({
           </Link>
         ))}
       </div>
+
+      <Link
+        href={manageHref}
+        aria-expanded={manageOpen}
+        className={manageOpen ? `${btnCls} border-primary bg-accent-soft text-accent` : btnCls}
+      >
+        <SlidersHorizontal size={14} /> Manage view
+        {filtersOn && <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-label="filters are on" />}
+      </Link>
 
       <Link href="/bookings/availability" className={btnCls}>
         <CalendarPlus size={14} /> Manage availability

@@ -1,7 +1,9 @@
 import type { CalEvent } from "@/lib/calendar-event";
+import { isDefaultFilters, showsNothing, type CalFilters } from "@/lib/calendar-filters";
 import { addDays, dayColumns, weekDays } from "@/lib/calendar-grid";
 import { EmptyState } from "@/components/ui/kit";
 import { CalendarToolbar, type CalView } from "./Toolbar";
+import { ManageView } from "./ManageView";
 import { MonthGrid } from "./MonthGrid";
 import { TimeGrid, type GridColumn } from "./TimeGrid";
 
@@ -39,13 +41,15 @@ export function stepDate(view: CalView, dayKey: string, dir: 1 | -1): string {
 }
 
 export function CalendarView({
-  view, dayKey, todayKey, events, team, hrefFor, toolbarActions,
+  view, dayKey, todayKey, events, team, filters, panelOpen, hrefFor, toolbarActions,
 }: {
   view: CalView;
   dayKey: string;
   todayKey: string;
   events: CalEvent[];
   team: { id: string; name: string | null }[];
+  filters: CalFilters;
+  panelOpen: boolean;
   /** Builds a URL for this page with some params changed, keeping the rest. */
   hrefFor: (patch: Record<string, string>) => string;
   toolbarActions?: React.ReactNode;
@@ -67,6 +71,24 @@ export function CalendarView({
           events: c.events,
         }));
 
+  const hiddenByFilter = showsNothing(filters);
+  const isDefault = isDefaultFilters(filters);
+
+  const grid = hiddenByFilter ? (
+    <EmptyState
+      title="Nothing is selected"
+      body="Every team member or calendar is unticked in Manage view, so there is nothing to draw."
+    />
+  ) : view === "month" ? (
+    <MonthGrid events={events} dayKey={dayKey} todayKey={todayKey} />
+  ) : view === "day" && columns.length === 0 ? (
+    // Day view is one column per person with something on; with nothing booked there is no
+    // column to draw, so say so rather than render an empty 24-hour ruler.
+    <EmptyState title="Nothing booked on this day" body="Blocked time and booked calls appear here, one column per team member." />
+  ) : (
+    <TimeGrid columns={columns} />
+  );
+
   return (
     <div className="space-y-3">
       <CalendarToolbar
@@ -77,18 +99,18 @@ export function CalendarView({
         todayHref={hrefFor({ date: todayKey })}
         prevHref={hrefFor({ date: stepDate(view, dayKey, -1) })}
         nextHref={hrefFor({ date: stepDate(view, dayKey, 1) })}
+        manageHref={panelOpen ? hrefFor({ panel: "" }) : hrefFor({ panel: "1" })}
+        manageOpen={panelOpen}
+        filtersOn={!isDefault}
         actions={toolbarActions}
       />
 
-      {view === "month" ? (
-        <MonthGrid events={events} dayKey={dayKey} todayKey={todayKey} />
-      ) : view === "day" && columns.length === 0 ? (
-        // Day view is one column per person with something on; with nothing booked there is no
-        // column to draw, so say so rather than render an empty 24-hour ruler.
-        <EmptyState title="Nothing booked on this day" body="Blocked time and booked calls appear here, one column per team member." />
-      ) : (
-        <TimeGrid columns={columns} />
-      )}
+      {/* The panel takes its width from the grid rather than covering it - as an overlay it hid
+          Saturday and Sunday, which are exactly the columns someone filtering is looking at. */}
+      <div className="flex flex-col gap-3 lg:flex-row">
+        <div className="min-w-0 flex-1">{grid}</div>
+        {panelOpen && <ManageView filters={filters} team={team} closeHref={hrefFor({ panel: "" })} />}
+      </div>
     </div>
   );
 }

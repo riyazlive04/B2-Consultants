@@ -7,6 +7,13 @@
 - Browser: local preview (:3011, local DB) via Playwright; never against live.
 
 ## Results
+- 2026-11-13 **calendar-manage-view**: `src/lib/__tests__/calendar-filters.test.ts` 10/10
+  (AC1-AC3 + unassigned token, junk params, short-URL choice). Browser: unticking a person drops
+  their events and writes `?off=<one id>`; "Blocked" leaves only the two Busy entries; Clear all
+  restores `?view=week&panel=1`. Full suite 2370 pass / 0 fail, tsc + lint clean.
+  Found and fixed while testing: `?users=` meant both "unassigned only" and "nobody" (now `none`);
+  one untick wrote 21 ids into the URL (now stored whichever way round is shorter); the panel
+  covered Sat+Sun as an overlay (now a column beside the grid).
 - 2026-11-13 **calendar-view**: `src/lib/__tests__/calendar-grid.test.ts` 10/10 (AC1-AC4 + IST day
   boundaries, midnight clipping, Monday-first weeks, month padding, leap day, px helpers).
   AC5-AC7 checked in the browser on the local preview (:3011, local Postgres, seeded demo calls):

@@ -25,6 +25,14 @@ This file starts 12 Nov 2026 with the Calendars redesign.
 - 2026-11-13 KPI move (decision 3) landed as ONE dashboard tile fed by a new light
   `getDiscoveryCallSummary` (4 counts), NOT `getBookingsOverview` (5 queries, 300 bookings).
 
+- 2026-11-13 Calendar filters: `users` (show) and `off` (hide) are two ways of saying the same
+  thing; the panel writes the shorter one. `none` is the unassigned pile - `?users=` empty means
+  NOTHING is ticked. Both are honoured server-side (`getCalendarEvents`), and `notIn` needs the
+  NULL owner allowed back in explicitly.
+- 2026-11-13 **Open question for the owner:** /bookings shows every role the whole team's calls
+  (deliberate per `sections.ts`), so feature 3's AC4 (a USER must not see another rep's calls)
+  was dropped rather than implemented. Changing that is an access decision.
+
 ## Constraints
 - Synamate capture at `../syn-cal/` (outer folder, not git) contains real prospect PII. Never commit.
 - Local preview only (`.env.local`, :5435 Postgres, `scripts/local-demo-serve.ps1` on :3011).

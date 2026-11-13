@@ -3,6 +3,8 @@
 ## Unreleased
 - 2026-11-12 build-docs created; Calendars redesign plan drafted.
 - 2026-11-13 Plan approved. `fix(app-guide)` 43d1e77: en dashes broke the house-style test.
+- 2026-11-13 `feat(calendar-manage-view)`: Manage view panel - view by type (All/Calls/Blocked),
+  per-person and per-calendar ticks, search, Clear all; filters in the URL and applied server-side.
 - 2026-11-13 `feat(brand-icons)`: real brand marks (official simple-icons paths, inlined) for the
   services the app integrates with - Zoom links, WhatsApp sends - and for brand lead sources on
   the funnel Source column. No Google surface exists to mark (Sheets has no screen; Calendar/Meet

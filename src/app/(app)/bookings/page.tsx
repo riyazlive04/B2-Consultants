@@ -7,6 +7,7 @@ import { istToday, istWallToUtc, parseDateInput, toDateInputValue } from "@/lib/
 import { formatDate } from "@/lib/format";
 import { requireSection } from "@/lib/rbac";
 import { addDays, monthDays, weekDays } from "@/lib/calendar-grid";
+import { kindsFor, parseFilters, showsNothing } from "@/lib/calendar-filters";
 import { getBookableTeamMembers, getBookingsOverview } from "@/server/booking-metrics";
 import { getCalendarEvents } from "@/server/calendar-events";
 import {
@@ -38,7 +39,7 @@ function visibleDays(view: CalView, dayKey: string): string[] {
 export default async function BookingsPage({
   searchParams,
 }: {
-  searchParams: { week?: string; date?: string; view?: string };
+  searchParams: { week?: string; date?: string; view?: string; users?: string; off?: string; cal?: string; type?: string; panel?: string };
 }) {
   const session = await requireSection("bookings");
   /* `availability` is NOT asked for here: the block below already explains an empty calendar in
@@ -54,6 +55,7 @@ export default async function BookingsPage({
 
   // The grid's own window, in UTC instants: from the first visible IST day to the start of the
   // day after the last, so a late-evening IST call is not cut off by a UTC boundary.
+  const filters = parseFilters(searchParams);
   const days = visibleDays(view, dayKey);
   const from = istWallToUtc(days[0], "00:00");
   const to = istWallToUtc(addDays(days[days.length - 1], 1), "00:00");
@@ -67,7 +69,16 @@ export default async function BookingsPage({
     events, teamMembers, sssSlots, sssNeeds, sssConfig, slotPattern, slotReleases,
   ] = await Promise.all([
     getBookingsOverview(),
-    getCalendarEvents({ from, to }),
+    // Nothing ticked is a real state, and one worth not querying for at all.
+    showsNothing(filters)
+      ? Promise.resolve([])
+      : getCalendarEvents({
+          from, to,
+          ownerIds: filters.users ?? undefined,
+          excludeOwnerIds: filters.usersOff ?? undefined,
+          types: filters.cals ?? undefined,
+          kinds: kindsFor(filters.type),
+        }),
     getBookableTeamMembers(),
     listSssSlots(weekStartUtc, weekEndUtc),
     listSssNeedsScheduling(),
@@ -115,7 +126,9 @@ export default async function BookingsPage({
     );
     next.set("view", view);
     next.set("date", dayKey);
-    for (const [k, v] of Object.entries(patch)) next.set(k, v);
+    // An empty value means "drop this one" - that is how the panel closes, rather than
+    // leaving `?panel=` behind for the next link to carry.
+    for (const [k, v] of Object.entries(patch)) (v === "" ? next.delete(k) : next.set(k, v));
     return `/bookings?${next}`;
   };
 
@@ -184,6 +197,8 @@ export default async function BookingsPage({
         todayKey={todayKey}
         events={events}
         team={teamMembers}
+        filters={filters}
+        panelOpen={searchParams.panel === "1"}
         hrefFor={hrefFor}
       />
 

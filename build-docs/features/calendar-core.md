@@ -10,16 +10,18 @@ the same code, the way Synamate treats every calendar's appointments alike.
     ownerColor, startsAt: string(ISO), endsAt, title, contact: {name, phone, email, leadId}|null,
     status: "CONFIRMED"|"UNCONFIRMED"|"SHOWED"|"NO_SHOW"|"CANCELLED",
     source: {table:"slot"|"release"|"sss", id, bookingId?, journeyId?} }`
-  - `eventLook(ev)` → `{bg, border, edge, text, strike}`; blocked = #E1E1E1 with #475467 text
-    (Synamate's #667085 is 3.7:1).
+  - `eventLook(ev)` → `{bg, border, edge, text, strike, dashed}`.
   - `CalendarRef = { key: "disco:<ownerId>"|"sss:<ownerId>", type: "DISCO"|"SSS", name, color }`
     Names copy Synamate: "Personalized Discovery Call with <first name>", "Solution Strategy
     Session - <first name>". Title copies Synamate: "<calendar label> between <contact> and <owner>".
   - Status map (Discovery): BOOKED/RESCHEDULED + confirmed → CONFIRMED, unconfirmed → UNCONFIRMED,
     COMPLETED → SHOWED, NO_SHOW → NO_SHOW, CANCELLED → CANCELLED. SSS: `salesCallConfirmed`.
-  - Colours: calendar fill per type (Disco indigo, SSS green; Ameen's Disco yellow in Synamate is
-    one calendar colour, so it's per calendar, not per type), owner edge from a fixed 8-hue palette
-    by stable index of owner. `textOn(fill)` picks white/dark by WCAG contrast ≥ 4.5.
+  - Colours (owner decision 13 Nov: **app design tokens, not Synamate hex**): each person keeps one
+    hue from `--chart-1/3/4/5/6` + `--primary` by name-sorted team index; a Discovery calendar's
+    colour is its owner's hue; SSS = `--chart-2` (held out of the people palette); unassigned =
+    `--border-strong`. `eventLook` → 16% tint over `--surface`, 45% border, 5px owner edge,
+    `--ink` text; unconfirmed = dashed border; cancelled hollow + struck (`--ink-3`); no-show
+    hollow; blocked = `--surface-2` + `--ink-2`. Both themes re-theme for free.
 - `src/lib/calendar-layout.ts` (pure): `layoutDay(events, dayStartMin, dayEndMin)` →
   `{ top%, height%, col, cols }`. Greedy column packing per overlap cluster (same rule as
   FullCalendar: events in one cluster share width equally).
@@ -53,4 +55,5 @@ the same code, the way Synamate treats every calendar's appointments alike.
 - AC4 OPEN slots are **not** events (decision 2).
 - AC5 `layoutDay`: 3 events overlapping pairwise → 3 columns; A overlaps B, B ends before C → C
   reuses column 0; touching (end == start) is not an overlap.
-- AC6 `textOn` returns dark text for #F6BF26 and #33B679, white for #3F51B5.
+- AC6 Cards are token-only (no raw hex): tint over `--surface`, text always an ink token;
+  cancelled hollow + struck, no-show hollow, blocked grey, unconfirmed dashed.

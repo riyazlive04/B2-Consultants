@@ -3,9 +3,7 @@
  * and SSS (SssSlot + OutreachJourney), so both render, filter and list through the same code -
  * the way Synamate treats every calendar's appointments alike. Pure and client-safe.
  *
- * Look copied from Synamate (capture 12 Nov 2026): fill = calendar colour, 5px left edge = owner
- * colour, cancelled = hollow + strikethrough, blocked = grey "Busy". Text colour is the one
- * deliberate departure: Synamate puts white on yellow/green (1.7:1, 2.6:1), we pick dark there.
+ * Layout copied from Synamate (capture 12 Nov 2026); colours are the app's own tokens (eventLook).
  */
 
 export type CalType = "DISCO" | "SSS";
@@ -33,20 +31,16 @@ export type CalEvent = {
   source: { table: "slot" | "release" | "sss"; id: string; bookingId?: string; journeyId?: string };
 };
 
-// Synamate's own calendar colours first (Asma's Disco indigo, Ameen's Disco yellow), then the
-// rest of the Google-calendar set it picks from.
-const DISCO_FILLS = ["#3F51B5", "#F6BF26", "#039BE5", "#8E24AA", "#E67C73", "#0B8043", "#F4511E", "#7986CB"];
-const SSS_FILL = "#33B679";
-// Owner edge colours: Synamate's Asma purple + Ameen gold, then six more darker hues.
-const OWNER_EDGES = ["#50449A", "#BFA100", "#0E7490", "#B42318", "#3B7C0F", "#9F1AB1", "#C4320A", "#344054"];
-const UNASSIGNED = "#98A2B3";
-
-export const DARK_TEXT = "#101828";
-export const BUSY = { bg: "#E1E1E1", text: "#475467" }; // Synamate's #667085 is 3.7:1 on #E1E1E1
+// Colours are the app's design tokens (owner decision 13 Nov), so both themes and the AA tuning of
+// design system v1.1 carry over. Each person keeps one hue; SSS calendars share --chart-2, which is
+// left out of the people palette so an SSS card never reads as someone's Discovery call.
+const PEOPLE = ["var(--chart-1)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "var(--chart-6)", "var(--primary)"];
+const SSS_COLOR = "var(--chart-2)";
+const UNASSIGNED = "var(--border-strong)";
 
 /** `index` = the owner's position in the name-sorted team list; -1 = unassigned/unknown. */
 export function ownerColor(index: number): string {
-  return index < 0 ? UNASSIGNED : OWNER_EDGES[index % OWNER_EDGES.length];
+  return index < 0 ? UNASSIGNED : PEOPLE[index % PEOPLE.length];
 }
 
 const firstName = (name: string | null) => name?.trim().split(/\s+/)[0] || "";
@@ -55,14 +49,9 @@ export function calendarRef(type: CalType, owner: { id: string; name: string | n
   const who = firstName(owner?.name ?? null);
   const key = `${type === "DISCO" ? "disco" : "sss"}:${owner?.id ?? ""}`;
   if (type === "SSS") {
-    return { key, type, name: who ? `Solution Strategy Session - ${who}` : "Solution Strategy Session", color: SSS_FILL };
+    return { key, type, name: who ? `Solution Strategy Session - ${who}` : "Solution Strategy Session", color: SSS_COLOR };
   }
-  return {
-    key,
-    type,
-    name: who ? `Personalized Discovery Call with ${who}` : "Discovery Call (unassigned)",
-    color: index < 0 ? UNASSIGNED : DISCO_FILLS[index % DISCO_FILLS.length],
-  };
+  return { key, type, name: who ? `Personalized Discovery Call with ${who}` : "Discovery Call (unassigned)", color: ownerColor(index) };
 }
 
 /** Synamate: "<calendar label> between <contact> and <owner first name>". */
@@ -86,32 +75,23 @@ export function releaseStatus(reason: string): CalStatus | null {
   return reason === "NO_SHOW" ? "NO_SHOW" : "CANCELLED";
 }
 
-function luminance(hex: string): number {
-  const n = parseInt(hex.slice(1), 16);
-  const lin = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-  return 0.2126 * lin(((n >> 16) & 255) / 255) + 0.7152 * lin(((n >> 8) & 255) / 255) + 0.0722 * lin((n & 255) / 255);
-}
+export type EventLook = { bg: string; border: string; edge: string; text: string; strike: boolean; dashed: boolean };
 
-export function contrast(a: string, b: string): number {
-  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-  return (hi + 0.05) / (lo + 0.05);
-}
+const tint = (c: string, pct: number) => `color-mix(in srgb, ${c} ${pct}%, var(--surface))`;
 
-/** White when it meets WCAG AA (4.5:1) on `fill`, otherwise dark. */
-export function textOn(fill: string): string {
-  return contrast("#FFFFFF", fill) >= 4.5 ? "#FFFFFF" : DARK_TEXT;
-}
-
-export type EventLook = { bg: string; border: string; edge: string; text: string; strike: boolean };
-
-/** Colours for one event card (Synamate: 2px border, 5px left edge in the owner colour). */
+/**
+ * Colours for one event card: Synamate's structure (fill = calendar, 5px left edge = owner,
+ * cancelled hollow + struck, blocked grey) in the house slot-tint idiom - a soft tint mixed over
+ * `--surface` with ink text, never a saturated fill under white, so it holds AA in both themes.
+ */
 export function eventLook(ev: Pick<CalEvent, "kind" | "status" | "calendar" | "ownerColor">): EventLook {
-  if (ev.kind === "BLOCKED") return { bg: BUSY.bg, border: BUSY.bg, edge: BUSY.bg, text: BUSY.text, strike: false };
-  const fill = ev.calendar.color;
-  if (ev.status === "CANCELLED" || ev.status === "NO_SHOW") {
-    // Hollow card: calendar colour as text only where it is readable on white.
-    const text = contrast(fill, "#FFFFFF") >= 4.5 ? fill : DARK_TEXT;
-    return { bg: "#FFFFFF", border: fill, edge: fill, text, strike: ev.status === "CANCELLED" };
+  if (ev.kind === "BLOCKED") {
+    return { bg: "var(--surface-2)", border: "var(--line)", edge: "var(--border-strong)", text: "var(--ink-2)", strike: false, dashed: false };
   }
-  return { bg: fill, border: fill, edge: ev.ownerColor, text: textOn(fill), strike: false };
+  const c = ev.calendar.color;
+  if (ev.status === "CANCELLED" || ev.status === "NO_SHOW") {
+    return { bg: "var(--surface)", border: tint(c, 55), edge: tint(c, 55), text: "var(--ink-3)", strike: ev.status === "CANCELLED", dashed: false };
+  }
+  // Unconfirmed = a slot held for someone who has not said YES; the dashed border is the one cue.
+  return { bg: tint(c, 16), border: tint(c, 45), edge: ev.ownerColor, text: "var(--ink)", strike: false, dashed: ev.status === "UNCONFIRMED" };
 }

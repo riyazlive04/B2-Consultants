@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildCalendarEvents, type ReleaseRow, type SlotRow, type SssRow } from "../calendar-events";
 import { layoutDay } from "@/lib/calendar-layout";
-import { contrast, eventLook, textOn, DARK_TEXT } from "@/lib/calendar-event";
+import { eventLook } from "@/lib/calendar-event";
 
 /** Feature 1 (build-docs/features/calendar-core.md): one event shape for Discovery + SSS. */
 
@@ -90,7 +90,7 @@ test("calendar-core edge: unassigned slot gets the unassigned calendar and grey 
   const [ev] = build({ slots: [slot({ assignedTo: null })] });
   assert.equal(ev.calendar.key, "disco:");
   assert.equal(ev.calendar.name, "Discovery Call (unassigned)");
-  assert.equal(ev.ownerColor, "#98A2B3");
+  assert.equal(ev.ownerColor, "var(--border-strong)");
   assert.equal(ev.title, "Personalized Discovery Call with Ravi K");
 });
 
@@ -128,21 +128,29 @@ test("calendar-core AC5: position is a percent of the day; events are clipped to
   assert.equal(p.out, undefined);
 });
 
-test("calendar-core AC6: textOn picks dark on Synamate yellow/green, white on indigo", () => {
-  assert.equal(textOn("#F6BF26"), DARK_TEXT);
-  assert.equal(textOn("#33B679"), DARK_TEXT);
-  assert.equal(textOn("#3F51B5"), "#FFFFFF");
+const look = (kind: "APPOINTMENT" | "BLOCKED", status: "CONFIRMED" | "UNCONFIRMED" | "CANCELLED" | "NO_SHOW") =>
+  eventLook({ kind, status, calendar: { key: "k", type: "DISCO", name: "n", color: "var(--chart-1)" }, ownerColor: "var(--chart-3)" });
+
+test("calendar-core AC6: a live card is a soft tint over --surface with the owner edge", () => {
+  const ok = look("APPOINTMENT", "CONFIRMED");
+  assert.equal(ok.bg, "color-mix(in srgb, var(--chart-1) 16%, var(--surface))");
+  assert.equal(ok.edge, "var(--chart-3)");
+  assert.equal(ok.dashed, false);
+  assert.equal(look("APPOINTMENT", "UNCONFIRMED").dashed, true);
 });
 
-test("calendar-core AC6: every event look meets WCAG AA", () => {
-  for (const color of ["#3F51B5", "#F6BF26", "#039BE5", "#8E24AA", "#E67C73", "#0B8043", "#F4511E", "#7986CB", "#33B679", "#98A2B3"]) {
-    for (const status of ["CONFIRMED", "CANCELLED", "NO_SHOW"] as const) {
-      for (const kind of ["APPOINTMENT", "BLOCKED"] as const) {
-        const look = eventLook({ kind, status, calendar: { key: "k", type: "DISCO", name: "n", color }, ownerColor: "#50449A" });
-        assert.ok(contrast(look.text, look.bg) >= 4.5, `${kind} ${status} ${color}: ${look.text} on ${look.bg}`);
-      }
+test("calendar-core AC6: cancelled is hollow + struck, no-show hollow, blocked grey", () => {
+  assert.deepEqual([look("APPOINTMENT", "CANCELLED").bg, look("APPOINTMENT", "CANCELLED").strike], ["var(--surface)", true]);
+  assert.deepEqual([look("APPOINTMENT", "NO_SHOW").bg, look("APPOINTMENT", "NO_SHOW").strike], ["var(--surface)", false]);
+  assert.equal(look("BLOCKED", "CONFIRMED").bg, "var(--surface-2)");
+});
+
+test("calendar-core AC6: colours are tokens only - no raw hex, text is always an AA-tuned ink token", () => {
+  for (const kind of ["APPOINTMENT", "BLOCKED"] as const) {
+    for (const status of ["CONFIRMED", "UNCONFIRMED", "CANCELLED", "NO_SHOW"] as const) {
+      const l = look(kind, status);
+      assert.match(l.text, /^var\(--ink(-2|-3)?\)$/);
+      for (const v of [l.bg, l.border, l.edge]) assert.ok(!/#[0-9a-f]{3,8}/i.test(v), `${kind} ${status}: raw hex in ${v}`);
     }
   }
-  const cancelled = eventLook({ kind: "APPOINTMENT", status: "CANCELLED", calendar: { key: "k", type: "DISCO", name: "n", color: "#3F51B5" }, ownerColor: "#50449A" });
-  assert.deepEqual(cancelled, { bg: "#FFFFFF", border: "#3F51B5", edge: "#3F51B5", text: "#3F51B5", strike: true });
 });

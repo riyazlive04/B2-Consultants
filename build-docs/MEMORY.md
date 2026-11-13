@@ -9,7 +9,9 @@ This file starts 12 Nov 2026 with the Calendars redesign.
 - 2026-11-12 No calendar library (FullCalendar's per-user Day view is a paid plugin); no schema
   change; existing slot actions remain the only writers.
 - 2026-11-13 Plan approved by owner ("start building"); the 5 decisions took the recommended option:
-  1. Synamate hues + scheme, but dark text where white fails AA (white on #F6BF26 is 1.7:1).
+  1. ~~Synamate hues~~ **superseded 13 Nov:** owner asked for "the application current ui design"
+     for colours. Synamate's structure stays; every colour is a design token (`eventLook`), so the
+     dark theme and the v1.1 AA tuning carry over and no contrast maths is needed at runtime.
   2. OPEN slots hidden from the grid; the Book modal's Slot select lists them.
   3. KPI cards + Next-call panel move to the Dashboard.
   4. SSS status = Confirmed/Unconfirmed (`salesCallConfirmed`) + Cancel; no `sssStatus` yet.

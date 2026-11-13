@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
 import {
-  ClipboardList, Gauge, GraduationCap, IndianRupee, Languages, LayoutGrid, Medal, ReceiptText,
+  CalendarClock, ClipboardList, Gauge, GraduationCap, IndianRupee, Languages, LayoutGrid, Medal, ReceiptText,
   Timer, Trophy, Wallet, Waypoints,
 } from "lucide-react";
 import { MetricCard } from "@/components/ui/MetricCard";
+import { getDiscoveryCallSummary } from "@/server/booking-metrics";
 import { Money } from "@/components/ui/CurrencyToggle";
 import { PageHeader, SectionHeading, ViewAll } from "@/components/ui/kit";
 import { OnboardingWalkthrough } from "@/components/onboarding/OnboardingWalkthrough";
@@ -158,7 +159,7 @@ export default async function Home({
   const line = await getBusinessLineView();
   const rangeLabel = range === "last-month" ? "Last Month" : range === "qtd" ? "QTD" : "This Month";
 
-  const [fx, runway, notifications, game, teamGame, pipeline, pendingRows, gn, funnelHealth, headCoach] = await Promise.all([
+  const [fx, runway, notifications, game, teamGame, pipeline, pendingRows, gn, funnelHealth, headCoach, discovery] = await Promise.all([
     getTodayInrPerEur(),
     isAdmin ? getRunwaySnapshot(range) : Promise.resolve(null),
     computeNotifications(session.role, session.user.id),
@@ -176,6 +177,9 @@ export default async function Home({
     // Head Coach dashboard (spec §5). Carries no money - §5 forbids it and §3 keeps Finance
     // away from the head.
     isHead ? getHeadCoachSnapshot() : Promise.resolve(null),
+    // The discovery-call figures the Calendars page used to carry above its grid. Four counts,
+    // not the /bookings overview - see `getDiscoveryCallSummary`.
+    isAdmin || isHead ? getDiscoveryCallSummary() : Promise.resolve(null),
   ]);
 
   // Day-wise work time (WorkDay). Accrual itself happens app-wide in the layout's
@@ -296,6 +300,43 @@ export default async function Home({
           { label: "Rank this month", value: `#${game.me.rankMonth}` },
           { label: "Rank all-time", value: `#${game.me.rankAll}` },
           { label: "Badges unlocked", value: game.me.unlockedCount },
+        ],
+      }}
+    />
+  );
+  /**
+   * Discovery calls - the tile that replaced the KPI strip on /bookings.
+   *
+   * One card, not the four that page carried: on a calendar the grid answers "what is booked",
+   * so what is worth a tile here is the pair of numbers you cannot see by looking at it - how
+   * much capacity is still open, and what is coming next.
+   */
+  const discoveryCard = discovery && (
+    <MetricCard
+      label="Discovery calls"
+      value={`${discovery.bookedThisMonth} booked`}
+      secondary={
+        discovery.next
+          ? `Next: ${discovery.next.name} · ${discovery.next.when}`
+          : discovery.openSlots > 0
+            ? `${discovery.openSlots} open slot${discovery.openSlots === 1 ? "" : "s"} · nothing booked yet`
+            : "No open slots - set availability"
+      }
+      signal={discovery.openSlots === 0 ? "watch" : undefined}
+      tooltip="Discovery calls booked this month, and the next one due. Open slots are the upcoming times a prospect can still take on /book."
+      icon={<CalendarClock size={18} />}
+      href="/bookings"
+      detail={{
+        rows: [
+          { label: "Booked this month", value: discovery.bookedThisMonth },
+          { label: "No-shows this month", value: discovery.noShows },
+          { label: "Open slots (upcoming)", value: discovery.openSlots },
+          {
+            label: "Next call",
+            value: discovery.next
+              ? `${discovery.next.name}${discovery.next.ownerName ? ` with ${discovery.next.ownerName}` : ""} · ${discovery.next.when}`
+              : "None booked",
+          },
         ],
       }}
     />
@@ -489,6 +530,7 @@ export default async function Home({
                   }}
                 />
               )}
+              {discoveryCard}
               {germanNoteCard}
             </div>
           </section>
@@ -530,6 +572,7 @@ export default async function Home({
                 thing twice, worse. */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {dailyLogCard}
+              {discoveryCard}
               {germanNoteCard}
               {arenaMeCard}
             </div>

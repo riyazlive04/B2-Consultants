@@ -489,7 +489,7 @@ export const SECTION_CATALOGUE = [
   { key: "opportunities", label: "Deals", href: "/opportunities", phase: 1, icon: "kanban", group: "Sales", roles: ["ADMIN", "HEAD", "USER"] },
   // §3: Head R · L1/L2/L3 E. Tutor and Student are `O` - their own calls surface on their own
   // screens, and this is the whole-team calendar, so they are not granted it.
-  { key: "bookings", label: "Bookings", href: "/bookings", phase: 1, icon: "calendar-check", group: "Sales", roles: ["ADMIN", "HEAD", "USER"] },
+  { key: "bookings", label: "Calendars", href: "/bookings", phase: 1, icon: "calendar-check", group: "Sales", roles: ["ADMIN", "HEAD", "USER"] },
   // The Outreach Specialist SOP queue (Script_for_Outreach_Specialist.docx, Steps 1-23) + the
   // Key Metrics sheet it feeds. USER is in the default list because the outreach specialist IS a
   // USER - this is their day's work, not an admin report.

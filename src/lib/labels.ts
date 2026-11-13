@@ -100,6 +100,21 @@ export const SLOT_STATUS_LABELS: Record<string, string> = {
   BLOCKED: "Blocked",
 };
 
+/**
+ * What one appointment's state is called on the Calendars grid (lib/calendar-event `CalStatus`).
+ *
+ * Separate from `BOOKING_STATUS_LABELS` because the calendar folds two facts into one word:
+ * a BOOKED booking reads "Confirmed" or "Unconfirmed" depending on whether the prospect replied,
+ * and SSS has only that same yes/no. Both call types therefore share these five.
+ */
+export const CALENDAR_STATUS_LABELS: Record<string, string> = {
+  CONFIRMED: "Confirmed",
+  UNCONFIRMED: "Unconfirmed",
+  SHOWED: "Showed",
+  NO_SHOW: "No show",
+  CANCELLED: "Cancelled",
+};
+
 /** Why a booked slot went back on the calendar (SlotReleaseReason). */
 export const SLOT_RELEASE_REASON_LABELS: Record<string, string> = {
   NO_CONFIRMATION: "No reply",

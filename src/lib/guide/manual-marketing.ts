@@ -438,7 +438,7 @@ export const MANUAL_MARKETING: GuideManual[] = [
           },
           {
             setting: "Booking window (minimum notice and furthest day ahead)",
-            where: ["Sidebar", "Sales", "Bookings", "Manage availability"],
+            where: ["Sidebar", "Sales", "Calendars", "Manage availability"],
             href: "/bookings/availability",
             who: ["ADMIN", "HEAD", "USER"],
             default: "2 hours notice, 30 days ahead",

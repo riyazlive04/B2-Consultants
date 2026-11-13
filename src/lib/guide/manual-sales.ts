@@ -2,7 +2,7 @@ import { consoleHref, type GuideManual } from "./manual-types";
 
 /**
  * App Guide manual - My Work (My Desk) and the Sales group:
- * Pipeline, Contacts, Deals, Bookings, Outreach.
+ * Pipeline, Contacts, Deals, Calendars, Outreach.
  */
 export const MANUAL_SALES: GuideManual[] = [
   // ───────────────────────────── My Desk ─────────────────────────────
@@ -126,7 +126,7 @@ export const MANUAL_SALES: GuideManual[] = [
         use: [
           "Check the three cards: Booked, Confirmed and Unconfirmed.",
           "Ring everyone on the “Unconfirmed - chase list” today and ask them to confirm.",
-          "If they confirm, press Mark confirmed on their booking in Bookings. If they cannot make it, cancel it there early so the slot frees up for someone else.",
+          "If they confirm, press Mark confirmed on their booking in Calendars. If they cannot make it, cancel it there early so the slot frees up for someone else.",
         ],
         logic: [
           "Only calls in slots assigned to you that start tomorrow (IST) are counted. Cancelled bookings and archived leads are left out.",
@@ -137,7 +137,7 @@ export const MANUAL_SALES: GuideManual[] = [
         controls: [
           {
             setting: "Minimum notice before a slot can be booked",
-            where: ["Sidebar", "Sales", "Bookings", "Manage availability", "Booking rules"],
+            where: ["Sidebar", "Sales", "Calendars", "Manage availability", "Booking rules"],
             href: "/bookings/availability",
             who: ["ADMIN", "HEAD", "USER"],
             default: "2 hours",
@@ -202,12 +202,12 @@ export const MANUAL_SALES: GuideManual[] = [
           "Recording an outcome does four things at once: saves the discovery outcome, moves the lead's stage, settles the booking as Completed or No show, and moves the Deals card.",
           "“Ready - route to Level 3” moves the lead to SSS Call Booked and marks them Highly Qualified for the outreach sequence. The workshop route moves them to Sent to Workshop. “Not qualified” closes them to Cancelled/Unqualified.",
           "Follow-up needed moves the lead to “Pre-Qualified & Confirmed - call done”. No show moves it to No Shows/Rescheduled.",
-          "An SSS time must be in the future. With a time, the reminders before the session are planned straight away; without one, the prospect waits on the “Needs an SSS time” list in Bookings.",
+          "An SSS time must be in the future. With a time, the reminders before the session are planned straight away; without one, the prospect waits on the “Needs an SSS time” list in Calendars.",
           "The BANT chip uses the booking form's score when there is one, otherwise the score taken when they opted in. No chip means nobody asked them, not a score of zero.",
           "A call shows Recorded once a discovery outcome for that lead has been saved today.",
         ],
         watchOut: [
-          "This list is empty if no slots are assigned to you. Bookings only land here when they are in your slots, which come from your availability calendar.",
+          "This list is empty if no slots are assigned to you. Calls only land here when they are in your slots, which come from your availability calendar.",
           "Only mark a no-show after you have tried ringing them. The job description does not count a missed call as a no-show until you have tried.",
         ],
         shot: {
@@ -358,7 +358,7 @@ export const MANUAL_SALES: GuideManual[] = [
     ],
     related: [
       { section: "pipeline", why: "Logging a call needs Pipeline access, and stages you set here move the Pipeline record. Leads reach your desk from Pipeline's Hand out leads." },
-      { section: "bookings", why: "Tomorrow's and today's calls are the bookings in your slots; confirming or cancelling them is done in Bookings." },
+      { section: "bookings", why: "Tomorrow's and today's calls are the bookings in your slots; confirming or cancelling them is done in Calendars." },
       { section: "outreach", why: "Call steps the outreach engine makes due for your leads appear in your queue." },
       { section: "contacts", why: "Every name on the desk opens that person's contact record." },
       { section: "people", why: "Your team profile decides which desk you get and holds your daily call target." },
@@ -1192,7 +1192,7 @@ export const MANUAL_SALES: GuideManual[] = [
     ],
   },
 
-  // ───────────────────────────── Bookings ─────────────────────────────
+  // ───────────────────────────── Calendars ─────────────────────────────
   {
     section: "bookings",
     overview:
@@ -1200,23 +1200,27 @@ export const MANUAL_SALES: GuideManual[] = [
     engines: ["availability", "confirmLoop", "whatsapp", "cron"],
     features: [
       {
-        id: "this-week",
-        name: "This week",
-        where: ["Sidebar", "Sales", "Bookings", "This week"],
+        id: "calendar-view",
+        name: "Calendar view",
+        where: ["Sidebar", "Sales", "Calendars"],
         href: "/bookings",
-        what: "The week calendar of slots, with the next call, this week's counts and the open-slot figures beside it.",
+        what: "One calendar carrying both kinds of call: discovery calls and strategy sessions, by day, week or month.",
         use: [
-          "Move between weeks with the arrows, or press Today.",
-          "Hover a slot for who booked it, their score, whether it is confirmed and its status.",
-          "Read the side panel: Booked, Held unconfirmed, Open, Blocked, Freed this week and no-shows this month.",
+          "Switch between Day, Week and Month at the right of the toolbar.",
+          "Move with the arrows, press Today, or press the date box to jump to any date.",
+          "Hover or tab to a call for who it is with, which calendar it belongs to, its time in IST and its state.",
+          "In Month view, press “+N more” on a busy day to list everything on it.",
           "Press Manage availability to add or remove slots.",
         ],
         logic: [
+          "Only booked calls and blocked time are drawn. Empty slots are left off the grid on purpose - the calendar shows what is happening, and open times are offered when you book.",
+          "Each person has their own colour, and a call carries it on its left edge. Discovery calls are tinted in the owner's colour, strategy sessions in their own.",
+          "A call waiting for the prospect to reply YES has a dashed edge. A cancelled one is hollow and struck through, a no-show hollow, and blocked time grey.",
+          "Day view gives each person their own column, so two calls at the same time sit side by side rather than on top of each other.",
+          "Calls that clash in Week view are narrowed and placed beside each other, so none is hidden.",
+          "Times are Indian Standard Time throughout, as the heading over the hour column says. The red line is the current time.",
           "Slots are made every hour from each person's weekly calendar in the Console. The top-up only adds missing slots; it never edits or deletes one.",
-          "A slot is coloured by state: booked, held and waiting for a YES, open, blocked, or a cancelled or no-show call.",
-          "Held is worked out from the booking and the confirm-or-cancel rules, not stored. Once asked, the slot shows when it will be freed if nobody replies.",
-          "A freed slot says who held it and why, and who moved in if the next person was promoted.",
-          "Open slots (upcoming) counts open slots from now on, split by person. Booked this month splits the month's bookings by status.",
+          "The view and the date are kept in the address, so a refresh, the Back button and a shared link all land on the same screen.",
         ],
         controls: [
           {
@@ -1229,54 +1233,22 @@ export const MANUAL_SALES: GuideManual[] = [
           },
         ],
         watchOut: [
-          "Four zeroes and an empty week almost always mean no calendar is live. The yellow banner says which of three causes applies and links to the fix.",
+          "An empty grid with a yellow banner means no calendar is live. The banner says which of three causes applies and links to the fix.",
           "Slots only appear while the scheduler is running, because the hourly top-up is what makes them.",
+          "An empty time is not shown here, so an empty-looking week is not proof that nobody can book. Check Manage availability.",
+          "The month, booking and score figures that used to sit above this calendar are now one Discovery calls tile on your home screen.",
         ],
         shot: {
           file: "bookings-this-week.png",
           route: "/bookings",
-          caption: "The week of discovery slots, with the next call and this week's counts.",
-          highlight: { text: "This week", label: "This week's counts" },
-        },
-      },
-      {
-        id: "bant-verdicts",
-        name: "BANT verdicts",
-        where: ["Sidebar", "Sales", "Bookings", "BANT verdicts"],
-        href: "/bookings",
-        what: "The average qualification score of this month's bookings, and how many were Confirm, Doubtful or Cancel.",
-        use: [
-          "Read Avg BANT score: higher means better-qualified bookings.",
-          "Open BANT verdicts to see how many bookings fell into each verdict.",
-        ],
-        logic: [
-          "Scores are out of 4. Above 2.4 is Confirm call, 1.6 to 2.4 is Go - conversion doubtful, below 1.6 is Cancel recommended.",
-          "The verdict is worked out from the answers on the booking form when the prospect books.",
-          "The verdict thresholds are built into the app. They are not a Console setting.",
-        ],
-        controls: [
-          {
-            setting: "Qualification questions and their scoring",
-            where: ["Sidebar", "Admin", "Founder Console", "Sales ops", "Qualification"],
-            href: consoleHref("sales", "qualification"),
-            who: ["ADMIN"],
-            effect: "Applies to people who answer after the change. Scores already given are kept.",
-          },
-        ],
-        watchOut: [
-          "The popup on the Avg BANT score card lists the bands as above 3, 2 to 3 and below 2. The real bands are the ones above: 2.4 and 1.6.",
-        ],
-        shot: {
-          file: "bookings-bant-verdicts.png",
-          route: "/bookings",
-          caption: "This month's average BANT score and the verdict split.",
-          highlight: { text: "BANT verdicts", label: "Confirm, doubtful, cancel" },
+          caption: "The week of calls, one colour per person.",
+          highlight: { text: "Today", label: "Jump back to this week" },
         },
       },
       {
         id: "booking-requests",
         name: "Booking requests",
-        where: ["Sidebar", "Sales", "Bookings", "Booking requests"],
+        where: ["Sidebar", "Sales", "Calendars", "Booking requests"],
         href: "/bookings",
         what: "Every booking with the prospect's answers, score, confirmation state and the actions to confirm, reschedule or settle it.",
         use: [
@@ -1317,7 +1289,7 @@ export const MANUAL_SALES: GuideManual[] = [
       {
         id: "cancelled-slots",
         name: "Cancelled slots",
-        where: ["Sidebar", "Sales", "Bookings", "Cancelled slots"],
+        where: ["Sidebar", "Sales", "Calendars", "Cancelled slots"],
         href: "/bookings?tab=1",
         what: "Every slot that was booked and then freed: who held it, why it came back, and what happened next.",
         use: [
@@ -1339,7 +1311,7 @@ export const MANUAL_SALES: GuideManual[] = [
       {
         id: "sss-calendar",
         name: "SSS Calendar",
-        where: ["Sidebar", "Sales", "Bookings", "SSS Calendar"],
+        where: ["Sidebar", "Sales", "Calendars", "SSS Calendar"],
         href: "/bookings?tab=2",
         what: "The closer's Solution Strategy Session diary, and the list of qualified prospects still waiting for a time.",
         use: [
@@ -1357,7 +1329,7 @@ export const MANUAL_SALES: GuideManual[] = [
         controls: [
           {
             setting: "SSS owner, session length and how far ahead to reschedule",
-            where: ["Sidebar", "Sales", "Bookings", "SSS Calendar"],
+            where: ["Sidebar", "Sales", "Calendars", "SSS Calendar"],
             href: "/bookings?tab=2",
             who: ["ADMIN"],
             default: "No owner, 45 minutes, 7 days",
@@ -1382,7 +1354,7 @@ export const MANUAL_SALES: GuideManual[] = [
       {
         id: "manage-availability",
         name: "Manage availability",
-        where: ["Sidebar", "Sales", "Bookings", "Manage availability"],
+        where: ["Sidebar", "Sales", "Calendars", "Manage availability"],
         href: "/bookings/availability",
         what: "The setup screen: add one-off slots, remove or block upcoming ones, and set the booking rules.",
         use: [
@@ -1399,7 +1371,7 @@ export const MANUAL_SALES: GuideManual[] = [
         controls: [
           {
             setting: "Buffer, minimum notice and maximum advance booking",
-            where: ["Sidebar", "Sales", "Bookings", "Manage availability", "Booking rules"],
+            where: ["Sidebar", "Sales", "Calendars", "Manage availability", "Booking rules"],
             href: "/bookings/availability",
             who: ["ADMIN", "HEAD", "USER"],
             default: "15 minutes, 2 hours, 30 days",
@@ -1407,7 +1379,7 @@ export const MANUAL_SALES: GuideManual[] = [
           },
           {
             setting: "Turn away applicants who score below 1.6",
-            where: ["Sidebar", "Sales", "Bookings", "Manage availability", "Booking rules"],
+            where: ["Sidebar", "Sales", "Calendars", "Manage availability", "Booking rules"],
             href: "/bookings/availability",
             who: ["ADMIN", "HEAD", "USER"],
             default: "On",
@@ -1415,7 +1387,7 @@ export const MANUAL_SALES: GuideManual[] = [
           },
         ],
         watchOut: [
-          "Anyone with Bookings can save these rules, not only the founder. Agree changes before making them.",
+          "Anyone with Calendars can save these rules, not only the founder. Agree changes before making them.",
         ],
         shot: {
           file: "bookings-manage-availability.png",
@@ -1427,7 +1399,7 @@ export const MANUAL_SALES: GuideManual[] = [
       {
         id: "confirm-or-cancel",
         name: "Auto-cancel unconfirmed calls",
-        where: ["Sidebar", "Sales", "Bookings", "Manage availability", "Auto-cancel unconfirmed calls"],
+        where: ["Sidebar", "Sales", "Calendars", "Manage availability", "Auto-cancel unconfirmed calls"],
         href: "/bookings/availability",
         what: "The confirm-or-cancel loop: ask each prospect to reply YES before their call, and free the slot if they never answer.",
         use: [
@@ -1453,8 +1425,8 @@ export const MANUAL_SALES: GuideManual[] = [
             effect: "Applies to every booked, unconfirmed call as it enters the window, including calls booked before you switched it on. Slots already freed stay freed when you switch it off.",
           },
           {
-            setting: "The same rule from the Bookings screen",
-            where: ["Sidebar", "Sales", "Bookings", "Manage availability", "Auto-cancel unconfirmed calls"],
+            setting: "The same rule from the Calendars screen",
+            where: ["Sidebar", "Sales", "Calendars", "Manage availability", "Auto-cancel unconfirmed calls"],
             href: "/bookings/availability",
             who: ["ADMIN", "HEAD", "USER"],
             default: "Off",
@@ -1474,11 +1446,11 @@ export const MANUAL_SALES: GuideManual[] = [
       {
         id: "public-booking-page",
         name: "Public booking page",
-        where: ["Sidebar", "Sales", "Bookings", "the booking link at the top"],
+        where: ["Sidebar", "Sales", "Calendars", "the booking link at the top"],
         href: "/book",
         what: "What a prospect sees: open slots, the qualification questions and the consent box.",
         use: [
-          "Press the link at the top of Bookings to see exactly what a prospect sees.",
+          "Press the link at the top of Calendars to see exactly what a prospect sees.",
           "Send prospects this link to book a discovery call.",
         ],
         logic: [
@@ -1492,7 +1464,7 @@ export const MANUAL_SALES: GuideManual[] = [
         controls: [
           {
             setting: "Minimum notice and how far ahead a prospect may book",
-            where: ["Sidebar", "Sales", "Bookings", "Booking rules"],
+            where: ["Sidebar", "Sales", "Calendars", "Booking rules"],
             href: "/bookings#booking-rules",
             who: ["ADMIN", "HEAD"],
             default: "2 hours notice, 30 days ahead",
@@ -1501,7 +1473,7 @@ export const MANUAL_SALES: GuideManual[] = [
           },
           {
             setting: "The gap kept between generated slots",
-            where: ["Sidebar", "Sales", "Bookings", "Booking rules"],
+            where: ["Sidebar", "Sales", "Calendars", "Booking rules"],
             href: "/bookings#booking-rules",
             who: ["ADMIN", "HEAD"],
             default: "0 minutes",

@@ -232,6 +232,41 @@ export async function getBookingsOverview() {
   };
 }
 
+/**
+ * The discovery-call figures for the DASHBOARD tile, in four cheap counts plus the next call.
+ *
+ * Deliberately not `getBookingsOverview`, which is five queries and pulls 300 bookings with their
+ * leads and releases - the price of the /bookings tables, not of one card. The Calendars page no
+ * longer carries a KPI strip (the calendar itself is the answer there), so these numbers live on
+ * the dashboard where the other standing figures are.
+ */
+export async function getDiscoveryCallSummary() {
+  const now = new Date();
+  const month = istMonthInstantRange(istToday());
+  const [openSlots, booked, noShows, next] = await Promise.all([
+    prisma.appointmentSlot.count({ where: { status: "OPEN", startsAt: { gt: now } } }),
+    prisma.bookingRequest.count({ where: { createdAt: { gte: month.start, lt: month.end } } }),
+    prisma.bookingRequest.count({ where: { createdAt: { gte: month.start, lt: month.end }, status: "NO_SHOW" } }),
+    prisma.appointmentSlot.findFirst({
+      where: { status: "BOOKED", startsAt: { gt: now }, booking: { isNot: null } },
+      orderBy: { startsAt: "asc" },
+      select: { startsAt: true, booking: { select: { name: true } }, assignedTo: { select: { name: true } } },
+    }),
+  ]);
+  return {
+    openSlots,
+    bookedThisMonth: booked,
+    noShows,
+    next: next?.booking
+      ? {
+          name: next.booking.name,
+          ownerName: next.assignedTo?.name ?? null,
+          when: `${istDay.format(next.startsAt)} · ${istTime.format(next.startsAt)} IST`,
+        }
+      : null,
+  };
+}
+
 /** All slots inside [weekStartUtc, weekEndUtc) for the week-calendar view, keyed by IST day. */
 export async function getWeekSlots(weekStartUtc: Date, weekEndUtc: Date) {
   const slots = await prisma.appointmentSlot.findMany({

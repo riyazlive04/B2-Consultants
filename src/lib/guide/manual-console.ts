@@ -591,7 +591,7 @@ export const MANUAL_CONSOLE: GuideManual[] = [
             who: ["ADMIN"],
             default: "Confirm above 2.4, Doubt from 1.6, Dimension met at 2.4, on the 0 to 4 average",
             effect:
-              "Forward only, and everywhere at once: the booking verdict, the Avg BANT card's colour and bands on Bookings, the outreach queue's Qualified verdict, and - with auto-disqualify on - who is turned away at booking.",
+              "Forward only, and everywhere at once: the booking verdict, the Avg BANT card's colour and bands on your home screen, the outreach queue's Qualified verdict, and - with auto-disqualify on - who is turned away at booking.",
             reset: "Type the three defaults back in: 2.4, 1.6 and 2.4.",
           },
         ],
@@ -677,9 +677,9 @@ export const MANUAL_CONSOLE: GuideManual[] = [
           "An hourly job replays every live calendar and creates any missing open slot inside its horizon. It never edits or deletes a booked or blocked slot.",
           "A funnel booking page shows only its own owner's times. An unassigned calendar feeds the shared booking page.",
           "Times are India time.",
-          "The horizon is capped at how far ahead someone may book, and the booking buffer is added between slots. Both are set on Bookings, Manage availability.",
+          "The horizon is capped at how far ahead someone may book, and the booking buffer is added between slots. Both are set on Calendars, Manage availability.",
           "A calendar that is on must have at least one day. Two live calendars cannot share an owner. Up to 12 calendars.",
-          "The SSS diary needs an SSS owner set on Bookings first, and its call length comes from there too.",
+          "The SSS diary needs an SSS owner set on Calendars first, and its call length comes from there too.",
           "Until at least one calendar is on with a day selected, availability counts as not armed and booking pages show an empty calendar.",
         ],
         controls: [
@@ -697,7 +697,7 @@ export const MANUAL_CONSOLE: GuideManual[] = [
           },
         ],
         watchOut: [
-          "To clear slots already created, block or delete them on Bookings.",
+          "To clear slots already created, block or delete them on Calendars.",
           "Nothing is created unless the scheduled jobs are running.",
         ],
         shot: {
@@ -762,12 +762,12 @@ export const MANUAL_CONSOLE: GuideManual[] = [
           "Press “Save changes”. Use “Run the loop now” to run it at once instead of waiting.",
         ],
         logic: [
-          "While a prospect has not confirmed, the slot is held for them. A WhatsApp yes confirms it, and so does Mark confirmed on Bookings, Booking requests.",
+          "While a prospect has not confirmed, the slot is held for them. A WhatsApp yes confirms it, and so does Mark confirmed on Calendars, Booking requests.",
           "The ask time must be longer than the release time, unless ask is 0, which means never ask and never release.",
           "The reply time counts from when the request went out and is at least 5 minutes, so a short-notice booking is never cancelled unanswered.",
           "Moving the next call up works on any cancellation, including one made by hand, even with the main switch off. It moves the same caller's next call that day, of the same length.",
           "If the app cannot show the prospect was ever asked, it does not release the slot.",
-          "It runs every minute on the scheduled jobs. “Slots released” lists the latest releases; the full list is on Bookings, Cancelled slots.",
+          "It runs every minute on the scheduled jobs. “Slots released” lists the latest releases; the full list is on Calendars, Cancelled slots.",
           "This one rule has three doors: this panel, WhatsApp settings and Bookings, Manage availability. A save on any of them changes it for all.",
           "A duration the panel cannot read keeps the stored value instead of resetting it.",
         ],

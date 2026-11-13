@@ -48,7 +48,7 @@ export type GuideEntry = {
  *
  * The gap the per-section guides could not close. Each of those explains one screen, and the
  * jobs that actually confuse people are the ones that span several: onboarding a student touches
- * Contacts, Bookings, Pipeline, Agreements, Students, Finance and Batches, and no single entry
+ * Contacts, Calendars, Pipeline, Agreements, Students, Finance and Batches, and no single entry
  * could ever describe it.
  */
 export type GuideJourney = {
@@ -405,14 +405,14 @@ export const GUIDES: GuideEntry[] = [
     tip: "Deleting a contact archives it rather than erasing it, and re-entering the same person later restores the original record with its history intact.",
   },
   {
-    section: "bookings", icon: "📆", title: "Bookings", href: "/bookings",
-    path: ["Sidebar", "Sales", "Bookings"],
+    section: "bookings", icon: "📆", title: "Calendars", href: "/bookings",
+    path: ["Sidebar", "Sales", "Calendars"],
     what: "Every discovery call booked, and the calendar of slots prospects can book into.",
     shots: [
       {
         src: "/guide/bookings.png",
         caption:
-          "Bookings, and the discovery-call calendar behind them.",
+          "Calendars: discovery and strategy calls in one place.",
       },
     ],
     steps: [
@@ -574,7 +574,7 @@ export const GUIDES: GuideEntry[] = [
       "Which funnel somebody came through is recorded on their contact, and shown in the attribution table on Reports.",
       "Editing a published funnel changes what the public sees as soon as you save.",
     ],
-    tip: "An empty calendar on a funnel is almost never the funnel's fault. Check Bookings first.",
+    tip: "An empty calendar on a funnel is almost never the funnel's fault. Check Calendars first.",
   },
   {
     section: "sites", icon: "🌐", title: "Website", href: "/sites",
@@ -689,7 +689,7 @@ export const GUIDES: GuideEntry[] = [
  *
  * The first one is the reason this file grew a second export. "Onboard a new student" is the job
  * the business runs on and the one the founder said they could not follow: it touches Contacts,
- * Bookings, Pipeline, Agreements, Students, Finance and Batches, so no per-screen guide could
+ * Calendars, Pipeline, Agreements, Students, Finance and Batches, so no per-screen guide could
  * ever have described it, and seven of those nine screens had no guide entry at all.
  *
  * Written so that somebody who has never seen the app can do it from this page alone - every
@@ -950,7 +950,7 @@ export const GUIDE_JOURNEYS: GuideJourney[] = [
       {
         n: 3,
         title: "Book the discovery call",
-        where: ["Sidebar", "Sales", "Bookings"],
+        where: ["Sidebar", "Sales", "Calendars"],
         does:
           "There is no staff booking form: a discovery call is booked through the public booking page, which you can send to the prospect or fill in with them. If its calendar is empty, no availability pattern has been saved yet - that is a founder setting, not something you can fix from here.",
       },

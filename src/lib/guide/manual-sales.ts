@@ -542,7 +542,7 @@ export const MANUAL_SALES: GuideManual[] = [
             where: ["Sidebar", "Admin", "Users", "Team & org chart"],
             href: "/people?tab=2",
             who: ["ADMIN"],
-            default: "Mon–Sat",
+            default: "Mon-Sat",
             effect:
               "Any day not ticked excludes this person from the rotation on that day of the week. A comp-off swap (off Tuesdays, in on Saturdays) is just two ticks. Applies from the next lead that arrives.",
           },

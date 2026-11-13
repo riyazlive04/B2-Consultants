@@ -526,7 +526,7 @@ export const MANUAL_ADMIN: GuideManual[] = [
           "Profiles with the Admin dashboard role sit on the top row and everyone else below. Offboarded people move to a separate Former team members list.",
           "The Daily log form decides the desk: Appointment Setter gets the Appointment Setter desk and Discovery Call Specialist gets the Discovery Specialist desk. Nothing else, not role or access, decides which My Desk a telecaller sees.",
           "First-call share is a target share of new leads; 0 keeps the person out of the rotation. Shares are scaled against everyone else working that day and not at their daily cap, so 5 and 2 behave like 71% and 29%.",
-          "People are skipped on any day of the week not ticked in their Working days (Mon–Sat is the default). Daily call target shows on their My Desk; 0 hides it.",
+          "People are skipped on any day of the week not ticked in their Working days (Mon-Sat is the default). Daily call target shows on their My Desk; 0 hides it.",
           "Monthly pay only pre-fills Finance team payments. Changing it rewrites no payment already made.",
           "Dashboard role and the login's role are kept in step: saving the profile changes the linked login's role to match.",
           "Setting Status to Inactive suspends the linked login and signs them out in the same save. Setting it back to Active does not reopen the login; use Reactivate on Users & access.",

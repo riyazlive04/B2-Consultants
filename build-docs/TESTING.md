@@ -7,6 +7,18 @@
 - Browser: local preview (:3011, local DB) via Playwright; never against live.
 
 ## Results
+- 2026-11-13 **book-appointment-modal**: `src/lib/__tests__/calendar-book.test.ts` 4/4 (AC4 open-only
+  blocking, empty range, end <= start incl. the equal case, junk times). Browser on the local
+  preview: AC5 clicking the 2 PM lane on Sat prefilled that date and selected the 02:00 PM slot;
+  AC1 booking Rohan Pillai into it created the call on the grid AND moved the lead to "strategy
+  call booked" on the pipeline; the duplicate-booking guard refused a second call for him;
+  AC4 blocking 12:00-14:00 reported "Blocked 1 slot", and a range holding only a booked call
+  reported it kept its time and changed nothing.
+  **AC3 (the refactor's real test)**: a full public /book submission still books - "You're booked
+  in", card on the calendar, lead at "strategy call booked" with BANT scored at intake.
+  AC2 (two people claiming one slot at once) is NOT exercised: it is the same `updateMany` status
+  guard the public path uses, checked by reading, not by running two browsers.
+  Full suite 2377 pass / 0 fail, tsc + lint clean.
 - 2026-11-13 **appointment-drawer**: `src/lib/__tests__/appointment-drawer.test.ts` 3/3 (AC2 status
   mapping incl. Showed -> COMPLETED, AC4 which outcomes are confirmed first). Browser on the local
   preview: AC1 a card opens the drawer with time/owner/phone/email/meeting rows; AC2 "No show"

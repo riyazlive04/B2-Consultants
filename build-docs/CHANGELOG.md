@@ -3,6 +3,12 @@
 ## Unreleased
 - 2026-11-12 build-docs created; Calendars redesign plan drafted.
 - 2026-11-13 Plan approved. `fix(app-guide)` 43d1e77: en dashes broke the house-style test.
+- 2026-11-13 `feat(book-appointment-modal)`: "+ New" on the toolbar and clicking an empty half-hour
+  open a two-tab dialog - book an existing contact into an OPEN slot, or block a time range off.
+  New actions `searchBookableLeads`, `listOpenSlotsForDay`, `bookDiscoveryForLead`, `blockTimeRange`;
+  the lead/board/journey step and the post-commit step are now shared with `submitBooking`.
+  Deferred: a title/description/notes to type (no field behind them), SSS booking (needs a journey),
+  multi-day block ranges, and Synamate's free "custom" time.
 - 2026-11-13 `feat(appointment-drawer)`: clicking an entry opens Synamate's "View details" drawer -
   time, owner, phone, email, Zoom join link - with the status select (Discovery), Unblock (blocked
   time) and a read-only note on a released call. Writes through the existing booking/sss actions;

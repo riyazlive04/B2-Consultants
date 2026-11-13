@@ -45,6 +45,17 @@ This file starts 12 Nov 2026 with the Calendars redesign.
   hard-deletes a booking, and a second control doing the same write would be a second way to be
   wrong.
 
+- 2026-11-13 `submitBooking` was NOT made to serve staff bookings. Everything that makes it what
+  it is - rate limits, the consent record, BANT scoring, auto-disqualify - belongs to a stranger
+  filling in a form. What the two paths genuinely share is now two functions in booking-actions:
+  `linkLeadToBooking` (stage + board card + journey link) and `afterBookingCommitted` (automation
+  trigger, Zoom, WhatsApp confirmation, in that order).
+- 2026-11-13 A staff booking stores `source: MANUAL`, blank email/phone when the lead has none
+  (the schema requires both) and `confirmedAt` set when the modal says Confirmed. The founder's
+  booking window (min notice / max advance) is deliberately NOT applied to it.
+- 2026-11-13 Blocking is one IST day and a time range, not Synamate's multi-day datetime pair;
+  OPEN slots only, booked calls keep their time and are reported back.
+
 ## Constraints
 - Synamate capture at `../syn-cal/` (outer folder, not git) contains real prospect PII. Never commit.
 - Local preview only (`.env.local`, :5435 Postgres, `scripts/local-demo-serve.ps1` on :3011).

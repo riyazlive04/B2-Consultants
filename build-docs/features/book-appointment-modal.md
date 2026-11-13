@@ -42,3 +42,17 @@ Synamate's "+ New" / click-empty-slot modal: staff book a call for a contact, or
 - AC3 /book public submission still passes its existing tests unchanged.
 - AC4 Blocking 2–4 PM blocks only OPEN slots in range and reports the booked ones left alone.
 - AC5 Clicking an empty 10:00 lane on Thu prefills date Thu and selects the 10:00 slot if open.
+
+## As built (2026-11-13)
+- **The refactor the plan asked for was narrowed, deliberately.** `bookDiscoveryForLead` does NOT
+  share `submitBooking`'s core: the rate limits, consent record, BANT scoring and auto-disqualify
+  branch all exist because a stranger is filling in a form, and none of them is true of a member
+  of staff booking a known lead. The two genuinely shared parts were extracted instead -
+  `linkLeadToBooking` and `afterBookingCommitted` - so the board move, the journey link, the
+  automation trigger, Zoom and the WhatsApp confirmation cannot drift apart.
+- **Not built** (no field or no screen behind them): appointment title, description, internal
+  notes, meeting-location choice, attendees. Booking an SSS from here is also out - it needs an
+  OutreachJourney, which is Outreach's to create.
+- Blocking takes one date and a time range rather than two datetimes; a whole day is 00:00-23:59.
+- Clicks are delegated: every half-hour lane carries `data-lane="<day>:<minutes>"` and the New
+  button `data-new-entry`, both read by `CalendarHost` - the same listener that opens the drawer.

@@ -25,6 +25,8 @@ import {
 import { bookingRulesConfigSchema } from "@/lib/config-schema";
 import { coerceDurationMinutes } from "@/lib/duration";
 import { releasedSlotStatus } from "@/lib/booking-hold";
+import { blockPlan, blockRangeError } from "@/lib/calendar-book";
+import { ACTIVE } from "@/lib/soft-delete";
 import { optionalRule, rule } from "@/lib/field-rules";
 import { activityStamp } from "@/lib/activity-actions";
 import { slotStartsForRange, WEEKDAY_KEYS } from "@/lib/slot-plan";
@@ -410,6 +412,100 @@ export async function submitNoSlotsInterest(form: FormData): Promise<ActionResul
   return { ok: true };
 }
 
+/**
+ * Everything the LEAD needs when a discovery call is booked - whatever booked it, the public form
+ * or a member of staff from the calendar. One copy of it, because these two paths drifting apart
+ * is how a booked prospect ends up sitting in the wrong board column or unlinked from their
+ * journey, which is exactly what this code was written to fix.
+ *
+ * `qual` is the verdict to record alongside the link. A staff booking carries no new score, so it
+ * passes null and leaves whatever qualification already exists untouched.
+ */
+async function linkLeadToBooking(
+  tx: Prisma.TransactionClient,
+  leadId: string,
+  bookingId: string,
+  qual: { verdict: ReturnType<typeof qualifiedFromBant>; bantAvg: number } | null,
+) {
+  /**
+   * A booked call = STRATEGY_CALL_BOOKED, the board's "Discovery Call Booked" column.
+   *
+   * This used to jump straight to DISCO_BOOKED ("Pre-Qualified & Confirmed"), which claimed
+   * the prospect had been qualified AND their call confirmed the instant they picked a slot -
+   * neither of which has happened yet. Qualification moves them on from here.
+   *
+   * The guard is a HOLD list rather than an allow list. It used to advance only NEW_LEAD and
+   * WHATSAPP_SENT, so a prospect who already existed in any OTHER stage booked a call and the
+   * board did not move at all - the 8,086 leads sitting in Cancelled/Unqualified could each
+   * book a discovery call and stay filed as written off. Someone who was given up on and comes
+   * back to book is the single most valuable card on the board, and it was invisible.
+   *
+   * Inverting it also means a stage added later advances by default, which is the safe
+   * direction: a missing early stage silently strands prospects, while a missing late stage
+   * would announce itself immediately by dragging a paying customer backwards.
+   */
+  const fresh = await tx.lead.findUnique({ where: { id: leadId }, select: { stage: true } });
+  if (fresh && !HOLDS_THROUGH_BOOKING.has(fresh.stage)) {
+    await tx.lead.update({ where: { id: leadId }, data: { stage: "STRATEGY_CALL_BOOKED" } });
+    await tx.leadStageHistory.create({
+      data: { leadId, fromStage: fresh.stage, toStage: "STRATEGY_CALL_BOOKED" },
+    });
+    /**
+     * ...and carry the board card with it.
+     *
+     * Every other path that moves a lead's stage calls this (call logs, discovery routing,
+     * automation, the auto-stage rules); booking was the one that did not, so a confirmed
+     * discovery call left its card sitting in "WhatsApp Sent". The lead record said booked
+     * and the board said not booked, and the team works from the board - observed on a real
+     * booking on 20 Aug 2026.
+     */
+    await syncDefaultOpportunity(tx, leadId, "STRATEGY_CALL_BOOKED");
+  }
+
+  // SOP Steps 10-11, synchronously. A prospect who books directly on the public form would
+  // otherwise stay unlinked from their booking - the ONLY thing that links the two is the
+  // async engine's Step 10 cross-check, and that engine is off by default. So without this,
+  // a booked prospect's BANT score never reaches the Qualified verdict (Step 11) or Key
+  // Metrics (Step 12): the outreach tab shows them as "not booked" while /bookings shows them
+  // booked. Link the journey here and derive Qualified from BANT - the same pure function the
+  // engine uses, so the two paths can never disagree. Guarded so it can't clobber a link or a
+  // human's prior verdict; a lead created outside intake (manual back-office entry) may have no
+  // journey, which is fine - updateMany-style tolerance via the null check.
+  const journey = await tx.outreachJourney.findUnique({
+    where: { leadId },
+    select: { id: true, bookingId: true, qualified: true },
+  });
+  if (journey && journey.bookingId === null) {
+    await tx.outreachJourney.update({
+      where: { id: journey.id },
+      data: {
+        bookingId,
+        ...(journey.qualified === null && qual?.verdict
+          ? { qualified: qual.verdict, qualifiedAt: new Date(), bantScoreAtQual: qual.bantAvg }
+          : {}),
+      },
+    });
+  }
+}
+
+/**
+ * The three things that follow a COMMITTED booking, in this order and for both paths.
+ *
+ * Zoom before the confirmation deliberately: no approved WATI template carries a meeting link
+ * today, but the moment one does, a confirmation sent first would be the one message the prospect
+ * reads and the one without the link in it.
+ */
+async function afterBookingCommitted(bookingId: string, leadId: string) {
+  // Tell the automation engine a booking happened, the same way moveOpportunity fires
+  // STAGE_CHANGED after its own transaction commits.
+  await emitTrigger("BOOKING_CREATED", { leadId });
+  // Silent and harmless when Zoom is unarmed; a failure leaves the booking untouched and
+  // `sweepZoomMeetings` fills the link in on the next tick.
+  await syncBookingMeeting(bookingId);
+  // No-op (and writes no row) unless WATI is configured + enabled; it never throws.
+  await sendBookingConfirmation(bookingId);
+}
+
 export async function submitBooking(form: FormData): Promise<BookingSubmitResult> {
   // Public endpoint, and the most expensive one here: a submission consumes a finite calendar
   // slot AND fires a WATI confirmation. Two dimensions, charged atomically:
@@ -672,66 +768,11 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
         data: { slotId: slot.id, leadId: lead.id, ...bookingFields },
       });
 
-      /**
-       * A booked call = STRATEGY_CALL_BOOKED, the board's "Discovery Call Booked" column.
-       *
-       * This used to jump straight to DISCO_BOOKED ("Pre-Qualified & Confirmed"), which claimed
-       * the prospect had been qualified AND their call confirmed the instant they picked a slot -
-       * neither of which has happened yet. Qualification moves them on from here.
-       *
-       * The guard is a HOLD list rather than an allow list. It used to advance only NEW_LEAD and
-       * WHATSAPP_SENT, so a prospect who already existed in any OTHER stage booked a call and the
-       * board did not move at all - the 8,086 leads sitting in Cancelled/Unqualified could each
-       * book a discovery call and stay filed as written off. Someone who was given up on and comes
-       * back to book is the single most valuable card on the board, and it was invisible.
-       *
-       * Inverting it also means a stage added later advances by default, which is the safe
-       * direction: a missing early stage silently strands prospects, while a missing late stage
-       * would announce itself immediately by dragging a paying customer backwards.
-       */
-      const fresh = await tx.lead.findUnique({ where: { id: lead.id }, select: { stage: true } });
-      if (fresh && !HOLDS_THROUGH_BOOKING.has(fresh.stage)) {
-        await tx.lead.update({ where: { id: lead.id }, data: { stage: "STRATEGY_CALL_BOOKED" } });
-        await tx.leadStageHistory.create({
-          data: { leadId: lead.id, fromStage: fresh.stage, toStage: "STRATEGY_CALL_BOOKED" },
-        });
-        /**
-         * ...and carry the board card with it.
-         *
-         * Every other path that moves a lead's stage calls this (call logs, discovery routing,
-         * automation, the auto-stage rules); booking was the one that did not, so a confirmed
-         * discovery call left its card sitting in "WhatsApp Sent". The lead record said booked
-         * and the board said not booked, and the team works from the board - observed on a real
-         * booking on 20 Aug 2026.
-         */
-        await syncDefaultOpportunity(tx, lead.id, "STRATEGY_CALL_BOOKED");
-      }
-
-      // SOP Steps 10-11, synchronously. A prospect who books directly on the public form would
-      // otherwise stay unlinked from their booking - the ONLY thing that links the two is the
-      // async engine's Step 10 cross-check, and that engine is off by default. So without this,
-      // a booked prospect's BANT score never reaches the Qualified verdict (Step 11) or Key
-      // Metrics (Step 12): the outreach tab shows them as "not booked" while /bookings shows them
-      // booked. Link the journey here and derive Qualified from BANT - the same pure function the
-      // engine uses, so the two paths can never disagree. Guarded so it can't clobber a link or a
-      // human's prior verdict; a lead created outside intake (manual back-office entry) may have no
-      // journey, which is fine - updateMany-style tolerance via the null check.
-      const journey = await tx.outreachJourney.findUnique({
-        where: { leadId: lead.id },
-        select: { id: true, bookingId: true, qualified: true },
+      await linkLeadToBooking(tx, lead.id, booking.id, {
+        verdict: qualifiedFromBant(bant.bantAvg, thresholds),
+        bantAvg: bant.bantAvg,
       });
-      if (journey && journey.bookingId === null) {
-        const verdict = qualifiedFromBant(bant.bantAvg, thresholds);
-        await tx.outreachJourney.update({
-          where: { id: journey.id },
-          data: {
-            bookingId: booking.id,
-            ...(journey.qualified === null && verdict
-              ? { qualified: verdict, qualifiedAt: new Date(), bantScoreAtQual: bant.bantAvg }
-              : {}),
-          },
-        });
-      }
+
       return booking.id;
     });
   } catch (e) {
@@ -768,26 +809,7 @@ export async function submitBooking(form: FormData): Promise<BookingSubmitResult
     // and must not be able to roll a confirmed booking back.
     await mirrorBookingScoreToLead(bookedLeadId, bant);
 
-    // Tell the automation engine a booking happened, the same way moveOpportunity fires
-    // STAGE_CHANGED after its own transaction commits. Previously nothing called this for a
-    // booking, so BOOKING_CREATED workflows could never enroll a single contact.
-    await emitTrigger("BOOKING_CREATED", { leadId: bookedLeadId });
-
-    /**
-     * Create the Zoom meeting BEFORE the confirmation goes out, not after.
-     *
-     * No approved WATI template carries a meeting link today, so today the order is invisible.
-     * It stops being invisible the moment one does: a confirmation sent first would be the one
-     * message the prospect actually reads, and it would be the one without the link in it.
-     *
-     * Silent and harmless when Zoom is unarmed; a failure here leaves the booking untouched and
-     * `sweepZoomMeetings` fills the link in on the next tick.
-     */
-    await syncBookingMeeting(bookingId);
-
-    // Wave-2: fire the WhatsApp booking confirmation. No-op (and writes no row) unless WATI is
-    // configured + enabled; it never throws, so it can't affect the booking result.
-    await sendBookingConfirmation(bookingId);
+    await afterBookingCommitted(bookingId, bookedLeadId);
   });
 
   revalidateSlotSurfaces();
@@ -1564,5 +1586,221 @@ export async function runBookingAutomationNow(): Promise<ActionResult & { summar
       (run.skippedNotReached
         ? ` · ${run.skippedNotReached} left alone (never reached them - check WhatsApp is on and the template is approved)`
         : ""),
+  };
+}
+
+// ──────────────────── Calendars: staff books a call, or blocks time off ────────────────────
+// Feature 5 (build-docs/features/book-appointment-modal.md). Both write through the same lead
+// linking and post-commit steps as the public form, so a call booked here behaves like one the
+// prospect booked themselves - same board move, same journey link, same Zoom and confirmation.
+
+/** Who a member of staff can book a call for. Searched server-side; 20 rows is a picker, not a list. */
+export async function searchBookableLeads(query: string): Promise<{ id: string; name: string; subtitle: string }[]> {
+  await requireSection("bookings");
+  const q = query.trim();
+  // Two characters, or every lead in the book comes back for one keystroke.
+  if (q.length < 2) return [];
+  const rows = await prisma.lead.findMany({
+    where: {
+      ...ACTIVE,
+      OR: [
+        { name: { contains: q, mode: "insensitive" } },
+        { email: { contains: q, mode: "insensitive" } },
+        { phone: { contains: q } },
+      ],
+    },
+    select: { id: true, name: true, email: true, phone: true },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    subtitle: [r.phone, r.email].filter(Boolean).join(" · ") || "No phone or email",
+  }));
+}
+
+export type OpenSlotOption = {
+  id: string;
+  startsAt: string;
+  durationMins: number;
+  ownerId: string | null;
+  ownerName: string | null;
+};
+
+/**
+ * The OPEN discovery slots of one IST day, for the Book modal's time list.
+ *
+ * The founder's booking window (minimum notice, maximum advance) is deliberately NOT applied:
+ * it exists to stop a stranger booking a call in ten minutes' time, and a member of staff
+ * putting a call in this afternoon's diary is the normal case, not the abuse it guards against.
+ */
+export async function listOpenSlotsForDay(dayKey: string): Promise<OpenSlotOption[]> {
+  await requireSection("bookings");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey)) return [];
+  const from = istWallToUtc(dayKey, "00:00");
+  const slots = await prisma.appointmentSlot.findMany({
+    where: { status: "OPEN", startsAt: { gte: from, lt: new Date(from.getTime() + 86_400_000) } },
+    select: { id: true, startsAt: true, durationMins: true, assignedTo: { select: { id: true, name: true } } },
+    orderBy: { startsAt: "asc" },
+  });
+  return slots.map((s) => ({
+    id: s.id,
+    startsAt: s.startsAt.toISOString(),
+    durationMins: s.durationMins,
+    ownerId: s.assignedTo?.id ?? null,
+    ownerName: s.assignedTo?.name ?? null,
+  }));
+}
+
+const bookForLeadSchema = z.object({
+  leadId: z.string().trim().min(1, "Pick a contact"),
+  slotId: z.string().trim().min(1, "Pick a time"),
+  confirmed: z.boolean().optional(),
+});
+
+/**
+ * Staff books an existing lead into an OPEN discovery slot.
+ *
+ * Deliberately NOT a re-use of `submitBooking`: that action is the public intake form, and
+ * everything that makes it what it is - the rate limits, the consent record, the BANT scoring,
+ * the auto-disqualify branch - is about a stranger filling in a form. There is no form here and
+ * no new consent to record. What the two genuinely share is what happens to the lead and what
+ * happens after the commit, and those are the two functions both of them call.
+ */
+export async function bookDiscoveryForLead(input: unknown): Promise<ActionResult> {
+  const session = await requireSection("bookings");
+  const parsed = bookForLeadSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const { leadId, slotId, confirmed } = parsed.data;
+
+  const lead = await prisma.lead.findFirst({
+    where: { id: leadId, ...ACTIVE },
+    select: { id: true, name: true, email: true, phone: true },
+  });
+  if (!lead) return { ok: false, error: "That contact no longer exists" };
+
+  /**
+   * The same one-live-call-per-person rule the public form enforces (lib/booking-identity). Two
+   * live bookings means two confirmation clocks and two sets of reminders with nothing able to
+   * say which call is real - and a member of staff double-booking someone by hand is no
+   * different from a prospect doing it in two tabs.
+   */
+  if (await liveBookingFor(prisma, { phone: lead.phone ?? "", email: lead.email ?? "", whatsapp: null })) {
+    return { ok: false, error: `${lead.name} already has a call booked - move that one instead.` };
+  }
+
+  let bookingId: string;
+  try {
+    bookingId = await prisma.$transaction(async (tx) => {
+      // updateMany with a status guard is the lock against two people claiming one slot.
+      const claim = await tx.appointmentSlot.updateMany({
+        where: { id: slotId, status: "OPEN" },
+        data: { status: "BOOKED" },
+      });
+      if (claim.count === 0) throw new Error("SLOT_TAKEN");
+      const booking = await tx.bookingRequest.create({
+        select: { id: true },
+        data: {
+          slotId,
+          leadId: lead.id,
+          name: lead.name,
+          // The schema requires both; a lead may genuinely have neither. Stored blank rather
+          // than invented - the modal says what a missing number costs before you book.
+          email: lead.email ?? "",
+          phone: lead.phone ?? "",
+          source: "MANUAL",
+          // "Confirmed" here is a member of staff saying the prospect has agreed to this time,
+          // which is exactly what the confirmation loop looks for before it chases them.
+          confirmedAt: confirmed ? new Date() : null,
+        },
+      });
+      await linkLeadToBooking(tx, lead.id, booking.id, null);
+      return booking.id;
+    });
+  } catch (e) {
+    if (e instanceof Error && e.message === "SLOT_TAKEN") {
+      return { ok: false, error: "That time was just booked - pick another." };
+    }
+    throw e;
+  }
+
+  await logActivity(session, {
+    action: "booking.create",
+    section: "bookings",
+    entityType: "BookingRequest",
+    entityId: bookingId,
+    summary: `Booked a discovery call for ${lead.name}`,
+  });
+  afterResponse(`booking:${bookingId}`, () => afterBookingCommitted(bookingId, lead.id));
+  revalidateSlotSurfaces();
+  return { ok: true };
+}
+
+const blockRangeSchema = z.object({
+  calendar: z.enum(["DISCO", "SSS"]),
+  /** "" is the unassigned pile, which is a real calendar on the grid. */
+  ownerId: z.string().trim().max(64),
+  dayKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date"),
+  from: z.string(),
+  to: z.string(),
+});
+
+/**
+ * Block every OPEN slot of one person between two times on one IST day.
+ *
+ * Booked calls inside the range are left exactly where they are and reported back, which is both
+ * what Synamate does and the only safe reading of "block this time off": nobody means "cancel
+ * the two calls I already have" by it.
+ */
+export async function blockTimeRange(input: unknown): Promise<ActionResult & { summary?: string }> {
+  const session = await requireSection("bookings");
+  const parsed = blockRangeSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const { calendar, ownerId, dayKey, from, to } = parsed.data;
+  const bad = blockRangeError(from, to);
+  if (bad) return { ok: false, error: bad };
+
+  const range = { gte: istWallToUtc(dayKey, from), lt: istWallToUtc(dayKey, to) };
+  const owner = ownerId ? ownerId : null;
+  const rows =
+    calendar === "SSS"
+      ? await prisma.sssSlot.findMany({ where: { startsAt: range, ownerId: owner }, select: { id: true, status: true } })
+      : await prisma.appointmentSlot.findMany({
+          where: { startsAt: range, assignedToId: owner },
+          select: { id: true, status: true },
+        });
+
+  const { block, kept } = blockPlan(rows);
+  const booked = (n: number) => `${n} booked call${n === 1 ? "" : "s"}`;
+  if (block.length === 0) {
+    return {
+      ok: true,
+      summary: kept.length
+        ? `Nothing to block - ${booked(kept.length)} in that range, and booked calls keep their time.`
+        : "There are no slots in that range, so nothing changed.",
+    };
+  }
+
+  const where = { id: { in: block }, status: "OPEN" as const };
+  const done =
+    calendar === "SSS"
+      ? await prisma.sssSlot.updateMany({ where, data: { status: "BLOCKED" } })
+      : await prisma.appointmentSlot.updateMany({ where, data: { status: "BLOCKED" } });
+
+  await logActivity(session, {
+    action: "slot.block",
+    section: "bookings",
+    entityType: calendar === "SSS" ? "SssSlot" : "AppointmentSlot",
+    entityId: block[0],
+    summary: `Blocked ${done.count} ${calendar === "SSS" ? "strategy" : "discovery"} slot${done.count === 1 ? "" : "s"} on ${dayKey}, ${from}-${to}`,
+    meta: { dayKey, from, to, blocked: done.count, keptBooked: kept.length },
+  });
+  revalidateSlotSurfaces();
+  return {
+    ok: true,
+    summary:
+      `Blocked ${done.count} slot${done.count === 1 ? "" : "s"}.` +
+      (kept.length ? ` ${booked(kept.length)} in that range kept their time.` : ""),
   };
 }

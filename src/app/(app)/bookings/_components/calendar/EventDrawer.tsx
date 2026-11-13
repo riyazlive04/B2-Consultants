@@ -200,32 +200,3 @@ export function EventDrawer({ ev, canSetSss, onClose }: { ev: CalEvent; canSetSs
     </Modal>
   );
 }
-
-/**
- * Opens the drawer for whichever card was clicked.
- *
- * One delegated listener rather than a callback threaded through the week grid, the day grid and
- * the month grid: every card is already a `<button data-event-id>`, so this also catches Enter and
- * Space, and the browser leaves focus on that button - which is where the drawer hands it back.
- */
-export function EventDrawerHost({
-  events, canSetSss, children,
-}: {
-  events: CalEvent[];
-  canSetSss: boolean;
-  children: ReactNode;
-}) {
-  const [id, setId] = useState<string | null>(null);
-  const ev = events.find((e) => e.id === id) ?? null;
-  return (
-    <div
-      onClick={(e) => {
-        const card = (e.target as HTMLElement).closest?.("[data-event-id]");
-        if (card) setId(card.getAttribute("data-event-id"));
-      }}
-    >
-      {children}
-      {ev && <EventDrawer ev={ev} canSetSss={canSetSss} onClose={() => setId(null)} />}
-    </div>
-  );
-}

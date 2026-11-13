@@ -1,9 +1,10 @@
+import { Plus } from "lucide-react";
 import type { CalEvent } from "@/lib/calendar-event";
 import { isDefaultFilters, showsNothing, type CalFilters } from "@/lib/calendar-filters";
 import { addDays, dayColumns, weekDays } from "@/lib/calendar-grid";
 import { EmptyState } from "@/components/ui/kit";
 import { CalendarToolbar, type CalView } from "./Toolbar";
-import { EventDrawerHost } from "./EventDrawer";
+import { CalendarHost } from "./CalendarHost";
 import { ManageView } from "./ManageView";
 import { MonthGrid } from "./MonthGrid";
 import { TimeGrid, type GridColumn } from "./TimeGrid";
@@ -93,6 +94,7 @@ export function CalendarView({
   );
 
   return (
+    <CalendarHost events={events} team={team} dayKey={dayKey} canSetSss={canSetSss}>
     <div className="space-y-3">
       <CalendarToolbar
         view={view}
@@ -105,17 +107,28 @@ export function CalendarView({
         manageHref={panelOpen ? hrefFor({ panel: "" }) : hrefFor({ panel: "1" })}
         manageOpen={panelOpen}
         filtersOn={!isDefault}
-        actions={toolbarActions}
+        actions={
+          <>
+            {/* No onClick: CalendarHost listens for this above (same path as a card or a lane). */}
+            <button
+              type="button"
+              data-new-entry="1"
+              className="inline-flex h-9 items-center gap-1.5 rounded-btn bg-accent px-3 text-sm font-semibold text-on-accent transition-opacity hover:opacity-90"
+            >
+              <Plus size={15} aria-hidden /> New
+            </button>
+            {toolbarActions}
+          </>
+        }
       />
 
       {/* The panel takes its width from the grid rather than covering it - as an overlay it hid
           Saturday and Sunday, which are exactly the columns someone filtering is looking at. */}
       <div className="flex flex-col gap-3 lg:flex-row">
-        <div className="min-w-0 flex-1">
-          <EventDrawerHost events={events} canSetSss={canSetSss}>{grid}</EventDrawerHost>
-        </div>
+        <div className="min-w-0 flex-1">{grid}</div>
         {panelOpen && <ManageView filters={filters} team={team} closeHref={hrefFor({ panel: "" })} />}
       </div>
     </div>
+    </CalendarHost>
   );
 }

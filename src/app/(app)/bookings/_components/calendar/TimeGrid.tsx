@@ -26,7 +26,7 @@ export type GridColumn = {
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 const hourLabel = (h: number) => `${((h + 11) % 12) + 1}:00 ${h < 12 ? "AM" : "PM"}`;
 
-export function TimeGrid({ columns, onPickSlot }: { columns: GridColumn[]; onPickSlot?: (dayKey: string, min: number) => void }) {
+export function TimeGrid({ columns }: { columns: GridColumn[] }) {
   const scroller = useRef<HTMLDivElement>(null);
   const [nowMin, setNowMin] = useState<{ key: string; min: number } | null>(null);
 
@@ -71,29 +71,29 @@ export function TimeGrid({ columns, onPickSlot }: { columns: GridColumn[]; onPic
         </div>
 
         {columns.map((c, i) => (
-          <Column key={c.key} col={c} now={nowMin} first={i === 0} onPickSlot={onPickSlot} />
+          <Column key={c.key} col={c} now={nowMin} first={i === 0} />
         ))}
       </div>
     </div>
   );
 }
 
-function Column({ col, now, first, onPickSlot }: { col: GridColumn; now: { key: string; min: number } | null; first: boolean; onPickSlot?: (dayKey: string, min: number) => void }) {
+function Column({ col, now, first }: { col: GridColumn; now: { key: string; min: number } | null; first: boolean }) {
   const placed = placeDay(col.events, col.dayKey);
   const showNow = now?.key === col.dayKey;
   return (
     <div className="relative border-r border-line last:border-r-0">
-      {/* Half-hour lanes. Each is a button so an empty time can be booked by click or keyboard. */}
+      {/* Half-hour lanes. Each is a button so an empty time can be booked by click or keyboard;
+          which half-hour it is travels in `data-lane`, and CalendarHost opens the modal. */}
       {HOURS.map((h) => (
         <div key={h} className="border-b border-line" style={{ height: HOUR_PX }}>
           {[0, 30].map((m) => (
             <button
               key={m}
               type="button"
-              onClick={onPickSlot ? () => onPickSlot(col.dayKey, h * 60 + m) : undefined}
-              disabled={!onPickSlot}
+              data-lane={`${col.dayKey}:${h * 60 + m}`}
               aria-label={`Book ${col.label} at ${String(h).padStart(2, "0")}:${m === 0 ? "00" : "30"}`}
-              className="block w-full border-line transition-colors first:border-b first:border-dashed enabled:hover:bg-surface-2"
+              className="block w-full border-line transition-colors first:border-b first:border-dashed hover:bg-surface-2"
               style={{ height: HOUR_PX / 2 }}
             />
           ))}

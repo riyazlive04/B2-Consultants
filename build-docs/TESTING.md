@@ -7,6 +7,12 @@
 - Browser: local preview (:3011, local DB) via Playwright; never against live.
 
 ## Results
+- 2026-11-13 **appointment-drawer**: `src/lib/__tests__/appointment-drawer.test.ts` 3/3 (AC2 status
+  mapping incl. Showed -> COMPLETED, AC4 which outcomes are confirmed first). Browser on the local
+  preview: AC1 a card opens the drawer with time/owner/phone/email/meeting rows; AC2 "No show"
+  asked first, then the card redrew as a no-show ghost with id `release:...`, i.e. a SlotRelease
+  row exists; AC3 Esc closed it and focus returned to the card; blocked entry unblocked and left
+  the grid (back to OPEN, which is hidden). Full suite 2373 pass / 0 fail, tsc + lint clean.
 - 2026-11-13 **calendar-manage-view**: `src/lib/__tests__/calendar-filters.test.ts` 10/10
   (AC1-AC3 + unassigned token, junk params, short-URL choice). Browser: unticking a person drops
   their events and writes `?off=<one id>`; "Blocked" leaves only the two Busy entries; Clear all

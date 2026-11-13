@@ -21,7 +21,7 @@ export type SlotRow = {
   id: string; startsAt: Date; durationMins: number; status: string; assignedTo: Owner;
   booking: {
     id: string; name: string; email: string; phone: string; leadId: string | null;
-    status: string; confirmedAt: Date | null;
+    status: string; confirmedAt: Date | null; zoomJoinUrl: string | null;
   } | null;
 };
 export type ReleaseRow = {
@@ -52,6 +52,7 @@ export function buildCalendarEvents(rows: { slots: SlotRow[]; releases: ReleaseR
       ownerColor: ownerColor(i),
       startsAt: startsAt.toISOString(),
       endsAt: end(startsAt, mins),
+      meetingUrl: null as string | null,
     };
   };
   const blocked = (table: "slot" | "sss", id: string, type: CalType, owner: Owner, startsAt: Date, mins: number): CalEvent => ({
@@ -92,6 +93,7 @@ export function buildCalendarEvents(rows: { slots: SlotRow[]; releases: ReleaseR
       title: eventTitle("DISCO", b.name, s.assignedTo?.name ?? null),
       contact: { name: b.name, phone: b.phone, email: b.email, leadId: b.leadId },
       status: discoStatus(b.status, b.confirmedAt !== null),
+      meetingUrl: b.zoomJoinUrl,
       source: { table: "slot", id: s.id, bookingId: b.id },
     });
   }
@@ -162,7 +164,7 @@ export async function getCalendarEvents(q: CalendarQuery): Promise<CalEvent[]> {
           where: { startsAt: range, status: { not: "OPEN" }, ...discoOwner },
           select: {
             id: true, startsAt: true, durationMins: true, status: true, assignedTo: owner,
-            booking: { select: { id: true, name: true, email: true, phone: true, leadId: true, status: true, confirmedAt: true } },
+            booking: { select: { id: true, name: true, email: true, phone: true, leadId: true, status: true, confirmedAt: true, zoomJoinUrl: true } },
           },
         })
       : [],

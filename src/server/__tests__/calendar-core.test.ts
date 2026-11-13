@@ -13,7 +13,7 @@ const at = (iso: string) => new Date(iso);
 
 const slot = (o: Partial<SlotRow> = {}): SlotRow => ({
   id: "s1", startsAt: at("2026-11-13T13:00:00Z"), durationMins: 20, status: "BOOKED", assignedTo: ameen,
-  booking: { id: "b1", name: "Ravi K", email: "r@x.in", phone: "+91900", leadId: "l1", status: "BOOKED", confirmedAt: at("2026-11-12T10:00:00Z") },
+  booking: { id: "b1", name: "Ravi K", email: "r@x.in", phone: "+91900", leadId: "l1", status: "BOOKED", confirmedAt: at("2026-11-12T10:00:00Z"), zoomJoinUrl: "https://zoom.us/j/1" },
   ...o,
 });
 const build = (p: { slots?: SlotRow[]; releases?: ReleaseRow[]; sss?: SssRow[] }) =>

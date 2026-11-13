@@ -3,6 +3,7 @@ import { isDefaultFilters, showsNothing, type CalFilters } from "@/lib/calendar-
 import { addDays, dayColumns, weekDays } from "@/lib/calendar-grid";
 import { EmptyState } from "@/components/ui/kit";
 import { CalendarToolbar, type CalView } from "./Toolbar";
+import { EventDrawerHost } from "./EventDrawer";
 import { ManageView } from "./ManageView";
 import { MonthGrid } from "./MonthGrid";
 import { TimeGrid, type GridColumn } from "./TimeGrid";
@@ -41,7 +42,7 @@ export function stepDate(view: CalView, dayKey: string, dir: 1 | -1): string {
 }
 
 export function CalendarView({
-  view, dayKey, todayKey, events, team, filters, panelOpen, hrefFor, toolbarActions,
+  view, dayKey, todayKey, events, team, filters, panelOpen, canSetSss, hrefFor, toolbarActions,
 }: {
   view: CalView;
   dayKey: string;
@@ -50,6 +51,8 @@ export function CalendarView({
   team: { id: string; name: string | null }[];
   filters: CalFilters;
   panelOpen: boolean;
+  /** Whether this person may confirm a strategy session (that action belongs to Outreach). */
+  canSetSss: boolean;
   /** Builds a URL for this page with some params changed, keeping the rest. */
   hrefFor: (patch: Record<string, string>) => string;
   toolbarActions?: React.ReactNode;
@@ -108,7 +111,9 @@ export function CalendarView({
       {/* The panel takes its width from the grid rather than covering it - as an overlay it hid
           Saturday and Sunday, which are exactly the columns someone filtering is looking at. */}
       <div className="flex flex-col gap-3 lg:flex-row">
-        <div className="min-w-0 flex-1">{grid}</div>
+        <div className="min-w-0 flex-1">
+          <EventDrawerHost events={events} canSetSss={canSetSss}>{grid}</EventDrawerHost>
+        </div>
         {panelOpen && <ManageView filters={filters} team={team} closeHref={hrefFor({ panel: "" })} />}
       </div>
     </div>

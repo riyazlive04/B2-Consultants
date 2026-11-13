@@ -34,6 +34,11 @@ export const istTimeLabel = (iso: string | Date) =>
     .format(typeof iso === "string" ? new Date(iso) : iso)
     .toUpperCase();
 
+/** "Mon, 17 Nov" in IST - the day a card sits on, spelled out. */
+export const istDateLabel = (iso: string | Date) =>
+  new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })
+    .format(typeof iso === "string" ? new Date(iso) : iso);
+
 /** Synamate's hover line: "06:30 PM - 06:50 PM (IST)". */
 export const istRangeLabel = (ev: Pick<CalEvent, "startsAt" | "endsAt">) =>
   `${istTimeLabel(ev.startsAt)} - ${istTimeLabel(ev.endsAt)} (IST)`;

@@ -33,6 +33,18 @@ This file starts 12 Nov 2026 with the Calendars redesign.
   (deliberate per `sections.ts`), so feature 3's AC4 (a USER must not see another rep's calls)
   was dropped rather than implemented. Changing that is an access decision.
 
+- 2026-11-13 The drawer opens from ONE delegated click listener over the grids, not a callback
+  threaded through Week/Day/Month: every card is already a `<button data-event-id>`, so keyboard
+  activation and focus-return come free (Modal hands focus back to the trigger).
+- 2026-11-13 SSS confirmation from the drawer calls the existing `setSalesCallConfirmed`, which
+  sits behind the **outreach** section - a HEAD has Calendars but not Outreach, so the page asks
+  `canOpenSection("outreach")` and the drawer says so instead of the click redirecting to
+  `/?denied=outreach`. Unconfirmed also red-flags the journey; that is the existing action's
+  behaviour and the hint says so.
+- 2026-11-13 "Delete" (feature doc) is the status select's Cancelled, not a bin icon: B2 never
+  hard-deletes a booking, and a second control doing the same write would be a second way to be
+  wrong.
+
 ## Constraints
 - Synamate capture at `../syn-cal/` (outer folder, not git) contains real prospect PII. Never commit.
 - Local preview only (`.env.local`, :5435 Postgres, `scripts/local-demo-serve.ps1` on :3011).

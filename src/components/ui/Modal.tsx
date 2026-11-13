@@ -38,6 +38,7 @@ export function Modal({
   title,
   subtitle,
   size = "lg",
+  side = false,
   children,
 }: {
   open: boolean;
@@ -45,6 +46,8 @@ export function Modal({
   title: string;
   subtitle?: string;
   size?: "sm" | "md" | "lg";
+  /** Full-height panel against the right edge (a drawer) instead of a centred dialog. */
+  side?: boolean;
   children: ReactNode;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -110,7 +113,11 @@ export function Modal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[90] flex items-end justify-center p-3 sm:items-center sm:p-4"
+      className={
+        side
+          ? "fixed inset-0 z-[90] flex justify-end"
+          : "fixed inset-0 z-[90] flex items-end justify-center p-3 sm:items-center sm:p-4"
+      }
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
@@ -118,7 +125,11 @@ export function Modal({
       <div aria-hidden className="overlay-in glass-scrim absolute inset-0" onClick={onClose} />
       <div
         ref={panelRef}
-        className={`dialog-in glass-modal relative max-h-[88vh] w-full ${maxW} overflow-y-auto rounded-card p-5 sm:p-6`}
+        className={
+          side
+            ? "dialog-in glass-modal relative h-full w-full max-w-[460px] overflow-y-auto rounded-l-card p-5 sm:p-6"
+            : `dialog-in glass-modal relative max-h-[88vh] w-full ${maxW} overflow-y-auto rounded-card p-5 sm:p-6`
+        }
       >
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>

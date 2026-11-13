@@ -16,6 +16,7 @@ import type { CalEvent } from "../calendar-event";
 const ev = (id: string, startsAt: string, mins: number, ownerId: string | null = "u1"): CalEvent => ({
   id,
   kind: "APPOINTMENT",
+  meetingUrl: null,
   calendar: { key: `disco:${ownerId ?? ""}`, type: "DISCO", name: "Disco", color: "var(--chart-1)" },
   ownerId,
   ownerName: ownerId,

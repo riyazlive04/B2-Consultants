@@ -35,3 +35,18 @@ Synamate's "View details" side drawer: everything about one appointment, plus it
   a SlotRelease row exists.
 - AC3 Esc and ✕ close; focus returns to the card.
 - AC4 Delete asks for confirmation and cancels, never hard-deletes.
+
+## As built (2026-11-13)
+- `Modal` gained a `side` variant (full-height right panel) rather than a second dialog
+  component - scroll lock, Esc, focus trap and focus return are already correct there.
+- Body rows as built: status pill + call type, title, date + IST range, owner, phone, email,
+  Zoom join link ("No meeting link yet" when Zoom made none), and Open in pipeline.
+  **Not built:** attendees, booked-by, source and description (no field or no screen behind them),
+  the "Rescheduled" chip, and the right icon rail.
+- **Edit / Reschedule from the drawer was deferred**, not cut: `RescheduleDialog` is driven by the
+  Bookings table's own row shape, and a second caller for it belongs with feature 5 (Book /
+  Blocked-off-time modal), which needs the same slot picker.
+- A released call (`source.table === "release"`) has no booking left to set, so the drawer is
+  read-only and points at the Booking requests tab.
+- AC4 is met by the status select's Cancelled, which asks first and releases the slot - there is
+  no delete control, because B2 never hard-deletes a booking.

@@ -5,7 +5,7 @@ import { enginesOff } from "@/server/engine-status";
 import { Tabs } from "@/components/ui/Tabs";
 import { istToday, istWallToUtc, parseDateInput, toDateInputValue } from "@/lib/dates";
 import { formatDate } from "@/lib/format";
-import { requireSection } from "@/lib/rbac";
+import { canOpenSection, requireSection } from "@/lib/rbac";
 import { addDays, monthDays, weekDays } from "@/lib/calendar-grid";
 import { kindsFor, parseFilters, showsNothing } from "@/lib/calendar-filters";
 import { getBookableTeamMembers, getBookingsOverview } from "@/server/booking-metrics";
@@ -45,6 +45,9 @@ export default async function BookingsPage({
   /* `availability` is NOT asked for here: the block below already explains an empty calendar in
      more detail than the shared notice could, naming which of three causes applies. */
   const enginesDown = await enginesOff(["confirmLoop"]);
+  /* The SSS confirmation action lives behind Outreach, which a HEAD does not have: asked here so
+     the drawer can say so rather than redirect the page to "denied" on click. */
+  const canSetSss = await canOpenSection("outreach", session.role, session.overrides, session.capabilities);
   const canConfigure = session.role === "ADMIN";
 
   const todayKey = toDateInputValue(istToday());
@@ -199,6 +202,7 @@ export default async function BookingsPage({
         team={teamMembers}
         filters={filters}
         panelOpen={searchParams.panel === "1"}
+        canSetSss={canSetSss}
         hrefFor={hrefFor}
       />
 

@@ -28,6 +28,8 @@ export type CalEvent = {
   title: string;
   contact: { name: string; phone: string | null; email: string | null; leadId: string | null } | null;
   status: CalStatus;
+  /** The prospect's Zoom join link, when Zoom made one. Never the host link - see schema. */
+  meetingUrl: string | null;
   source: { table: "slot" | "release" | "sss"; id: string; bookingId?: string; journeyId?: string };
 };
 
@@ -74,6 +76,22 @@ export function releaseStatus(reason: string): CalStatus | null {
   if (reason === "POSTPONED") return null; // the booking is drawn at its new slot instead
   return reason === "NO_SHOW" ? "NO_SHOW" : "CANCELLED";
 }
+
+/**
+ * What the drawer's status select writes for a Discovery call: the two unfinished states are a
+ * confirmation flag on the booking, the three outcomes are its BookingStatus. Pure so the mapping
+ * is tested once rather than read off a switch inside a component.
+ */
+export type StatusWrite = { confirmed: boolean } | { bookingStatus: string };
+
+export function discoStatusWrite(s: CalStatus): StatusWrite {
+  if (s === "CONFIRMED") return { confirmed: true };
+  if (s === "UNCONFIRMED") return { confirmed: false };
+  return { bookingStatus: s === "SHOWED" ? "COMPLETED" : s };
+}
+
+/** Changing to one of these hands the slot back, so the drawer asks first. */
+export const FREES_THE_SLOT: CalStatus[] = ["NO_SHOW", "CANCELLED"];
 
 export type EventLook = { bg: string; border: string; edge: string; text: string; strike: boolean; dashed: boolean };
 

@@ -87,8 +87,8 @@ This file starts 12 Nov 2026 with the Calendars redesign.
 - Synamate login (shared Playwright profile) was refreshed by the owner on 12 Nov; it expires.
 
 ## Known issues
-- App Guide screenshots for /bookings are stale: the copy describes the new calendar, the images
-  still show the old grid. Needs a capture run (watch the `--only` trap: count the manifest after).
+- A deep link into a tab must use its stable id (`?tab=cancelled`), never its number: the App Guide
+  still used `?tab=1`/`?tab=2` and pointed at the wrong tabs the moment two were inserted.
 - The local preview DB was 2 migrations behind; applied via a temporary `prisma/tmp-local.prisma`
   with the local URL hardcoded, because the Prisma CLI reads `.env` (LIVE) and would ignore a
   shell `DATABASE_URL`.

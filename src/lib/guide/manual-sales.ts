@@ -1210,6 +1210,9 @@ export const MANUAL_SALES: GuideManual[] = [
           "Move with the arrows, press Today, or press the date box to jump to any date.",
           "Hover or tab to a call for who it is with, which calendar it belongs to, its time in IST and its state.",
           "In Month view, press “+N more” on a busy day to list everything on it.",
+          "Press a call to open its details: time, owner, phone, email, its Zoom link and its status.",
+          "Press an empty half-hour, or + New, to book a call into it or block the time off.",
+          "Drag a call onto another empty half-hour to move it - or open it and press Move to another time, then press the half-hour you want.",
           "Press Manage availability to add or remove slots.",
         ],
         logic: [
@@ -1221,6 +1224,12 @@ export const MANUAL_SALES: GuideManual[] = [
           "Times are Indian Standard Time throughout, as the heading over the hour column says. The red line is the current time.",
           "Slots are made every hour from each person's weekly calendar in the Console. The top-up only adds missing slots; it never edits or deletes one.",
           "The view and the date are kept in the address, so a refresh, the Back button and a shared link all land on the same screen.",
+          "Moving a call frees its old slot, clears the confirmation and tells the prospect their call moved - the same as Reschedule on the Booking requests tab, because it is the same code.",
+          "A moved call's new time is held for that prospect alone: it is never published on the public booking page, even if nobody had an open slot at that hour.",
+          "Only a live discovery call can be dragged. Blocked time, a cancelled call and a strategy session cannot: a session is moved on the SSS Calendar tab, where its open slots are drawn.",
+          "In Day view, dropping a call in another person's column hands it to them as well as moving it. It is refused if it would clash with a call they already have.",
+          "Booking a call here links the lead, moves their card to Discovery Call Booked and sends the confirmation, exactly as a prospect's own booking does.",
+          "Blocking a range takes only the OPEN slots inside it out of the public page. A slot already holding a booked call is left alone, and the result says how many.",
         ],
         controls: [
           {
@@ -1233,6 +1242,7 @@ export const MANUAL_SALES: GuideManual[] = [
           },
         ],
         watchOut: [
+          "Dragging needs a mouse: HTML5 drag does nothing on a phone or tablet. Open the call and press Move to another time instead - it works the same way, and by keyboard too.",
           "An empty grid with a yellow banner means no calendar is live. The banner says which of three causes applies and links to the fix.",
           "Slots only appear while the scheduler is running, because the hourly top-up is what makes them.",
           "An empty time is not shown here, so an empty-looking week is not proof that nobody can book. Check Manage availability.",
@@ -1246,10 +1256,40 @@ export const MANUAL_SALES: GuideManual[] = [
         },
       },
       {
+        id: "appointments-list",
+        name: "Appointments",
+        where: ["Sidebar", "Sales", "Calendars", "Appointments"],
+        href: "/bookings?tab=appointments",
+        what: "Both kinds of call as one list you can sort, search and set a status on - the calendar's contents without the grid.",
+        use: [
+          "Pick a list: Upcoming, Cancelled, All, Upcoming discovery or Upcoming strategy.",
+          "Search by prospect name or call title; sort by time, status, calendar or owner.",
+          "Set a status straight in the row - no need to open anything.",
+          "Press Details for the full entry: contact, Zoom link and the rest.",
+          "Founder: press Export CSV for the list as it is filtered.",
+        ],
+        logic: [
+          "“Upcoming” means the call has not ended yet and is neither cancelled nor a no-show; Cancelled lists the newest first, because that is the one you are looking for.",
+          "Blocked time is never listed here. It is time nobody booked, so it has no prospect, no status and nothing to do.",
+          "A status set here writes through the same action as the drawer and the Booking requests tab, so the three can never disagree.",
+          "A strategy session's status can only be set by someone who has Outreach; the row says so instead of failing.",
+          "This list does NOT replace Booking requests beside it. That tab holds the BANT verdict, the intake answers and the WhatsApp state, which this one deliberately leaves out.",
+        ],
+        watchOut: [
+          "Export is founder only, and exports the rows the current list and search leave, not every call.",
+        ],
+        shot: {
+          file: "bookings-appointments-list.png",
+          route: "/bookings?tab=appointments",
+          caption: "Every call in one list, with the saved views across the top.",
+          highlight: { text: "Upcoming discovery", label: "Discovery calls only" },
+        },
+      },
+      {
         id: "booking-requests",
         name: "Booking requests",
         where: ["Sidebar", "Sales", "Calendars", "Booking requests"],
-        href: "/bookings",
+        href: "/bookings?tab=requests",
         what: "Every booking with the prospect's answers, score, confirmation state and the actions to confirm, reschedule or settle it.",
         use: [
           "Use the quick filters: All, Upcoming, To confirm, Completed, or Cancelled & no-shows. Filter by team member if needed.",
@@ -1277,11 +1317,11 @@ export const MANUAL_SALES: GuideManual[] = [
           },
         ],
         watchOut: [
-          "There is no button here to book a new call. New bookings are made on the public booking page, linked at the top of this screen.",
+          "A booking made here or on the calendar is marked Booked by hand, so it is never scored: BANT comes from the prospect's own answers on the public form, and a call you booked for them has none.",
         ],
         shot: {
           file: "bookings-booking-requests.png",
-          route: "/bookings",
+          route: "/bookings?tab=requests",
           caption: "Booking requests: each prospect's score, verdict, status and actions.",
           highlight: { text: "Verdict", label: "Their BANT verdict" },
         },
@@ -1290,7 +1330,7 @@ export const MANUAL_SALES: GuideManual[] = [
         id: "cancelled-slots",
         name: "Cancelled slots",
         where: ["Sidebar", "Sales", "Calendars", "Cancelled slots"],
-        href: "/bookings?tab=1",
+        href: "/bookings?tab=cancelled",
         what: "Every slot that was booked and then freed: who held it, why it came back, and what happened next.",
         use: [
           "Pick a filter: Cancellations only, No reply (auto-cancelled), Cancelled by hand, No show, Postponed or Everything.",
@@ -1303,16 +1343,45 @@ export const MANUAL_SALES: GuideManual[] = [
         ],
         shot: {
           file: "bookings-cancelled-slots.png",
-          route: "/bookings?tab=1",
+          route: "/bookings?tab=cancelled",
           caption: "Freed slots, why they came back and who took them.",
           highlight: { text: "What came of it", label: "What happened next" },
+        },
+      },
+      {
+        id: "calendar-settings",
+        name: "Calendar settings",
+        where: ["Sidebar", "Sales", "Calendars", "Calendar settings"],
+        href: "/bookings?tab=settings",
+        what: "Every calendar the business has, and - the reason to come here - whether each one is actually offering anybody a time.",
+        use: [
+          "Filter by All calendars, Discovery or Strategy.",
+          "Read each card: who runs it, how long its calls are, which days and hours it covers, and how many open slots it has ahead.",
+          "Press the link on a card to open the screen that owns that setting.",
+        ],
+        logic: [
+          "Nothing is configured here. A discovery calendar IS a weekly pattern in Console → Availability, and the strategy calendar IS the owner in the SSS config, so each card is a door onto the screen that already owns it.",
+          "The status is worked out, not stored: Active means open slots ahead; No availability means it is set up correctly and still offering nothing; Switched off means the hourly top-up skips it; No days chosen means it is on with no weekdays ticked; Owner not set means nobody runs it yet.",
+          "“No days chosen” has its own words on purpose: it is the state that once left the calendar empty with no explanation.",
+          "A third kind of card accounts for open slots that no pattern explains - added by hand, or left behind by a pattern somebody deleted.",
+          "Open slots are counted from now to the horizon, so the number is what a prospect could actually take today.",
+        ],
+        watchOut: [
+          "A calendar reading No availability is usually a horizon or hours problem, not a broken one - the top-up runs hourly, so a change made minutes ago has not happened yet.",
+          "Only the founder sees New calendar, because creating one means editing the weekly patterns in the Console.",
+        ],
+        shot: {
+          file: "bookings-calendar-settings.png",
+          route: "/bookings?tab=settings",
+          caption: "Each calendar, and whether it is offering anybody a time.",
+          highlight: { text: "New calendar", label: "Add a weekly pattern" },
         },
       },
       {
         id: "sss-calendar",
         name: "SSS Calendar",
         where: ["Sidebar", "Sales", "Calendars", "SSS Calendar"],
-        href: "/bookings?tab=2",
+        href: "/bookings?tab=sss",
         what: "The closer's Solution Strategy Session diary, and the list of qualified prospects still waiting for a time.",
         use: [
           "Founder: pick the SSS owner first. Generate slots stays greyed out until one is set.",
@@ -1330,7 +1399,7 @@ export const MANUAL_SALES: GuideManual[] = [
           {
             setting: "SSS owner, session length and how far ahead to reschedule",
             where: ["Sidebar", "Sales", "Calendars", "SSS Calendar"],
-            href: "/bookings?tab=2",
+            href: "/bookings?tab=sss",
             who: ["ADMIN"],
             default: "No owner, 45 minutes, 7 days",
             effect: "Applies to slots generated and reschedules done after the change. Existing slots keep their length.",
@@ -1346,7 +1415,7 @@ export const MANUAL_SALES: GuideManual[] = [
         ],
         shot: {
           file: "bookings-sss-calendar.png",
-          route: "/bookings?tab=2",
+          route: "/bookings?tab=sss",
           caption: "The SSS diary and the prospects still waiting for a session time.",
           highlight: { text: "Generate slots", label: "Add SSS slots" },
         },

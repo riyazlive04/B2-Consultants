@@ -301,6 +301,17 @@ export const MANUAL_SHOTS: Record<string, CapturedShot> = {
       "h": 4.9
     }
   },
+  "bookings-appointments-list.png": {
+    "src": "/guide/manual/bookings-appointments-list.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 35.4,
+      "y": 40.2,
+      "w": 11.4,
+      "h": 5.3
+    }
+  },
   "bookings-bant-verdicts.png": {
     "src": "/guide/manual/bookings-bant-verdicts.jpg",
     "width": 1440,
@@ -317,10 +328,21 @@ export const MANUAL_SHOTS: Record<string, CapturedShot> = {
     "width": 1440,
     "height": 900,
     "hotspot": {
-      "x": 66,
-      "y": 61,
+      "x": 66.1,
+      "y": 32.9,
       "w": 3.8,
       "h": 2.9
+    }
+  },
+  "bookings-calendar-settings.png": {
+    "src": "/guide/manual/bookings-calendar-settings.jpg",
+    "width": 1440,
+    "height": 900,
+    "hotspot": {
+      "x": 88.6,
+      "y": 41.7,
+      "w": 9.7,
+      "h": 4.9
     }
   },
   "bookings-cancelled-slots.png": {
@@ -329,7 +351,7 @@ export const MANUAL_SHOTS: Record<string, CapturedShot> = {
     "height": 900,
     "hotspot": {
       "x": 79,
-      "y": 62.6,
+      "y": 70,
       "w": 7.9,
       "h": 2.9
     }
@@ -367,7 +389,7 @@ export const MANUAL_SHOTS: Record<string, CapturedShot> = {
     "height": 900,
     "hotspot": {
       "x": 78.1,
-      "y": 54.8,
+      "y": 50.3,
       "w": 10.7,
       "h": 5.3
     }
@@ -377,10 +399,10 @@ export const MANUAL_SHOTS: Record<string, CapturedShot> = {
     "width": 1440,
     "height": 900,
     "hotspot": {
-      "x": 19.8,
-      "y": 56.3,
-      "w": 16.7,
-      "h": 3.6
+      "x": 18.3,
+      "y": 19.6,
+      "w": 4.6,
+      "h": 4.4
     }
   },
   "cash-cash-position.png": {

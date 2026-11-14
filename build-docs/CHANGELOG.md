@@ -43,3 +43,10 @@
   the existing `rescheduleBookingToTime`, so the old slot is freed, confirmation reset and the
   prospect notified exactly as from the Bookings table. Day view: a drop in another person's
   column reassigns too. SSS stays on the SSS Calendar tab, which already does this properly.
+- 2026-11-14 `fix(app-guide)`: the Calendars manual caught up with the rebuild. Two new entries
+  (Appointments list, Calendar settings) with their own screenshots; the calendar entry now covers
+  opening a call, booking or blocking an empty half-hour, and moving a call by drag or by keyboard.
+  Stale deep links fixed: Cancelled slots and SSS Calendar were still `?tab=1`/`?tab=2`, which after
+  the two new tabs opened Booking requests and Cancelled slots instead - they use the stable ids
+  now. Dropped the line saying a call cannot be booked from this screen (it can, since feature 5).
+  All 9 bookings screenshots re-captured from the local preview; manifest still holds 200 entries.

@@ -84,3 +84,13 @@
   every arm/disarm (all four sides are long-hands now).
   Not covered: a touch device (HTML5 drag has no touch support, which is why the click path exists);
   a 15-minute snap (lanes are the drop target, so the snap is 30).
+- 2026-11-14 **app-guide (bookings)**: `src/lib/__tests__/guide-manual.test.ts` 19/19, including
+  "every tab deep link points at a tab the page has" and "every shot names a file in the manual
+  folder" - the two that cover what changed. Re-captured all 9 bookings shots plus the overview
+  shot against the local preview (:3011) and read each image back: the week grid, the new
+  Appointments list and the new Calendar settings cards are the current screens. Manifest entry
+  count checked before and after the run (200 both times - the `--only` trap did not bite).
+  Full suite 2392 pass / 0 fail (of 2393, 1 skipped), tsc + lint clean.
+  Found while doing it: the guide's Cancelled slots and SSS Calendar links were numbered tabs, so
+  the two tabs added in features 6 and 7 silently re-pointed them one place to the left. This is
+  the failure the stable tab ids were added to end, and the guide was still the old way round.

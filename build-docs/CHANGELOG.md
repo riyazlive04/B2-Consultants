@@ -50,3 +50,8 @@
   the two new tabs opened Booking requests and Cancelled slots instead - they use the stable ids
   now. Dropped the line saying a call cannot be booked from this screen (it can, since feature 5).
   All 9 bookings screenshots re-captured from the local preview; manifest still holds 200 entries.
+- 2026-11-14 **DEPLOYED to production** as `b2-app:0edfa7d` (was `dd4203d`): the whole Calendars
+  rebuild, features 1-8, plus the App Guide catch-up. Pure image swap - no migration (119 in the
+  repo, 119 applied live, same latest) and no cron rebuild (`docker/` untouched, cron stays on
+  `b2-cron:d4d24dc`). Built locally from `git archive HEAD`, shipped over an ssh pipe, loaded on
+  the box. Health after the swap: ok, db up, 4 ms. Rollback image tagged `b2-app:rollback-20261114`.

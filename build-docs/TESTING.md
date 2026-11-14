@@ -64,3 +64,23 @@
   unassigned, sort, clip, late-cancel ghost dedupe, AA on every fill). Full suite had 1
   pre-existing failure: `guide-manual` house-style failure (en dash "Mon–Sat" in manual-admin /
   manual-sales), fixed in `43d1e77`; now 2349 pass, 0 fail (of 2350). tsc clean, lint clean.
+- 2026-11-14 **calendar-drag-reschedule**: `src/lib/__tests__/calendar-move.test.ts` 4/4 (AC1 the
+  action input a drop becomes incl. the call's own length and a Day-view owner change; AC2 past
+  time / its own lane / a lane that is not a time; AC2+AC3 what is draggable at all). Browser on
+  the local preview (:3011, local Postgres): dragged Rohan Pillai Sat 14 Nov 14:00 -> Sun 15 Nov
+  10:00, confirmed, and again 10:00 -> 13:00 into ANOTHER person's Day column; drove the same move
+  by keyboard alone for Meena Shah (card -> drawer -> "Move to another time" -> Tab to a lane ->
+  Enter -> Enter). Verified in the database, not just on screen: the vacated 14:00 and 10:00 slots
+  are OPEN with a POSTPONED SlotRelease each, the new slots are BOOKED, `confirmedAt` is null on
+  both bookings (confirmation reset), and Meena's old 11:10 slot came back BLOCKED - correct, it
+  was inside the minimum notice, which is `releasedSlotStatus`, not a drag bug. AC2: a drop on a
+  past lane said "That time has already passed.", asked nothing and changed nothing (DB unchanged).
+  Full suite 2392 pass / 0 fail (of 2393, 1 skipped), tsc + lint clean.
+  Found and fixed while testing: every card was draggable, including blocked time and the cancelled
+  ghosts, because TimeGrid passed `draggable` unconditionally (now `canMove(event)`); the armed-lane
+  tint never rendered because `bg-primary-soft/40` generates nothing for a var-based token (now
+  `bg-surface-2`); and EventCard's React shorthand warning was back - the earlier fix replaced
+  `borderLeft` but left `borderStyle`, which is also a shorthand, and this card now re-renders on
+  every arm/disarm (all four sides are long-hands now).
+  Not covered: a touch device (HTML5 drag has no touch support, which is why the click path exists);
+  a 15-minute snap (lanes are the drop target, so the snap is 30).

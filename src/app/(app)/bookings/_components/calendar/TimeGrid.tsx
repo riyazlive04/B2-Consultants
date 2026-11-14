@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { CalEvent } from "@/lib/calendar-event";
+import { canMove } from "@/lib/calendar-move";
 import { DAY_PX, HOUR_PX, SCROLL_TO_MIN, istSlot, minutePx, placeDay } from "@/lib/calendar-grid";
 import { EventCard } from "./EventCard";
 
@@ -20,6 +21,8 @@ export type GridColumn = {
   isToday?: boolean;
   /** The IST day these events are laid out against. */
   dayKey: string;
+  /** Day view only, where a column IS a person ("" = unassigned): dropping here reassigns too. */
+  ownerKey?: string | null;
   events: CalEvent[];
 };
 
@@ -92,8 +95,9 @@ function Column({ col, now, first }: { col: GridColumn; now: { key: string; min:
               key={m}
               type="button"
               data-lane={`${col.dayKey}:${h * 60 + m}`}
+              data-lane-owner={col.ownerKey ?? undefined}
               aria-label={`Book ${col.label} at ${String(h).padStart(2, "0")}:${m === 0 ? "00" : "30"}`}
-              className="block w-full border-line transition-colors first:border-b first:border-dashed hover:bg-surface-2"
+              className="block w-full border-line transition-colors first:border-b first:border-dashed hover:bg-surface-2 group-data-[moving]:bg-surface-2 group-data-[moving]:hover:bg-primary-soft"
               style={{ height: HOUR_PX / 2 }}
             />
           ))}
@@ -113,7 +117,7 @@ function Column({ col, now, first }: { col: GridColumn; now: { key: string; min:
             width: `${100 / place.cols}%`,
           }}
         >
-          <EventCard ev={event} />
+          <EventCard ev={event} draggable={canMove(event)} />
         </div>
       ))}
 

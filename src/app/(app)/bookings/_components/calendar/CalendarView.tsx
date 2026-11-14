@@ -71,6 +71,7 @@ export function CalendarView({
       : dayColumns(events, dayKey, team).map((c) => ({
           key: c.id || "unassigned",
           dayKey,
+          ownerKey: c.id,
           label: c.name,
           events: c.events,
         }));

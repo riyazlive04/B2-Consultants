@@ -37,3 +37,9 @@
   App Guide copy updated. Old hand-rolled week grid retired; tables unchanged.
 - 2026-11-13 `feat(calendar-core)`: CalEvent model, Synamate colours (AA-safe text), overlap layout,
   `getCalendarEvents` read. No UI yet, no schema change.
+- 2026-11-14 `feat(calendar-drag-reschedule)`: drag a discovery call to another time in Week/Day -
+  or arm the move from the drawer and click a time, which is the keyboard and touch path. Lands on
+  the grid's own half-hour lanes (not OPEN slots, which the grid does not draw) and writes through
+  the existing `rescheduleBookingToTime`, so the old slot is freed, confirmation reset and the
+  prospect notified exactly as from the Bookings table. Day view: a drop in another person's
+  column reassigns too. SSS stays on the SSS Calendar tab, which already does this properly.

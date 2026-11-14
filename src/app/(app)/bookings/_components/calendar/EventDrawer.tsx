@@ -12,6 +12,7 @@ import { toast } from "@/components/ui/feedback";
 import { CALENDAR_STATUS_LABELS } from "@/lib/labels";
 import { istDateLabel, istRangeLabel } from "@/lib/calendar-grid";
 import { eventLook, type CalEvent, type CalStatus } from "@/lib/calendar-event";
+import { canMove } from "@/lib/calendar-move";
 import { applyStatusChange, unblockEntry, type StatusResult } from "./event-status";
 
 /**
@@ -34,7 +35,13 @@ function Row({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   );
 }
 
-export function EventDrawer({ ev, canSetSss, onClose }: { ev: CalEvent; canSetSss: boolean; onClose: () => void }) {
+export function EventDrawer({ ev, canSetSss, onMove, onClose }: {
+  ev: CalEvent;
+  canSetSss: boolean;
+  /** Arms the grid to move this call to a clicked time - the keyboard and touch path for a drag. */
+  onMove?: () => void;
+  onClose: () => void;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const look = eventLook(ev);
@@ -144,6 +151,13 @@ export function EventDrawer({ ev, canSetSss, onClose }: { ev: CalEvent; canSetSs
                 options={DISCO_STATUSES.map((s) => ({ value: s, label: CALENDAR_STATUS_LABELS[s] }))}
               />
             </Field>
+          )}
+
+          {/* Only where there is a grid to pick a time on: the appointment list passes no onMove. */}
+          {onMove && canMove(ev) && (
+            <Btn variant="outline" onClick={onMove} disabled={busy} className="w-full sm:w-auto">
+              Move to another time
+            </Btn>
           )}
 
           {ev.contact?.leadId && (

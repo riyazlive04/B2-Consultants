@@ -20,7 +20,12 @@ export function eventSummary(ev: CalEvent): string {
   return parts.join(" · ");
 }
 
-export function EventCard({ ev, compact = false }: { ev: CalEvent; compact?: boolean }) {
+export function EventCard({ ev, compact = false, draggable = false }: {
+  ev: CalEvent;
+  compact?: boolean;
+  /** Week/Day only: CalendarHost picks the drag up by delegation and moves the call. */
+  draggable?: boolean;
+}) {
   const look = eventLook(ev);
   const label = eventSummary(ev);
   return (
@@ -29,16 +34,20 @@ export function EventCard({ ev, compact = false }: { ev: CalEvent; compact?: boo
       title={label}
       aria-label={label}
       data-event-id={ev.id}
+      draggable={draggable || undefined}
       className={`block w-full overflow-hidden rounded-field border text-left transition-shadow hover:shadow-card focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${
         compact ? "px-1.5 py-0.5" : "h-full px-2 py-1"
-      }`}
+      } ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
       style={{
         background: look.bg,
         color: look.text,
         borderColor: look.border,
-        borderStyle: look.dashed ? "dashed" : "solid",
-        // Long-hand, not `borderLeft`: React warns (and can mis-apply) when a shorthand and a
-        // long-hand fight over the same property across a re-render.
+        // Per side, with no `borderStyle`/`borderLeft` shorthand anywhere: React warns (and can
+        // mis-apply) when a shorthand and a long-hand fight over the same property on a re-render,
+        // and this card now re-renders whenever a move is armed.
+        borderTopStyle: look.dashed ? "dashed" : "solid",
+        borderRightStyle: look.dashed ? "dashed" : "solid",
+        borderBottomStyle: look.dashed ? "dashed" : "solid",
         borderLeftWidth: 5,
         borderLeftStyle: "solid",
         borderLeftColor: look.edge,
